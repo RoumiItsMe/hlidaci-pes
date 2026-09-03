@@ -97,6 +97,7 @@ async function fetchOneUrl(url, watch) {
       id: String(r.id),
       title: r.name || "Nabídka",
       price: formatPrice(r.priceCzk),
+      priceCzk: r.priceCzk || null,
       address: formatAddress(r.locality),
       url: buildDetailUrl(r),
     });

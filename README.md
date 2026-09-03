@@ -1,8 +1,9 @@
 # 🐕 Hlídací pes
 
 Automatický hlídač nových nabídek nemovitostí. Každých ~15 minut projde
-nastavené realitní portály a o nových inzerátech (odpovídajících filtru)
-pošle notifikaci na Telegram.
+nastavené realitní portály a pošle notifikaci na Telegram o (a) nových
+inzerátech odpovídajících filtru a (b) **změně ceny** u inzerátů, které už
+dřív sledoval.
 
 ## Aktuální sledování
 
@@ -70,19 +71,25 @@ zdrojů, které umí filtrovat cenu přímo v URL (Bazoš) — jako pojistka.
 1. `.github/workflows/watch.yml` spouští `node index.js` cca každých 15
    minut (GitHub Actions cron, minimální praktický interval — přesně na
    minutu to negarantuje, ale v praxi sedí).
-2. `index.js` pro každé sledování × každý portál stáhne aktuální nabídku,
-   porovná ji s `data/seen.json` (co už bylo dřív vidět pod klíčem
-   `<sledování>:<portál>`) a o nových inzerátech pošle zprávu přes Telegram
-   bota.
+2. `index.js` pro každé sledování × každý portál stáhne aktuální nabídku a
+   porovná ji s `data/seen.json` — konkrétně s poslední známou cenou
+   každého inzerátu, uloženou pod klíčem `<sledování>:<portál>`. Pošle
+   zprávu přes Telegram bota o:
+   - **nových inzerátech** (ID, co tam dřív nebylo), a
+   - **změně ceny** u inzerátů, které už zná (jiná známá cena než
+     naposledy — 🔻 při zlevnění, 🔺 při zdražení). Přechod z/na "Cena na
+     vyžádání" se nepočítá jako změna (žádná ze dvou stran není konkrétní
+     číslo k porovnání), jen se cena tiše aktualizuje.
 3. Aktualizovaný `data/seen.json` se po každém běhu commitne zpátky do
-   repa — tak stav přežije mezi jednotlivými spuštěními Action.
+   repa — tak stav (vč. poslední známé ceny) přežije mezi jednotlivými
+   spuštěními Action.
 4. **První běh pro každou dvojici (sledování, zdroj)** aktuální nabídku jen
-   "zabaseline" (uloží jako už viděnou) BEZ posílání notifikací — jinak by
-   zaplavil Telegram desítkami zpráv o inzerátech, co tam visí už dlouho.
-   Stejně se řeší i **přidání nového sledování/lokality** — po úpravě
-   `config.js` se lokálně spustí `node index.js` bez Telegram proměnných
-   (viz níže), ať se nově objevené inzeráty jen zabaselinují a nepošlou se
-   jako "nové".
+   "zabaseline" (uloží jako už viděnou, i s cenou) BEZ posílání notifikací
+   — jinak by zaplavil Telegram desítkami zpráv o inzerátech, co tam visí
+   už dlouho. Stejně se řeší i **přidání nového sledování/lokality** — po
+   úpravě `config.js` se lokálně spustí `node index.js` bez Telegram
+   proměnných (viz níže), ať se nově objevené inzeráty jen zabaselinují a
+   nepošlou se jako "nové".
 5. Když zdroj selže (změna struktury stránky, výpadek webu...) nebo se
    naopak rozchodí, přijde o tom Telegram alert — viz [Upozornění při
    výpadku](#upozornění-při-výpadku).
@@ -123,12 +130,16 @@ jsou uložené jako GitHub Secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 ## Přidání dalšího portálu
 
 1. Nový soubor v `sources/`, export `async function fetchX(watch)` vracející
-   pole objektů `{ source, sourceLabel, id, title, price, address, url }`.
+   pole objektů `{ source, sourceLabel, id, title, price, priceCzk, address, url }`.
    `watch` = jeden záznam z pole `watches` v `config.js` (typ nemovitosti,
-   cenový strop, lokality).
+   cenový strop, lokality). `price` je formátovaný text pro zobrazení
+   ("4 400 000 Kč" / "Cena na vyžádání"), `priceCzk` je stejná cena jako
+   číslo (nebo `null`, když není známá) — na něm stojí detekce změny ceny,
+   viz `lib/price.js` (`parsePriceCzkFromText` pro zdroje, co mají jen
+   naformátovaný text, `withinPriceCap` pro filtrování podle stropu).
 2. Přidat do `SOURCES` v `index.js`.
 3. `id` musí být stabilní a unikátní napříč běhy (typicky ID z URL inzerátu)
-   — na něm stojí celá dedup logika.
+   — na něm stojí celá dedup logika i sledování změny ceny.
 
 ## Známá omezení / možná vylepšení
 

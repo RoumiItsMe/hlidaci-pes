@@ -52,7 +52,8 @@ async function fetchOneUrl(url, watch) {
   $(".c-products__inner").each((_, el) => {
     const parsed = parseListing(el, $);
     if (!parsed) return;
-    if (!withinPriceCap(parsePriceCzkFromText(parsed.price), watch.priceMaxCzk)) return;
+    const priceCzk = parsePriceCzkFromText(parsed.price);
+    if (!withinPriceCap(priceCzk, watch.priceMaxCzk)) return;
 
     items.push({
       source: "idnes",
@@ -60,6 +61,7 @@ async function fetchOneUrl(url, watch) {
       id: parsed.id,
       title: parsed.title || "Nabídka",
       price: parsed.price,
+      priceCzk,
       address: parsed.address,
       url: parsed.url,
     });

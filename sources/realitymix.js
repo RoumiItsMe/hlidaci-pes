@@ -68,7 +68,8 @@ async function fetchForUrl(url, watch) {
 
     const priceMatch = text.match(/(\d[\d\s]{3,}\d)\s?Kč/);
     const price = priceMatch ? `${priceMatch[1].replace(/\s+/g, " ").trim()} Kč` : "Cena na vyžádání";
-    if (!withinPriceCap(parsePriceCzkFromText(price), watch.priceMaxCzk)) return;
+    const priceCzk = parsePriceCzkFromText(price);
+    if (!withinPriceCap(priceCzk, watch.priceMaxCzk)) return;
 
     items.push({
       source: "realitymix",
@@ -76,6 +77,7 @@ async function fetchForUrl(url, watch) {
       id,
       title,
       price,
+      priceCzk,
       address,
       url: href,
     });

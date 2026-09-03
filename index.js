@@ -2,13 +2,18 @@
 //
 // Projde všechna sledování (watches, viz config.js) × všechny zdroje
 // (portály), porovná nalezené inzeráty s tím, co už bylo dřív viděno
-// (data/seen.json), a o nových pošle notifikaci na Telegram.
+// (data/seen.json), a pošle notifikaci na Telegram o:
+//  (a) nových inzerátech,
+//  (b) změně ceny u inzerátů, které už dřív sledoval.
 //
 // Při úplně prvním běhu pro danou dvojici (sledování, zdroj) — žádný
 // předchozí stav — se aktuální nabídka jen "zabaseline" jako už viděná —
 // bez notifikací — ať uživatele nezaplaví desítkami zpráv o inzerátech,
 // které tam visí už dlouho. Stejný princip platí i při přidání nového
 // sledování/lokality: state klíč je nový → první běh je tichý baseline.
+// Změna ceny se navíc přirozeně neohlásí, pokud předchozí cena nebyla
+// známá (typicky migrace ze staršího formátu stavu, nebo inzerát dřív měl
+// "Cena na vyžádání") — hlásí se jen známá cena → jiná známá cena.
 //
 // Zdravotní stav (state.__health) sleduje, jestli daná dvojice (sledování,
 // zdroj) právě selhává — když ano, pošle se Telegram alert (a znovu až po
@@ -16,7 +21,7 @@
 // Jakmile se zdroj zase rozchodí, pošle se zpráva o zotavení.
 
 import { watches, maxSeenPerSource } from "./config.js";
-import { loadState, saveState, getSourceSeen, setSourceSeen } from "./lib/state.js";
+import { loadState, saveState, getSourceItems, setSourceItems } from "./lib/state.js";
 import { sendTelegramMessage, sleep } from "./lib/telegram.js";
 import { fetchSreality } from "./sources/sreality.js";
 import { fetchBezrealitky } from "./sources/bezrealitky.js";
@@ -35,10 +40,28 @@ const SOURCES = [
   { name: "bazos", label: "Bazoš.cz", fetch: fetchBazos },
 ];
 
-function formatMessage(watch, item) {
+function formatCzk(n) {
+  return `${n.toLocaleString("cs-CZ")} Kč`;
+}
+
+function formatNewItemMessage(watch, item) {
   const lines = [`${watch.emoji} Nová nabídka — ${watch.label} • ${item.sourceLabel}`, item.title];
   if (item.address) lines.push(`📍 ${item.address}`);
   lines.push(`💰 ${item.price}`);
+  lines.push(item.url);
+  return lines.join("\n");
+}
+
+function formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk) {
+  const arrow = newPriceCzk < oldPriceCzk ? "🔻" : "🔺";
+  const diff = newPriceCzk - oldPriceCzk;
+  const diffText = `${diff > 0 ? "+" : ""}${formatCzk(diff)}`;
+  const lines = [
+    `${arrow} Změna ceny — ${watch.label} • ${item.sourceLabel}`,
+    item.title,
+  ];
+  if (item.address) lines.push(`📍 ${item.address}`);
+  lines.push(`💰 ${formatCzk(oldPriceCzk)} → ${formatCzk(newPriceCzk)} (${diffText})`);
   lines.push(item.url);
   return lines.join("\n");
 }
@@ -82,6 +105,7 @@ async function alertRecoveryIfNeeded(health, label) {
 async function run() {
   const state = await loadState();
   let totalNew = 0;
+  let totalPriceChanges = 0;
   let hadError = false;
 
   for (const watch of watches) {
@@ -89,8 +113,8 @@ async function run() {
       const stateKey = `${watch.key}:${src.name}`;
       const label = `${watch.label} • ${src.label}`;
       const health = getHealth(state, stateKey);
-      const seen = getSourceSeen(state, stateKey);
-      const isFirstRun = seen.size === 0;
+      const known = getSourceItems(state, stateKey);
+      const isFirstRun = known.size === 0;
 
       let items;
       try {
@@ -104,33 +128,54 @@ async function run() {
 
       await alertRecoveryIfNeeded(health, label);
 
-      const newItems = items.filter((item) => !seen.has(item.id));
+      const newItems = [];
+      const priceChanges = [];
+      for (const item of items) {
+        const prev = known.get(item.id);
+        if (!prev) {
+          newItems.push(item);
+        } else if (prev.price != null && item.priceCzk != null && prev.price !== item.priceCzk) {
+          priceChanges.push({ item, oldPriceCzk: prev.price, newPriceCzk: item.priceCzk });
+        }
+        known.set(item.id, { price: item.priceCzk ?? null });
+      }
+
       console.log(
-        `[${stateKey}] nalezeno ${items.length} inzerátů, z toho ${newItems.length} nových${
+        `[${stateKey}] nalezeno ${items.length} inzerátů, z toho ${newItems.length} nových, ${priceChanges.length} se změnou ceny${
           isFirstRun ? " (první běh — jen baseline, bez notifikací)" : ""
         }`
       );
 
-      for (const item of items) seen.add(item.id);
-      setSourceSeen(state, stateKey, seen, maxSeenPerSource);
+      setSourceItems(state, stateKey, known, maxSeenPerSource);
 
-      if (isFirstRun || newItems.length === 0) continue;
+      if (isFirstRun) continue;
 
       for (const item of newItems) {
         try {
-          await sendTelegramMessage(formatMessage(watch, item));
+          await sendTelegramMessage(formatNewItemMessage(watch, item));
           totalNew += 1;
           await sleep(400);
         } catch (err) {
           hadError = true;
-          console.error(`[${stateKey}] CHYBA při odesílání Telegram zprávy: ${err.message}`);
+          console.error(`[${stateKey}] CHYBA při odesílání Telegram zprávy (nová nabídka): ${err.message}`);
+        }
+      }
+
+      for (const { item, oldPriceCzk, newPriceCzk } of priceChanges) {
+        try {
+          await sendTelegramMessage(formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk));
+          totalPriceChanges += 1;
+          await sleep(400);
+        } catch (err) {
+          hadError = true;
+          console.error(`[${stateKey}] CHYBA při odesílání Telegram zprávy (změna ceny): ${err.message}`);
         }
       }
     }
   }
 
   await saveState(state);
-  console.log(`Hotovo. Odesláno ${totalNew} notifikací.`);
+  console.log(`Hotovo. Odesláno ${totalNew} notifikací o nových nabídkách, ${totalPriceChanges} o změně ceny.`);
 
   if (hadError) {
     console.warn("Během běhu došlo k dílčím chybám — zkontroluj log výše.");

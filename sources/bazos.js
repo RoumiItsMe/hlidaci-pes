@@ -77,7 +77,8 @@ async function fetchForLocationAndCategory(loc, watch, category) {
 
     if (category.requireKeyword && !LAND_KEYWORD_RE.test(title)) return;
     if (watch.propertyType === "pozemek" && CO_OWNERSHIP_RE.test(title)) return;
-    if (!withinPriceCap(parsePriceCzkFromText(price), watch.priceMaxCzk)) return;
+    const priceCzk = parsePriceCzkFromText(price);
+    if (!withinPriceCap(priceCzk, watch.priceMaxCzk)) return;
 
     items.push({
       source: "bazos",
@@ -85,6 +86,7 @@ async function fetchForLocationAndCategory(loc, watch, category) {
       id,
       title: title || "Nabídka",
       price,
+      priceCzk,
       address: "",
       url: link,
     });

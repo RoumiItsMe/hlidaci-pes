@@ -101,6 +101,7 @@ async function fetchForLocation(loc, watch) {
       id: String(advert.id),
       title,
       price: formatPrice(advert.price),
+      priceCzk: advert.price || null,
       address: advert['address({"locale":"CS"})'] || "",
       url: `https://www.bezrealitky.cz/nemovitosti-byty-domy/${advert.uri}`,
     });
