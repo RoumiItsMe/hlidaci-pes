@@ -69,8 +69,12 @@ zdrojů, které umí filtrovat cenu přímo v URL (Bazoš) — jako pojistka.
 ## Jak to funguje
 
 1. `.github/workflows/watch.yml` spouští `node index.js` cca každých 15
-   minut (GitHub Actions cron, minimální praktický interval — přesně na
-   minutu to negarantuje, ale v praxi sedí).
+   minut. **Spouští ho externí služba [cron-job.org](https://cron-job.org)**
+   přes GitHub API (`workflow_dispatch`) — ne GitHubův vlastní `schedule`
+   trigger, viz [Proč externí cron](#proč-externí-cron-a-ne-githubův-schedule)
+   níže. `schedule` ve `watch.yml` zůstává v souboru jako bonusová záloha
+   (kdyby GitHub časem začal spouštět spolehlivě sám), ale neřeš ho —
+   primární a spolehlivý spouštěč je cron-job.org.
 2. `index.js` pro každé sledování × každý portál stáhne aktuální nabídku a
    porovná ji s `data/seen.json` — konkrétně s poslední známou cenou
    každého inzerátu, uloženou pod klíčem `<sledování>:<portál>`. Pošle
@@ -93,6 +97,54 @@ zdrojů, které umí filtrovat cenu přímo v URL (Bazoš) — jako pojistka.
 5. Když zdroj selže (změna struktury stránky, výpadek webu...) nebo se
    naopak rozchodí, přijde o tom Telegram alert — viz [Upozornění při
    výpadku](#upozornění-při-výpadku).
+
+## Proč externí cron (a ne GitHubův `schedule`)
+
+**Zjištěno naostro po nasazení:** GitHub Actions `schedule` trigger u
+tohohle repa nenaskočil ani jednou během prvních ~4+ hodin po nasazení —
+v historii běhů byly jen ruční `workflow_dispatch` spuštění. Posun mimo
+kulaté minuty (`4,19,34,49` místo `*/15`) nepomohl. Tohle je bohužel
+známá (i když ne oficiálně garantovaná) vlastnost GitHub Actions cronu —
+u nových/málo vytížených repozitářů se scheduled trigger někdy neaktivuje
+spolehlivě vůbec, a GitHub to nijak nehlásí (žádný běh = nic k nahlášení).
+
+**Řešení:** místo spoléhání na GitHubův vlastní scheduler spouští
+`watch.yml` externí free cron služba **[cron-job.org](https://cron-job.org)**
+— zavolá GitHub API endpoint pro `workflow_dispatch` (přesně to samé, co
+dělá tlačítko "Run workflow" na GitHubu nebo `gh workflow run`), a to
+každých 15 minut, spolehlivě. `schedule` trigger zůstává ve `watch.yml`
+jako neškodná bonusová záloha (kdyby to GitHub časem opravil), ale
+neřídíme se podle něj.
+
+### Jednorázové nastavení (udělá vlastník repa)
+
+1. **Vytvoř GitHub token** — [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta)
+   → *Generate new token* (fine-grained):
+   - Repository access → *Only select repositories* → `RoumiItsMe/hlidaci-pes`
+   - Permissions → *Repository permissions* → **Actions** → nastav na
+     **Read and write**
+   - Expiration: klidně nejdelší možnou volbu (token jde kdykoli
+     obnovit/znovu vygenerovat, jen si pohlídej datum vypršení)
+   - *Generate token* → **zkopíruj si ho hned** (zobrazí se jen jednou) —
+     nikam ho neposílej, vlož ho v dalším kroku přímo do cron-job.org
+2. **Založ si účet na [cron-job.org](https://cron-job.org)** (zdarma)
+3. **Vytvoř nový cronjob:**
+   - **Title:** `Hlídací pes — spustit watch.yml`
+   - **URL:** `https://api.github.com/repos/RoumiItsMe/hlidaci-pes/actions/workflows/watch.yml/dispatches`
+   - **Schedule:** každých 15 minut
+   - **Request method:** `POST`
+   - **Headers** (v pokročilém nastavení):
+     - `Authorization: Bearer <tvůj token z kroku 1>`
+     - `Accept: application/vnd.github+json`
+     - `X-GitHub-Api-Version: 2022-11-28`
+     - `Content-Type: application/json`
+   - **Request body:** `{"ref":"main"}`
+   - Ulož a použij "Test run" tlačítko — během pár vteřin by se měl v
+     [GitHub Actions](https://github.com/RoumiItsMe/hlidaci-pes/actions/workflows/watch.yml)
+     objevit nový běh.
+
+Token dej pozor nikdy nevkládat nikam jinam než do hlaviček tohohle
+jednoho cronjobu — má zápisový přístup k Actions v tomhle repu.
 
 ## Lokální spuštění / test
 
@@ -121,21 +173,21 @@ Zdravotní stav každé dvojice (sledování, zdroj) se sleduje v
   e-mailové upozornění GitHubu vlastníkovi repa (záložní kanál nezávislý
   na tom, jestli se podaří odeslat Telegram zprávu).
 
-**🛎️ Kontrola, jestli sám cron vůbec běží** ([`heartbeat.yml`](.github/workflows/heartbeat.yml)):
+**🛎️ Kontrola, jestli hlídací pes vůbec běží** ([`heartbeat.yml`](.github/workflows/heartbeat.yml)):
 výše popsané alerty pokrývají "zdroj/portál nefunguje", ale ne scénář, kdy
-GitHubu vůbec nenaskočí automatické (scheduled) spuštění `watch.yml` — to
-se nehlásí jako chyba (žádný běh = nic k nahlášení), a přesně tohle se
-reálně stalo pár hodin po prvním nasazení (viz "Známá omezení" — kulaté
-minuty + prodleva u nového repa). `heartbeat.yml` běží
-samostatně, jednou za hodinu, na jiném rozvrhu než `watch.yml`, a přes
-GitHub API kontroluje, kdy naposledy proběhl skutečný `schedule`-běh
-hlavního workflow. Když je to víc než 40 minut (= min. dva zmeškané
-15minutové běhy v řadě), pošle **🛎️** Telegram zprávu — jiné označení než
-alerty výše, ať je hned jasné, že jde o "cron neběží vůbec", ne o "portál
-nefunguje". Zbytkové riziko: obě kontroly běží na stejné GitHub Actions
-infrastruktuře, takže úplný výpadek celého GitHubu srazí obě najednou —
-pro tenhle scénář by bylo potřeba nezávislé externí hlídání (např.
-healthchecks.io), což ale vyžaduje založit účet u třetí strany.
+`watch.yml` neproběhne vůbec (spouštěč — cron-job.org — přestane volat,
+nebo je výpadek na straně GitHubu) — to se nehlásí jako chyba (žádný běh =
+nic k nahlášení). `heartbeat.yml` běží samostatně, jednou za hodinu, na
+jiném rozvrhu než `watch.yml`, a přes GitHub API kontroluje, kdy naposledy
+proběhl JAKÝKOLI běh hlavního workflow (ať ho spustil cron-job.org,
+GitHubův bonusový `schedule`, nebo ruční spuštění). Když je to víc než
+40 minut (= min. dva zmeškané 15minutové běhy v řadě), pošle **🛎️**
+Telegram zprávu — jiné označení než alerty výše, ať je hned jasné, že jde
+o "hlídací pes vůbec neběžel", ne o "portál nefunguje". Zbytkové riziko:
+`heartbeat.yml` běží na stejné GitHub Actions infrastruktuře jako
+`watch.yml`, takže úplný výpadek celého GitHubu by srazil obě kontroly
+najednou — tohle konkrétní riziko ale řeší už to, že primární spouštěč
+(cron-job.org) je mimo GitHub úplně, viz [Proč externí cron](#proč-externí-cron-a-ne-githubův-schedule).
 
 ## Telegram bot
 
@@ -159,12 +211,13 @@ jsou uložené jako GitHub Secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 
 ## Známá omezení / možná vylepšení
 
-- GitHub Actions cron negarantuje přesný čas spuštění (může se zpozdit o
-  pár minut, hlavně ve špičce) — proto je cron schválně posunutý mimo
-  kulaté minuty (`4,19,34,49`, ne `*/15`, viz komentář ve `watch.yml`). U
-  nově založeného repa navíc první automatické spuštění cronu může přijít
-  až s pár hodinovým zpožděním, i když je vše nakonfigurované správně —
-  jakmile jednou naskočí, pak už jede spolehlivě podle rozvrhu.
+- GitHub Actions `schedule` trigger se u tohohle repa ukázal nespolehlivý
+  (nenaskočil ani po 4+ hodinách) — proto je primární spouštěč externí
+  cron-job.org, ne GitHubův vlastní scheduler. Podrobnosti a nastavení viz
+  [Proč externí cron](#proč-externí-cron-a-ne-githubův-schedule).
+  cron-job.org samo o sobě taky negarantuje úplně přesnou minutu (běžně
+  v řádu vteřin až nízkých jednotek minut zpoždění), ale řádově
+  spolehlivěji než to, co jsme pozorovali u GitHubu.
 - iDNES a RealityMIX nemají GPS na inzerátech ani skutečný radius-search →
   u bytů jen samotné město, u pozemků aproximace (viz tabulka výše).
 - Pokud portál za 15 minut zveřejní víc nových inzerátů, než kolik jich je
