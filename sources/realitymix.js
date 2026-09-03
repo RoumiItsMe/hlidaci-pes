@@ -1,7 +1,10 @@
 // RealityMIX.cz — server-rendered HTML, parsuje se přes CSS selektory.
 //
-// Lokalita: hledání na úrovni "město Ústí nad Orlicí" (bez GPS souřadnic
-// v datech, stejný kompromis jako u iDNES — žádný přesný 5km radius).
+// Lokality: URL má tvar /reality/byty/prodej/{kraj}/{okres}/{město}. Kraj
+// (pardubicky) i okres (usti-nad-orlici) jsou pro všechny nakonfigurované
+// lokality společné — všechny leží ve stejném okrese — mění se jen poslední
+// segment (citySlug). Stejně jako u iDNES nejsou k dispozici GPS souřadnice
+// jednotlivých inzerátů, takže se bere jen město (bez přesného 5km okruhu).
 //
 // Titulek/cena/adresa se parsují heuristicky z textu karty (přesné CSS
 // třídy pro cenu/adresu portál nepojmenovává jednoznačně) — pokud se
@@ -10,12 +13,14 @@
 
 import * as cheerio from "cheerio";
 import { fetchText } from "../lib/http.js";
+import { mergeUniqueById } from "../lib/merge.js";
 
-const SEARCH_URL =
-  "https://realitymix.cz/reality/byty/prodej/pardubicky/usti-nad-orlici/usti-nad-orlici";
+const KRAJ_SLUG = "pardubicky";
+const OKRES_SLUG = "usti-nad-orlici";
 
-export async function fetchRealitymix() {
-  const html = await fetchText(SEARCH_URL);
+async function fetchForLocation(loc) {
+  const url = `https://realitymix.cz/reality/byty/prodej/${KRAJ_SLUG}/${OKRES_SLUG}/${loc.citySlug}`;
+  const html = await fetchText(url);
   const $ = cheerio.load(html);
 
   const seenIds = new Set();
@@ -58,4 +63,12 @@ export async function fetchRealitymix() {
     });
   });
   return items;
+}
+
+export async function fetchRealitymix(config) {
+  const perLocation = [];
+  for (const loc of config.locations) {
+    perLocation.push(await fetchForLocation(loc));
+  }
+  return mergeUniqueById(perLocation);
 }

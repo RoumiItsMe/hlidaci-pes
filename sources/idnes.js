@@ -1,18 +1,19 @@
 // Reality.iDNES.cz — klasicky server-rendered HTML (žádný embedded JSON),
 // parsuje se přes CSS selektory (cheerio).
 //
-// Lokalita: hledání je na úrovni "město Ústí nad Orlicí" (bez okolí +5 km —
-// iDNES nenabízí radius filtr ani GPS souřadnice u jednotlivých inzerátů
-// v seznamu, takže přesný 5km filtr tu nejde spočítat jako u Sreality/
-// Bezrealitky). Drobné podhodnocení oproti +5 km je vědomý kompromis.
+// Lokality: pro každou nakonfigurovanou lokalitu je samostatná URL (jen na
+// úrovni "město", bez GPS/radius — iDNES nenabízí radius filtr ani GPS
+// souřadnice u jednotlivých inzerátů v seznamu, takže přesný 5km okruh tu
+// nejde spočítat jako u Sreality/Bezrealitky). Výsledky se sloučí a
+// odduplikují.
 
 import * as cheerio from "cheerio";
 import { fetchText } from "../lib/http.js";
+import { mergeUniqueById } from "../lib/merge.js";
 
-const SEARCH_URL = "https://reality.idnes.cz/s/prodej/byty/usti-nad-orlici/";
-
-export async function fetchIdnes() {
-  const html = await fetchText(SEARCH_URL);
+async function fetchForLocation(loc) {
+  const url = `https://reality.idnes.cz/s/prodej/byty/${loc.citySlug}/`;
+  const html = await fetchText(url);
   const $ = cheerio.load(html);
 
   const items = [];
@@ -40,4 +41,12 @@ export async function fetchIdnes() {
     });
   });
   return items;
+}
+
+export async function fetchIdnes(config) {
+  const perLocation = [];
+  for (const loc of config.locations) {
+    perLocation.push(await fetchForLocation(loc));
+  }
+  return mergeUniqueById(perLocation);
 }

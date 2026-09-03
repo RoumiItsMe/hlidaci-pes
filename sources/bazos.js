@@ -3,26 +3,31 @@
 // ze všech pěti zdrojů.
 //
 // cat=65 = kategorie "Byty" v rubrice "Prodej" (Reality), typ=1 = Prodej,
-// hlokalita = PSČ bez mezery, humkreis = okruh v km.
+// hlokalita = PSČ bez mezery, humkreis = okruh v km. `hlokalita` MUSÍ být
+// platné PSČ (ne text) — Bazoš bez rozpoznaného PSČ tiše ignoruje lokalitní
+// filtr a vrátí nabídku z celé ČR (ověřeno).
+//
+// Lokality: pro každou nakonfigurovanou lokalitu samostatný RSS dotaz
+// (Bazoš neumí víc středů/okruhů v jednom požadavku), výsledky se sloučí
+// a odduplikují.
 
 import * as cheerio from "cheerio";
 import { fetchText } from "../lib/http.js";
+import { mergeUniqueById } from "../lib/merge.js";
 
-function buildRssUrl(config) {
-  const zip = config.location.zip;
-  const radiusKm = config.location.radiusKm;
+function buildRssUrl(loc) {
   const params = new URLSearchParams({
     rub: "re",
     cat: "65",
     typ: "1",
-    hlokalita: zip,
-    humkreis: String(radiusKm),
+    hlokalita: loc.zip,
+    humkreis: String(loc.radiusKm),
   });
   return `https://www.bazos.cz/rss.php?${params.toString()}`;
 }
 
-export async function fetchBazos(config) {
-  const xml = await fetchText(buildRssUrl(config));
+async function fetchForLocation(loc) {
+  const xml = await fetchText(buildRssUrl(loc));
   const $ = cheerio.load(xml, { xmlMode: true });
 
   const items = [];
@@ -51,4 +56,12 @@ export async function fetchBazos(config) {
     });
   });
   return items;
+}
+
+export async function fetchBazos(config) {
+  const perLocation = [];
+  for (const loc of config.locations) {
+    perLocation.push(await fetchForLocation(loc));
+  }
+  return mergeUniqueById(perLocation);
 }

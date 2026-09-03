@@ -1,11 +1,13 @@
 // Bezrealitky.cz — data se čtou z embedded JSON (__NEXT_DATA__ → apolloCache),
-// stejný princip jako Sreality. Lokalitu řešíme přes "boundaryPoints"
-// (obdélníkový výřez mapy) opsaný kolem 5km kružnice, a pak stejně jako
-// u Sreality ještě přefiltrujeme přes skutečnou GPS vzdálenost (aby rohy
-// obdélníku, které jsou dál než 5 km, nezůstaly v datech).
+// stejný princip jako Sreality. Portál ale (na rozdíl od Sreality) nemá
+// "fetchni celý okres najednou" endpoint — lokalitu řeší přes "boundaryPoints"
+// (obdélníkový výřez mapy), takže pro každou nakonfigurovanou lokalitu musíme
+// poslat samostatný dotaz. Výsledky se pak sloučí a odduplikují (blízké
+// lokality se v okruhu mohou překrývat).
 
 import { haversineKm, boundingBox } from "../lib/geo.js";
 import { fetchText } from "../lib/http.js";
+import { mergeUniqueById } from "../lib/merge.js";
 
 function buildUrl(boundaryPoints) {
   const params = new URLSearchParams({
@@ -43,9 +45,8 @@ function formatPrice(price) {
   return `${price.toLocaleString("cs-CZ")} Kč`;
 }
 
-export async function fetchBezrealitky(config) {
-  const { centerLat, centerLng, radiusKm } = config.location;
-  const box = boundingBox(centerLat, centerLng, radiusKm);
+async function fetchForLocation(loc) {
+  const box = boundingBox(loc.centerLat, loc.centerLng, loc.radiusKm);
   const boundaryPoints = [
     { lat: box.latMax, lng: box.lonMax },
     { lat: box.latMax, lng: box.lonMin },
@@ -73,7 +74,7 @@ export async function fetchBezrealitky(config) {
   for (const { __ref } of refs) {
     const advert = cache[__ref];
     if (!advert?.gps) continue;
-    if (haversineKm(centerLat, centerLng, advert.gps.lat, advert.gps.lng) > radiusKm) continue;
+    if (haversineKm(loc.centerLat, loc.centerLng, advert.gps.lat, advert.gps.lng) > loc.radiusKm) continue;
 
     const disp = formatDisposition(advert.disposition);
     const surface = advert.surface ? `${advert.surface} m²` : "";
@@ -88,4 +89,12 @@ export async function fetchBezrealitky(config) {
     });
   }
   return items;
+}
+
+export async function fetchBezrealitky(config) {
+  const perLocation = [];
+  for (const loc of config.locations) {
+    perLocation.push(await fetchForLocation(loc));
+  }
+  return mergeUniqueById(perLocation);
 }

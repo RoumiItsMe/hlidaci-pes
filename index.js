@@ -27,8 +27,8 @@ const REALERT_COOLDOWN_MS = 12 * 60 * 60 * 1000; // 12 hodin
 const SOURCES = [
   { name: "sreality", label: "Sreality.cz", fetch: () => fetchSreality(config) },
   { name: "bezrealitky", label: "Bezrealitky.cz", fetch: () => fetchBezrealitky(config) },
-  { name: "idnes", label: "Reality.iDNES.cz", fetch: () => fetchIdnes() },
-  { name: "realitymix", label: "RealityMIX.cz", fetch: () => fetchRealitymix() },
+  { name: "idnes", label: "Reality.iDNES.cz", fetch: () => fetchIdnes(config) },
+  { name: "realitymix", label: "RealityMIX.cz", fetch: () => fetchRealitymix(config) },
   { name: "bazos", label: "Bazoš.cz", fetch: () => fetchBazos(config) },
 ];
 
