@@ -144,7 +144,11 @@ jsou uložené jako GitHub Secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 ## Známá omezení / možná vylepšení
 
 - GitHub Actions cron negarantuje přesný čas spuštění (může se zpozdit o
-  pár minut, hlavně ve špičce).
+  pár minut, hlavně ve špičce) — proto je cron schválně posunutý mimo
+  kulaté minuty (`4,19,34,49`, ne `*/15`, viz komentář ve `watch.yml`). U
+  nově založeného repa navíc první automatické spuštění cronu může přijít
+  až s pár hodinovým zpožděním, i když je vše nakonfigurované správně —
+  jakmile jednou naskočí, pak už jede spolehlivě podle rozvrhu.
 - iDNES a RealityMIX nemají GPS na inzerátech ani skutečný radius-search →
   u bytů jen samotné město, u pozemků aproximace (viz tabulka výše).
 - Pokud portál za 15 minut zveřejní víc nových inzerátů, než kolik jich je

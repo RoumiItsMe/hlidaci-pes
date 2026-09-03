@@ -2,9 +2,12 @@ name: Hlídací pes
 
 on:
   schedule:
-    # GitHub Actions cron negarantuje přesný interval (zvlášť ve špičce
-    # může být spuštění o pár minut později) — v praxi to ale sedí na +/- 15-30 min.
-    - cron: "*/15 * * * *"
+    # Schválně NE "*/15 * * * *" — kulaté časy (:00, :15, :30, :45) jsou
+    # nejvytíženější sloty na celém GitHubu a spouštění se tam nejvíc
+    # zpožďuje/přeskakuje (doporučená praxe GitHubu: posunout mimo kulaté
+    # minuty). Tohle běží ve stejném intervalu (každých 15 min), jen na
+    # :04/:19/:34/:49.
+    - cron: "4,19,34,49 * * * *"
   workflow_dispatch: {}
 
 # Ať se nikdy nespustí dva běhy najednou (kdyby GitHub kvůli frontě spustil
