@@ -1,0 +1,16 @@
+{
+  "name": "hlidaci-pes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hlídací pes na nové nemovitosti — sleduje realitní portály a posílá notifikace na Telegram.",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  }
+}
