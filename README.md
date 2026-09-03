@@ -121,6 +121,22 @@ Zdravotní stav každé dvojice (sledování, zdroj) se sleduje v
   e-mailové upozornění GitHubu vlastníkovi repa (záložní kanál nezávislý
   na tom, jestli se podaří odeslat Telegram zprávu).
 
+**🛎️ Kontrola, jestli sám cron vůbec běží** ([`heartbeat.yml`](.github/workflows/heartbeat.yml)):
+výše popsané alerty pokrývají "zdroj/portál nefunguje", ale ne scénář, kdy
+GitHubu vůbec nenaskočí automatické (scheduled) spuštění `watch.yml` — to
+se nehlásí jako chyba (žádný běh = nic k nahlášení), a přesně tohle se
+reálně stalo pár hodin po prvním nasazení (viz "Známá omezení" — kulaté
+minuty + prodleva u nového repa). `heartbeat.yml` běží
+samostatně, jednou za hodinu, na jiném rozvrhu než `watch.yml`, a přes
+GitHub API kontroluje, kdy naposledy proběhl skutečný `schedule`-běh
+hlavního workflow. Když je to víc než 40 minut (= min. dva zmeškané
+15minutové běhy v řadě), pošle **🛎️** Telegram zprávu — jiné označení než
+alerty výše, ať je hned jasné, že jde o "cron neběží vůbec", ne o "portál
+nefunguje". Zbytkové riziko: obě kontroly běží na stejné GitHub Actions
+infrastruktuře, takže úplný výpadek celého GitHubu srazí obě najednou —
+pro tenhle scénář by bylo potřeba nezávislé externí hlídání (např.
+healthchecks.io), což ale vyžaduje založit účet u třetí strany.
+
 ## Telegram bot
 
 Bot: **[@Peshlidaci_bot](https://t.me/Peshlidaci_bot)**. Token a chat ID
