@@ -1,19 +1,36 @@
 // Sreality.cz — data se čtou přímo z embedded JSON (__NEXT_DATA__), který
 // stránka posílá server-side rendered. Žádné volání API navíc není potřeba.
 //
-// Lokality: fetchujeme jedním dotazem za celý okres Ústí nad Orlicí (ten
-// pokrývá VŠECHNY nakonfigurované lokality — Ústí n. O., Letohrad, Žamberk
-// i Českou Třebovou, protože všechny leží ve stejném okrese), a pak každý
-// inzerát otestujeme, jestli spadá do okruhu ALESPOŇ JEDNÉ z nich (přes GPS
-// souřadnice). Sreality neumí "adresa + poloměr" hledání přes URL/parametry,
-// ale ke každému inzerátu vrací lat/lng, takže si radius dopočítáme sami —
-// a díky jednomu společnému fetchi za celý okres nepotřebujeme samostatný
-// dotaz na lokalitu (na rozdíl od Bezrealitky/iDNES/RealityMIX/Bazoše).
+// Lokality: fetchujeme jedním (nebo pro pozemky dvěma — viz níže) dotazem
+// za celý okres Ústí nad Orlicí (ten pokrývá VŠECHNY nakonfigurované
+// lokality napříč všemi sledováními, protože všechny leží ve stejném
+// okrese), a pak každý inzerát otestujeme, jestli spadá do okruhu ALESPOŇ
+// JEDNÉ z nakonfigurovaných lokalit (přes GPS souřadnice). Sreality neumí
+// "adresa + poloměr" hledání přes URL/parametry, ale ke každému inzerátu
+// vrací lat/lng, takže si radius dopočítáme sami — a díky jednomu
+// společnému fetchi za celý okres nepotřebujeme samostatný dotaz na
+// lokalitu (na rozdíl od Bezrealitky/iDNES/RealityMIX/Bazoše).
+//
+// Pozemky: Sreality nemá kategorii "rekreační pozemek", ale má vlastní URL
+// pro "Bydlení" (stavební parcely, slug "stavebni-parcely") a "Zahrady"
+// (slug "zahrady") — přesně to, co chceme. Fetchují se zvlášť a slučují.
 
 import { haversineKm } from "../lib/geo.js";
 import { fetchText } from "../lib/http.js";
+import { withinPriceCap } from "../lib/price.js";
+import { mergeUniqueById } from "../lib/merge.js";
 
-const SEARCH_URL = "https://www.sreality.cz/hledani/prodej/byty/usti-nad-orlici";
+const DISTRICT_SLUG = "usti-nad-orlici";
+
+function buildSearchUrls(watch) {
+  if (watch.propertyType === "pozemek") {
+    return [
+      `https://www.sreality.cz/hledani/prodej/pozemky/stavebni-parcely/${DISTRICT_SLUG}`,
+      `https://www.sreality.cz/hledani/prodej/pozemky/zahrady/${DISTRICT_SLUG}`,
+    ];
+  }
+  return [`https://www.sreality.cz/hledani/prodej/byty/${DISTRICT_SLUG}`];
+}
 
 function extractNextData(html) {
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
@@ -30,7 +47,8 @@ function buildDetailUrl(item) {
   const loc = item.locality || {};
   const parts = [loc.citySeoName, loc.cityPartSeoName, loc.streetSeoName].filter(Boolean);
   const slug = parts.length ? parts.join("-") : "byt";
-  return `https://www.sreality.cz/detail/prodej/byt/${encodeURIComponent(
+  const kind = item.categoryMainCb?.value === 3 ? "pozemky" : "byt";
+  return `https://www.sreality.cz/detail/prodej/${kind}/${encodeURIComponent(
     disposition
   )}/${slug}/${item.id}`;
 }
@@ -40,7 +58,7 @@ function formatPrice(priceCzk) {
   return `${priceCzk.toLocaleString("cs-CZ")} Kč`;
 }
 
-// U měst bez konkrétní čtvrti vrací Sreality cityPart === city (např. obojí
+// U míst bez konkrétní čtvrti vrací Sreality cityPart === city (např. obojí
 // "Ústí nad Orlicí") — bez téhle deduplikace by adresa vyšla "Ústí nad
 // Orlicí, Ústí nad Orlicí".
 function formatAddress(locality) {
@@ -50,8 +68,8 @@ function formatAddress(locality) {
   return city || "";
 }
 
-export async function fetchSreality(config) {
-  const html = await fetchText(SEARCH_URL);
+async function fetchOneUrl(url, watch) {
+  const html = await fetchText(url);
   const data = extractNextData(html);
   const dehydrated = data?.props?.pageProps?.dehydratedState;
   if (!dehydrated) {
@@ -66,20 +84,31 @@ export async function fetchSreality(config) {
     const lng = r.locality?.longitude;
     if (lat == null || lng == null) continue;
 
-    const withinAnyLocation = config.locations.some(
+    const withinAnyLocation = watch.locations.some(
       (loc) => haversineKm(loc.centerLat, loc.centerLng, lat, lng) <= loc.radiusKm
     );
     if (!withinAnyLocation) continue;
+
+    if (!withinPriceCap(r.priceCzk, watch.priceMaxCzk)) continue;
 
     items.push({
       source: "sreality",
       sourceLabel: "Sreality.cz",
       id: String(r.id),
-      title: r.name || "Byt na prodej",
+      title: r.name || "Nabídka",
       price: formatPrice(r.priceCzk),
       address: formatAddress(r.locality),
       url: buildDetailUrl(r),
     });
   }
   return items;
+}
+
+export async function fetchSreality(watch) {
+  const urls = buildSearchUrls(watch);
+  const perUrl = [];
+  for (const url of urls) {
+    perUrl.push(await fetchOneUrl(url, watch));
+  }
+  return mergeUniqueById(perUrl);
 }

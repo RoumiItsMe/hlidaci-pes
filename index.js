@@ -1,18 +1,21 @@
 // Hlídací pes — hlavní orchestrátor.
 //
-// Projde všechny zdroje (portály), porovná nalezené inzeráty s tím, co už
-// bylo dřív viděno (data/seen.json), a o nových pošle notifikaci na Telegram.
+// Projde všechna sledování (watches, viz config.js) × všechny zdroje
+// (portály), porovná nalezené inzeráty s tím, co už bylo dřív viděno
+// (data/seen.json), a o nových pošle notifikaci na Telegram.
 //
-// Při úplně prvním běhu pro daný zdroj (žádný předchozí stav) se aktuální
-// nabídka jen "zabaseline" jako už viděná — bez notifikací — ať uživatele
-// nezaplaví desítkami zpráv o inzerátech, které tam visí už dlouho.
+// Při úplně prvním běhu pro danou dvojici (sledování, zdroj) — žádný
+// předchozí stav — se aktuální nabídka jen "zabaseline" jako už viděná —
+// bez notifikací — ať uživatele nezaplaví desítkami zpráv o inzerátech,
+// které tam visí už dlouho. Stejný princip platí i při přidání nového
+// sledování/lokality: state klíč je nový → první běh je tichý baseline.
 //
-// Zdravotní stav zdrojů (state.__health) sleduje, jestli daný portál právě
-// selhává — když ano, pošle se Telegram alert (a znovu až po 12 hodinách,
-// ať to při dlouhodobém výpadku nespamuje každých 15 minut). Jakmile se
-// zdroj zase rozchodí, pošle se zpráva o zotavení.
+// Zdravotní stav (state.__health) sleduje, jestli daná dvojice (sledování,
+// zdroj) právě selhává — když ano, pošle se Telegram alert (a znovu až po
+// 12 hodinách, ať to při dlouhodobém výpadku nespamuje každých 15 minut).
+// Jakmile se zdroj zase rozchodí, pošle se zpráva o zotavení.
 
-import { config } from "./config.js";
+import { watches, maxSeenPerSource } from "./config.js";
 import { loadState, saveState, getSourceSeen, setSourceSeen } from "./lib/state.js";
 import { sendTelegramMessage, sleep } from "./lib/telegram.js";
 import { fetchSreality } from "./sources/sreality.js";
@@ -25,28 +28,28 @@ const ACTIONS_LOG_URL = "https://github.com/RoumiItsMe/hlidaci-pes/actions";
 const REALERT_COOLDOWN_MS = 12 * 60 * 60 * 1000; // 12 hodin
 
 const SOURCES = [
-  { name: "sreality", label: "Sreality.cz", fetch: () => fetchSreality(config) },
-  { name: "bezrealitky", label: "Bezrealitky.cz", fetch: () => fetchBezrealitky(config) },
-  { name: "idnes", label: "Reality.iDNES.cz", fetch: () => fetchIdnes(config) },
-  { name: "realitymix", label: "RealityMIX.cz", fetch: () => fetchRealitymix(config) },
-  { name: "bazos", label: "Bazoš.cz", fetch: () => fetchBazos(config) },
+  { name: "sreality", label: "Sreality.cz", fetch: fetchSreality },
+  { name: "bezrealitky", label: "Bezrealitky.cz", fetch: fetchBezrealitky },
+  { name: "idnes", label: "Reality.iDNES.cz", fetch: fetchIdnes },
+  { name: "realitymix", label: "RealityMIX.cz", fetch: fetchRealitymix },
+  { name: "bazos", label: "Bazoš.cz", fetch: fetchBazos },
 ];
 
-function formatMessage(item) {
-  const lines = [`🏠 Nová nabídka — ${item.sourceLabel}`, item.title];
+function formatMessage(watch, item) {
+  const lines = [`${watch.emoji} Nová nabídka — ${watch.label} • ${item.sourceLabel}`, item.title];
   if (item.address) lines.push(`📍 ${item.address}`);
   lines.push(`💰 ${item.price}`);
   lines.push(item.url);
   return lines.join("\n");
 }
 
-function getHealth(state, source) {
+function getHealth(state, key) {
   if (!state.__health) state.__health = {};
-  if (!state.__health[source]) state.__health[source] = { failing: false, lastAlertAt: null };
-  return state.__health[source];
+  if (!state.__health[key]) state.__health[key] = { failing: false, lastAlertAt: null };
+  return state.__health[key];
 }
 
-/** Pošle Telegram alert o selhání zdroje — hned při první chybě, pak nejvýš 1x za 12 h. */
+/** Pošle Telegram alert o selhání — hned při první chybě, pak nejvýš 1x za 12 h. */
 async function alertFailure(health, label, err) {
   const now = Date.now();
   const alreadyAlertedRecently =
@@ -57,22 +60,22 @@ async function alertFailure(health, label, err) {
   health.lastAlertAt = new Date(now).toISOString();
   try {
     await sendTelegramMessage(
-      `⚠️ Hlídací pes: zdroj ${label} přestal fungovat.\nChyba: ${err.message}\n\nLog: ${ACTIONS_LOG_URL}`
+      `⚠️ Hlídací pes: ${label} přestal fungovat.\nChyba: ${err.message}\n\nLog: ${ACTIONS_LOG_URL}`
     );
   } catch (alertErr) {
-    console.error(`Nepodařilo se odeslat alert o selhání zdroje ${label}: ${alertErr.message}`);
+    console.error(`Nepodařilo se odeslat alert o selhání (${label}): ${alertErr.message}`);
   }
 }
 
-/** Pošle Telegram zprávu o zotavení, pokud zdroj předtím selhával. */
+/** Pošle Telegram zprávu o zotavení, pokud předtím selhávalo. */
 async function alertRecoveryIfNeeded(health, label) {
   if (!health.failing) return;
   health.failing = false;
   health.lastAlertAt = null;
   try {
-    await sendTelegramMessage(`✅ Hlídací pes: zdroj ${label} zase funguje.`);
+    await sendTelegramMessage(`✅ Hlídací pes: ${label} zase funguje.`);
   } catch (err) {
-    console.error(`Nepodařilo se odeslat zprávu o zotavení zdroje ${label}: ${err.message}`);
+    console.error(`Nepodařilo se odeslat zprávu o zotavení (${label}): ${err.message}`);
   }
 }
 
@@ -81,43 +84,47 @@ async function run() {
   let totalNew = 0;
   let hadError = false;
 
-  for (const src of SOURCES) {
-    const health = getHealth(state, src.name);
-    const seen = getSourceSeen(state, src.name);
-    const isFirstRun = seen.size === 0;
+  for (const watch of watches) {
+    for (const src of SOURCES) {
+      const stateKey = `${watch.key}:${src.name}`;
+      const label = `${watch.label} • ${src.label}`;
+      const health = getHealth(state, stateKey);
+      const seen = getSourceSeen(state, stateKey);
+      const isFirstRun = seen.size === 0;
 
-    let items;
-    try {
-      items = await src.fetch();
-    } catch (err) {
-      hadError = true;
-      console.error(`[${src.name}] CHYBA při stahování: ${err.message}`);
-      await alertFailure(health, src.label, err);
-      continue;
-    }
-
-    await alertRecoveryIfNeeded(health, src.label);
-
-    const newItems = items.filter((item) => !seen.has(item.id));
-    console.log(
-      `[${src.name}] nalezeno ${items.length} inzerátů v okruhu, z toho ${newItems.length} nových${
-        isFirstRun ? " (první běh — jen baseline, bez notifikací)" : ""
-      }`
-    );
-
-    for (const item of items) seen.add(item.id);
-    setSourceSeen(state, src.name, seen, config.maxSeenPerSource);
-
-    if (isFirstRun || newItems.length === 0) continue;
-
-    for (const item of newItems) {
+      let items;
       try {
-        await sendTelegramMessage(formatMessage(item));
-        totalNew += 1;
-        await sleep(400);
+        items = await src.fetch(watch);
       } catch (err) {
         hadError = true;
-        console.error(`[${src.name}] CHYBA při odesílání Telegram zprávy: ${err.message}`);
+        console.error(`[${stateKey}] CHYBA při stahování: ${err.message}`);
+        await alertFailure(health, label, err);
+        continue;
+      }
+
+      await alertRecoveryIfNeeded(health, label);
+
+      const newItems = items.filter((item) => !seen.has(item.id));
+      console.log(
+        `[${stateKey}] nalezeno ${items.length} inzerátů, z toho ${newItems.length} nových${
+          isFirstRun ? " (první běh — jen baseline, bez notifikací)" : ""
+        }`
+      );
+
+      for (const item of items) seen.add(item.id);
+      setSourceSeen(state, stateKey, seen, maxSeenPerSource);
+
+      if (isFirstRun || newItems.length === 0) continue;
+
+      for (const item of newItems) {
+        try {
+          await sendTelegramMessage(formatMessage(watch, item));
+          totalNew += 1;
+          await sleep(400);
+        } catch (err) {
+          hadError = true;
+          console.error(`[${stateKey}] CHYBA při odesílání Telegram zprávy: ${err.message}`);
+        }
       }
     }
   }

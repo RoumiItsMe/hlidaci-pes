@@ -1,21 +1,63 @@
 {
-  "sreality": [
+  "__health": {
+    "byty:sreality": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "byty:bezrealitky": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "byty:idnes": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "byty:realitymix": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "byty:bazos": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "pozemky-glamping:sreality": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "pozemky-glamping:bezrealitky": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "pozemky-glamping:idnes": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "pozemky-glamping:realitymix": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "pozemky-glamping:bazos": {
+      "failing": false,
+      "lastAlertAt": null
+    }
+  },
+  "byty:sreality": [
     "4059480140",
-    "1314598988",
-    "479977548",
-    "527286348",
     "657010764",
     "1156223052",
+    "1314598988",
     "242860108",
     "1693761612",
+    "479977548",
     "3698638924",
+    "527286348",
     "1895026764",
     "2283966540"
   ],
-  "bezrealitky": [
+  "byty:bezrealitky": [
     "1060552"
   ],
-  "idnes": [
+  "byty:idnes": [
     "69f30c951205ea1027055d6e",
     "6a95d108e6f8ebf3310aebba",
     "6a4668a52a85ccc83b07b5fc",
@@ -44,7 +86,7 @@
     "6a4dfc8f11965fa7960e4e3c",
     "69dceceb62763515130bc828"
   ],
-  "realitymix": [
+  "byty:realitymix": [
     "8680515",
     "8673271",
     "8584525",
@@ -67,7 +109,7 @@
     "8466803",
     "6380499"
   ],
-  "bazos": [
+  "byty:bazos": [
     "223332943",
     "223114473",
     "223114403",
@@ -101,26 +143,92 @@
     "221063482",
     "221052027"
   ],
-  "__health": {
-    "sreality": {
-      "failing": false,
-      "lastAlertAt": null
-    },
-    "bezrealitky": {
-      "failing": false,
-      "lastAlertAt": null
-    },
-    "idnes": {
-      "failing": false,
-      "lastAlertAt": null
-    },
-    "realitymix": {
-      "failing": false,
-      "lastAlertAt": null
-    },
-    "bazos": {
-      "failing": false,
-      "lastAlertAt": null
-    }
-  }
+  "pozemky-glamping:sreality": [
+    "369152076",
+    "3999264844",
+    "3666489420",
+    "1565946444",
+    "1999355980",
+    "3814510668",
+    "3203059788",
+    "3190411340",
+    "2378358860",
+    "1462800460",
+    "3818885196",
+    "3542917964",
+    "1713660748",
+    "2917581644",
+    "1209451340",
+    "2556772940",
+    "605831756",
+    "3120198220",
+    "3660161612",
+    "1750227036"
+  ],
+  "pozemky-glamping:bezrealitky": [
+    "1047986",
+    "1055787",
+    "1045206",
+    "949297"
+  ],
+  "pozemky-glamping:idnes": [
+    "6a31935cb5d97633bb0d953b",
+    "67e53ef15d8458e4270b2496",
+    "6a75c55187ed96a4a90c8ed3"
+  ],
+  "pozemky-glamping:realitymix": [
+    "8208881",
+    "7918448",
+    "8432759",
+    "8643995",
+    "8651119",
+    "7801660",
+    "8519347",
+    "8223895"
+  ],
+  "pozemky-glamping:bazos": [
+    "223313840",
+    "223289236",
+    "223288270",
+    "223272311",
+    "223252310",
+    "223225131",
+    "223164972",
+    "223129849",
+    "223041715",
+    "223039276",
+    "223036678",
+    "222941944",
+    "222774944",
+    "222763837",
+    "222762845",
+    "222762562",
+    "222648055",
+    "222572809",
+    "223084740",
+    "222763237",
+    "222692463",
+    "222691613",
+    "222686386",
+    "222667827",
+    "222651606",
+    "222597695",
+    "222515319",
+    "222514143",
+    "222513650",
+    "222487209",
+    "222475949",
+    "222436287",
+    "222422884",
+    "222207461",
+    "222124664",
+    "221978962",
+    "221325207",
+    "221116589",
+    "221038541",
+    "221038255",
+    "221038080",
+    "221037828",
+    "221037716"
+  ]
 }

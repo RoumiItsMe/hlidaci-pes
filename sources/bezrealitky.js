@@ -4,16 +4,23 @@
 // (obdélníkový výřez mapy), takže pro každou nakonfigurovanou lokalitu musíme
 // poslat samostatný dotaz. Výsledky se pak sloučí a odduplikují (blízké
 // lokality se v okruhu mohou překrývat).
+//
+// Pozemky: portál sice má pole `landType` (typ pozemku), ale u inzerátů
+// v tomhle regionu je prakticky vždy "UNDEFINED" (prodejci ho nevyplňují) —
+// nejde se tedy spolehlivě omezit jen na "bydlení/zahrady" jako u ostatních
+// zdrojů. Bereme proto VŠECHNY pozemky v okruhu + do cenového stropu (je
+// jich v tomhle regionu málo, takže i tak zůstává použitelné).
 
 import { haversineKm, boundingBox } from "../lib/geo.js";
 import { fetchText } from "../lib/http.js";
+import { withinPriceCap } from "../lib/price.js";
 import { mergeUniqueById } from "../lib/merge.js";
 
-function buildUrl(boundaryPoints) {
+function buildUrl(boundaryPoints, estateType) {
   const params = new URLSearchParams({
     country: "ceska-republika",
     currency: "CZK",
-    estateType: "BYT",
+    estateType,
     location: "fromMap",
     offerType: "PRODEJ",
   });
@@ -45,7 +52,8 @@ function formatPrice(price) {
   return `${price.toLocaleString("cs-CZ")} Kč`;
 }
 
-async function fetchForLocation(loc) {
+async function fetchForLocation(loc, watch) {
+  const estateType = watch.propertyType === "pozemek" ? "POZEMEK" : "BYT";
   const box = boundingBox(loc.centerLat, loc.centerLng, loc.radiusKm);
   const boundaryPoints = [
     { lat: box.latMax, lng: box.lonMax },
@@ -55,7 +63,7 @@ async function fetchForLocation(loc) {
     { lat: box.latMax, lng: box.lonMax },
   ];
 
-  const html = await fetchText(buildUrl(boundaryPoints));
+  const html = await fetchText(buildUrl(boundaryPoints, estateType));
   const data = extractNextData(html);
   const cache = data?.props?.pageProps?.apolloCache;
   if (!cache?.ROOT_QUERY) {
@@ -75,14 +83,23 @@ async function fetchForLocation(loc) {
     const advert = cache[__ref];
     if (!advert?.gps) continue;
     if (haversineKm(loc.centerLat, loc.centerLng, advert.gps.lat, advert.gps.lng) > loc.radiusKm) continue;
+    if (!withinPriceCap(advert.price, watch.priceMaxCzk)) continue;
 
-    const disp = formatDisposition(advert.disposition);
-    const surface = advert.surface ? `${advert.surface} m²` : "";
+    let title;
+    if (watch.propertyType === "pozemek") {
+      const surface = advert.surfaceLand ? `${advert.surfaceLand} m²` : "";
+      title = ["Pozemek", surface].filter(Boolean).join(" • ");
+    } else {
+      const disp = formatDisposition(advert.disposition);
+      const surface = advert.surface ? `${advert.surface} m²` : "";
+      title = [disp, surface].filter(Boolean).join(" • ") || "Byt na prodej";
+    }
+
     items.push({
       source: "bezrealitky",
       sourceLabel: "Bezrealitky.cz",
       id: String(advert.id),
-      title: [disp, surface].filter(Boolean).join(" • ") || "Byt na prodej",
+      title,
       price: formatPrice(advert.price),
       address: advert['address({"locale":"CS"})'] || "",
       url: `https://www.bezrealitky.cz/nemovitosti-byty-domy/${advert.uri}`,
@@ -91,10 +108,10 @@ async function fetchForLocation(loc) {
   return items;
 }
 
-export async function fetchBezrealitky(config) {
+export async function fetchBezrealitky(watch) {
   const perLocation = [];
-  for (const loc of config.locations) {
-    perLocation.push(await fetchForLocation(loc));
+  for (const loc of watch.locations) {
+    perLocation.push(await fetchForLocation(loc, watch));
   }
   return mergeUniqueById(perLocation);
 }
