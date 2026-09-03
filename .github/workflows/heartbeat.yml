@@ -50,9 +50,7 @@ jobs:
 
           if [ "$DIFF_MIN" -gt "$THRESHOLD_MIN" ]; then
             echo "::warning::Automatický cron watch.yml neběžel přes $THRESHOLD_MIN minut — posílám Telegram alert."
-            MSG="🛎️ Hlídací pes — kontrola cronu: automatický běh (watch.yml) neproběhl už $DIFF_MIN minut (čekal jsem max $THRESHOLD_MIN). GitHubu možná zase nenaskočil scheduled cron.
-
-Zkontroluj: https://github.com/${{ github.repository }}/actions/workflows/watch.yml"
+            MSG=$(printf '🛎️ Hlídací pes — kontrola cronu: automatický běh (watch.yml) neproběhl už %s minut (čekal jsem max %s). GitHubu možná zase nenaskočil scheduled cron.\n\nZkontroluj: https://github.com/%s/actions/workflows/watch.yml' "$DIFF_MIN" "$THRESHOLD_MIN" "${{ github.repository }}")
             curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
               -d chat_id="$TELEGRAM_CHAT_ID" \
               --data-urlencode "text=$MSG" \
