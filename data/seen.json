@@ -42,5 +42,27 @@
     "222726880",
     "221765090",
     "221574961"
-  ]
+  ],
+  "__health": {
+    "sreality": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "bezrealitky": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "idnes": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "realitymix": {
+      "failing": false,
+      "lastAlertAt": null
+    },
+    "bazos": {
+      "failing": false,
+      "lastAlertAt": null
+    }
+  }
 }
