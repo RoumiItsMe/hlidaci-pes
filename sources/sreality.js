@@ -134,14 +134,18 @@ export async function fetchSreality(watch) {
 
 // Sreality řadí "nejnovější" podle data POSLEDNÍ ÚPRAVY inzerátu, ne podle
 // data prvního zveřejnění — když prodejce/RK inzerát jen upraví (třeba
-// jen opraví popisek), vyskočí nahoru jako "nové", i když je na trhu roky
-// (ověřeno naostro: inzerát s `since: 2021-02-27`, `edited: 2026-08-19`,
-// zachycený naším pollingem jako "nová nabídka" v okamžiku, kdy ho Sreality
-// "upravila" — reálně žádná nová nabídka). Detail stránka má pole
-// `params.since` (na trhu od) — to search-výpis nemá, proto extra fetch,
-// ale volá se jen pro položky, co jsme právě vyhodnotili jako nové (viz
-// index.js), ne pro každý inzerát v každém běhu.
-export async function fetchListingSince(url) {
+// jen opraví popisek, nebo právě SNÍŽÍ CENU), vyskočí nahoru jako "nové",
+// i když je na trhu roky (ověřeno naostro: inzerát s `since: 2021-02-27`,
+// `edited: 2026-08-19`, zachycený naším pollingem jako "nová nabídka"
+// v okamžiku, kdy ho Sreality "upravila" — reálně žádná nová nabídka).
+// Detail stránka má pole `params.since` (na trhu od) a `params.edited`
+// (naposledy upraveno) — search-výpis ani jedno z nich nemá, proto extra
+// fetch. Oba se hodí, ale pro jiný účel: `since` u NOVÝCH inzerátů (odliší
+// "opravdu nové" od "jen vytažené nahoru", viz index.js), `edited` u ZMĚNY
+// CENY (potvrdí, kdy se cena reálně změnila — to je totiž přesně ta stejná
+// "úprava", co inzerát vytáhne nahoru). Volá se jen pro položky, co jsme
+// právě vyhodnotili jako nové/změněné, ne pro každý inzerát v každém běhu.
+export async function fetchListingDates(url) {
   // Retry navíc jako pojistka (síť je síť), i když hlavní příčinu (viz
   // fetchText skipAcceptHeader) už řešíme přímo.
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -150,10 +154,11 @@ export async function fetchListingSince(url) {
       const data = extractNextData(html);
       const dh = data?.props?.pageProps?.dehydratedState;
       const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
-      return q?.state?.data?.params?.since || null;
+      const params = q?.state?.data?.params;
+      return { since: params?.since || null, edited: params?.edited || null };
     } catch {
       if (attempt === 0) await sleep(1000);
     }
   }
-  return null; // best-effort — ať kvůli tomuhle neselže celá notifikace
+  return { since: null, edited: null }; // best-effort — ať kvůli tomuhle neselže celá notifikace
 }

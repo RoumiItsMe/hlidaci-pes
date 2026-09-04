@@ -23,7 +23,7 @@
 import { watches, maxSeenPerSource } from "./config.js";
 import { loadState, saveState, getSourceItems, setSourceItems } from "./lib/state.js";
 import { sendTelegramMessage, sleep } from "./lib/telegram.js";
-import { fetchSreality, fetchListingSince } from "./sources/sreality.js";
+import { fetchSreality, fetchListingDates } from "./sources/sreality.js";
 import { fetchBezrealitky } from "./sources/bezrealitky.js";
 import { fetchIdnes } from "./sources/idnes.js";
 import { fetchRealitymix } from "./sources/realitymix.js";
@@ -46,10 +46,16 @@ function formatCzk(n) {
 
 // Sreality řadí "nejnovější" podle data poslední ÚPRAVY inzerátu, ne podle
 // prvního zveřejnění — inzerát starý roky tak umí vyskočit jako "nový", jen
-// když ho prodejce/RK upraví (viz komentář u fetchListingSince). Nad tímhle
-// prahem (dní od `since`) přidáme k notifikaci upozornění, ať uživatel ví,
-// že nejde o čerstvou nabídku.
+// když ho prodejce/RK upraví (viz komentář u fetchListingDates). Nad tímhle
+// prahem (dní od `since`) přidáme k notifikaci o NOVÉ nabídce upozornění, ať
+// uživatel ví, že nejde o čerstvou nabídku.
 const STALE_LISTING_THRESHOLD_DAYS = 30;
+
+function formatDateCzk(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("cs-CZ", { timeZone: "UTC" });
+}
 
 function formatSinceNote(sinceDateStr) {
   if (!sinceDateStr) return null;
@@ -57,8 +63,19 @@ function formatSinceNote(sinceDateStr) {
   if (Number.isNaN(since.getTime())) return null;
   const days = Math.floor((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000));
   if (days < STALE_LISTING_THRESHOLD_DAYS) return null;
-  const dateLabel = since.toLocaleDateString("cs-CZ", { timeZone: "UTC" });
-  return `📅 Na trhu už od ${dateLabel} (${days} dní) — Sreality ji zřejmě jen upravila/vytáhla nahoru, není to čerstvá nabídka.`;
+  return `📅 Na trhu už od ${formatDateCzk(sinceDateStr)} (${days} dní) — Sreality ji zřejmě jen upravila/vytáhla nahoru, není to čerstvá nabídka.`;
+}
+
+// U ZMĚNY CENY je zajímavý opačný údaj než u nových nabídek — ne "since"
+// (na trhu od), ale "edited" (naposledy upraveno), protože změna ceny JE
+// ta úprava, co inzerát vytáhla nahoru. Na rozdíl od formatSinceNote se
+// ukazuje vždycky (když je k dispozici), ne jen nad nějakým prahem — tady
+// jde jen o potvrzující kontext, ne o filtr "je to relevantní".
+function formatEditedNote(editedDateStr) {
+  if (!editedDateStr) return null;
+  const dateLabel = formatDateCzk(editedDateStr);
+  if (!dateLabel) return null;
+  return `📝 Upraveno na Sreality: ${dateLabel}`;
 }
 
 function formatNewItemMessage(watch, item, extraNote) {
@@ -70,7 +87,7 @@ function formatNewItemMessage(watch, item, extraNote) {
   return lines.join("\n");
 }
 
-function formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk) {
+function formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk, extraNote) {
   const arrow = newPriceCzk < oldPriceCzk ? "🔻" : "🔺";
   const diff = newPriceCzk - oldPriceCzk;
   const diffText = `${diff > 0 ? "+" : ""}${formatCzk(diff)}`;
@@ -80,6 +97,7 @@ function formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk) {
   ];
   if (item.address) lines.push(`📍 ${item.address}`);
   lines.push(`💰 ${formatCzk(oldPriceCzk)} → ${formatCzk(newPriceCzk)} (${diffText})`);
+  if (extraNote) lines.push(extraNote);
   lines.push(item.url);
   return lines.join("\n");
 }
@@ -175,7 +193,7 @@ async function run() {
           // výše a v sources/sreality.js). Fail-soft: když se since nepodaří
           // zjistit, notifikace jde ven i tak, jen bez upozornění navíc.
           const sinceNote =
-            item.source === "sreality" ? formatSinceNote(await fetchListingSince(item.url)) : null;
+            item.source === "sreality" ? formatSinceNote((await fetchListingDates(item.url)).since) : null;
           await sendTelegramMessage(formatNewItemMessage(watch, item, sinceNote));
           totalNew += 1;
           await sleep(400);
@@ -187,7 +205,11 @@ async function run() {
 
       for (const { item, oldPriceCzk, newPriceCzk } of priceChanges) {
         try {
-          await sendTelegramMessage(formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk));
+          // Tady naopak zajímá "edited" (kdy se cena reálně změnila), ne
+          // "since" — viz formatEditedNote výše.
+          const editedNote =
+            item.source === "sreality" ? formatEditedNote((await fetchListingDates(item.url)).edited) : null;
+          await sendTelegramMessage(formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk, editedNote));
           totalPriceChanges += 1;
           await sleep(400);
         } catch (err) {
