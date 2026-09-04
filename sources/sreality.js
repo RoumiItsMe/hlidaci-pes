@@ -42,12 +42,29 @@ function extractNextData(html) {
   return JSON.parse(m[1]);
 }
 
+// Detail URL u pozemků NENÍ jen kosmetický — Sreality vrací 404, pokud
+// "kind" segment (pozemek/byt) nebo dispozice v URL neodpovídá přesně
+// (ověřeno naostro: /pozemky/ místo /pozemek/ i /Bydlení/ místo /bydleni/
+// obojí samostatně 404ovalo). `categorySubCb.name` (např. "Bydlení",
+// "Zahrady") se pro pozemky v URL nepoužívá stejně jako pro byty — web má
+// vlastní (nepravidelné, "Zahrady" → "zahrada" je navíc jednotné číslo)
+// slugy, které nejdou odvodit obecným pravidlem, proto explicitní mapa.
+// Fetchujeme jen tyhle dvě kategorie (viz buildSearchUrls), takže mapa
+// nikdy neminí — kdyby přesto ano, fallback aspoň neshodí celý běh.
+const LAND_DETAIL_SLUGS = {
+  19: "bydleni", // Bydlení (stavební parcela)
+  23: "zahrada", // Zahrady
+};
+
 function buildDetailUrl(item) {
-  const disposition = item.categorySubCb?.name || "";
+  const isLand = item.categoryMainCb?.value === 3;
+  const kind = isLand ? "pozemek" : "byt";
+  const disposition = isLand
+    ? LAND_DETAIL_SLUGS[item.categorySubCb?.value] || "ostatni"
+    : item.categorySubCb?.name || "";
   const loc = item.locality || {};
   const parts = [loc.citySeoName, loc.cityPartSeoName, loc.streetSeoName].filter(Boolean);
   const slug = parts.length ? parts.join("-") : "byt";
-  const kind = item.categoryMainCb?.value === 3 ? "pozemky" : "byt";
   return `https://www.sreality.cz/detail/prodej/${kind}/${encodeURIComponent(
     disposition
   )}/${slug}/${item.id}`;
