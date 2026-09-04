@@ -23,7 +23,7 @@
 import { watches, maxSeenPerSource } from "./config.js";
 import { loadState, saveState, getSourceItems, setSourceItems } from "./lib/state.js";
 import { sendTelegramMessage, sleep } from "./lib/telegram.js";
-import { fetchSreality } from "./sources/sreality.js";
+import { fetchSreality, fetchListingSince } from "./sources/sreality.js";
 import { fetchBezrealitky } from "./sources/bezrealitky.js";
 import { fetchIdnes } from "./sources/idnes.js";
 import { fetchRealitymix } from "./sources/realitymix.js";
@@ -44,10 +44,28 @@ function formatCzk(n) {
   return `${n.toLocaleString("cs-CZ")} Kč`;
 }
 
-function formatNewItemMessage(watch, item) {
+// Sreality řadí "nejnovější" podle data poslední ÚPRAVY inzerátu, ne podle
+// prvního zveřejnění — inzerát starý roky tak umí vyskočit jako "nový", jen
+// když ho prodejce/RK upraví (viz komentář u fetchListingSince). Nad tímhle
+// prahem (dní od `since`) přidáme k notifikaci upozornění, ať uživatel ví,
+// že nejde o čerstvou nabídku.
+const STALE_LISTING_THRESHOLD_DAYS = 30;
+
+function formatSinceNote(sinceDateStr) {
+  if (!sinceDateStr) return null;
+  const since = new Date(`${sinceDateStr}T00:00:00Z`);
+  if (Number.isNaN(since.getTime())) return null;
+  const days = Math.floor((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000));
+  if (days < STALE_LISTING_THRESHOLD_DAYS) return null;
+  const dateLabel = since.toLocaleDateString("cs-CZ", { timeZone: "UTC" });
+  return `📅 Na trhu už od ${dateLabel} (${days} dní) — Sreality ji zřejmě jen upravila/vytáhla nahoru, není to čerstvá nabídka.`;
+}
+
+function formatNewItemMessage(watch, item, extraNote) {
   const lines = [`${watch.emoji} Nová nabídka — ${watch.label} • ${item.sourceLabel}`, item.title];
   if (item.address) lines.push(`📍 ${item.address}`);
   lines.push(`💰 ${item.price}`);
+  if (extraNote) lines.push(extraNote);
   lines.push(item.url);
   return lines.join("\n");
 }
@@ -152,7 +170,13 @@ async function run() {
 
       for (const item of newItems) {
         try {
-          await sendTelegramMessage(formatNewItemMessage(watch, item));
+          // Jen pro Sreality — jediný zdroj, kde víme, že "nejnovější" může
+          // znamenat "jen upraveno", ne "nově zveřejněno" (viz komentáře
+          // výše a v sources/sreality.js). Fail-soft: když se since nepodaří
+          // zjistit, notifikace jde ven i tak, jen bez upozornění navíc.
+          const sinceNote =
+            item.source === "sreality" ? formatSinceNote(await fetchListingSince(item.url)) : null;
+          await sendTelegramMessage(formatNewItemMessage(watch, item, sinceNote));
           totalNew += 1;
           await sleep(400);
         } catch (err) {

@@ -19,6 +19,7 @@ import { haversineKm } from "../lib/geo.js";
 import { fetchText } from "../lib/http.js";
 import { withinPriceCap } from "../lib/price.js";
 import { mergeUniqueById } from "../lib/merge.js";
+import { sleep } from "../lib/telegram.js";
 
 const DISTRICT_SLUG = "usti-nad-orlici";
 
@@ -129,4 +130,30 @@ export async function fetchSreality(watch) {
     perUrl.push(await fetchOneUrl(url, watch));
   }
   return mergeUniqueById(perUrl);
+}
+
+// Sreality řadí "nejnovější" podle data POSLEDNÍ ÚPRAVY inzerátu, ne podle
+// data prvního zveřejnění — když prodejce/RK inzerát jen upraví (třeba
+// jen opraví popisek), vyskočí nahoru jako "nové", i když je na trhu roky
+// (ověřeno naostro: inzerát s `since: 2021-02-27`, `edited: 2026-08-19`,
+// zachycený naším pollingem jako "nová nabídka" v okamžiku, kdy ho Sreality
+// "upravila" — reálně žádná nová nabídka). Detail stránka má pole
+// `params.since` (na trhu od) — to search-výpis nemá, proto extra fetch,
+// ale volá se jen pro položky, co jsme právě vyhodnotili jako nové (viz
+// index.js), ne pro každý inzerát v každém běhu.
+export async function fetchListingSince(url) {
+  // Retry navíc jako pojistka (síť je síť), i když hlavní příčinu (viz
+  // fetchText skipAcceptHeader) už řešíme přímo.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const html = await fetchText(url, { skipAcceptHeader: true });
+      const data = extractNextData(html);
+      const dh = data?.props?.pageProps?.dehydratedState;
+      const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
+      return q?.state?.data?.params?.since || null;
+    } catch {
+      if (attempt === 0) await sleep(1000);
+    }
+  }
+  return null; // best-effort — ať kvůli tomuhle neselže celá notifikace
 }
