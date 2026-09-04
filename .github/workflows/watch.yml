@@ -36,24 +36,47 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Spustit hlídacího psa
+      # Spuštění + commit jsou v jednom kroku (na rozdíl od dřívějška), protože
+      # při konfliktu na push potřebujeme detekci znovu spustit nad čerstvě
+      # staženým stavem — ne jen zkusit znovu `git push` se zastaralým diffem.
+      #
+      # Proč tenhle retry vůbec existuje: díky víc spouštěčům (cron-job.org
+      # každých 15 min + příležitostný GitHubův bonusový `schedule` + ruční
+      # spuštění) se může stát, že dva běhy skončí blízko sebe — typicky když
+      # jeden neobvykle dlouho visí na "Install dependencies" (viděno naostro:
+      # ~9 min misto obvyklých ~15s, pravděpodobně přechodná pomalost GitHub
+      # runneru/npm registry). `concurrency` skupina níže běhy sekvencuje, ale
+      # nezabrání tomu, aby jeden PŘESTO nestihl commitnout dřív, než druhý
+      # (spuštěný mezitím) dokončí svůj push — `git push` pak dostane "fetch
+      # first" odmítnutí. Řešení: stáhnout nejnovější stav a spustit detekci
+      # ZNOVU nad ním (ne slepě rebasovat starý diff) — tím se garantuje, že
+      # se nikdy nepošle duplicitní notifikace o inzerátu, který mezitím
+      # zachytil a nahlásil ten druhý běh.
+      - name: Spustit hlídacího psa (s retry při souběhu s jiným během)
+        if: always()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node index.js
-
-      # if: always() — stav (vč. health-tracking pro Telegram alerty) se musí
-      # uložit i po neúspěšném běhu výše, jinak by se dedup alertů a "je to
-      # zase OK" hlášky nezapisovaly a běh by o sobě nezanechal žádnou stopu.
-      - name: Commit stav (data/seen.json), pokud se změnil
-        if: always()
         run: |
-          if ! git diff --quiet -- data/seen.json; then
-            git config user.name "hlidaci-pes-bot"
-            git config user.email "actions@users.noreply.github.com"
-            git add data/seen.json
-            git commit -m "chore: aktualizace stavu hlídacího psa [skip ci]"
-            git push
-          else
-            echo "Stav beze změny, není co commitovat."
-          fi
+          git config user.name "hlidaci-pes-bot"
+          git config user.email "actions@users.noreply.github.com"
+          for i in 1 2 3; do
+            node index.js
+            SCRIPT_EXIT=$?
+            if ! git diff --quiet -- data/seen.json; then
+              git add data/seen.json
+              git commit -m "chore: aktualizace stavu hlídacího psa [skip ci]"
+              if git push; then
+                echo "Push OK (pokus $i)."
+                exit $SCRIPT_EXIT
+              fi
+              echo "Push selhal (pokus $i/3) — jiný běh mezitím pushnul. Stahuju nejnovější stav a zkouším detekci znovu."
+              git fetch origin main
+              git reset --hard origin/main
+            else
+              echo "Stav beze změny, není co commitovat."
+              exit $SCRIPT_EXIT
+            fi
+          done
+          echo "::error::Nepodařilo se commitnout stav ani po 3 pokusech (opakovaný souběh s jiným během)."
+          exit 1
