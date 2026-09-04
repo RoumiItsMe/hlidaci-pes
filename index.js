@@ -47,8 +47,9 @@ function formatCzk(n) {
 // Sreality řadí "nejnovější" podle data poslední ÚPRAVY inzerátu, ne podle
 // prvního zveřejnění — inzerát starý roky tak umí vyskočit jako "nový", jen
 // když ho prodejce/RK upraví (viz komentář u fetchListingDates). Nad tímhle
-// prahem (dní od `since`) přidáme k notifikaci o NOVÉ nabídce upozornění, ať
-// uživatel ví, že nejde o čerstvou nabídku.
+// prahem (dní od `since`) se taková "nová" nabídka rovnou přeskočí a
+// notifikace se vůbec nepošle (dřív se posílala s vysvětlující poznámkou,
+// ale uživatel je nechce vidět vůbec — jen to zaneřádí Telegram).
 const STALE_LISTING_THRESHOLD_DAYS = 30;
 
 function formatDateCzk(dateStr) {
@@ -57,13 +58,12 @@ function formatDateCzk(dateStr) {
   return d.toLocaleDateString("cs-CZ", { timeZone: "UTC" });
 }
 
-function formatSinceNote(sinceDateStr) {
+/** Vrátí počet dní od `since`, nebo null (neznámé/neparsovatelné datum). */
+function daysSince(sinceDateStr) {
   if (!sinceDateStr) return null;
   const since = new Date(`${sinceDateStr}T00:00:00Z`);
   if (Number.isNaN(since.getTime())) return null;
-  const days = Math.floor((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000));
-  if (days < STALE_LISTING_THRESHOLD_DAYS) return null;
-  return `📅 Na trhu už od ${formatDateCzk(sinceDateStr)} (${days} dní) — Sreality ji zřejmě jen upravila/vytáhla nahoru, není to čerstvá nabídka.`;
+  return Math.floor((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000));
 }
 
 // U ZMĚNY CENY je zajímavý opačný údaj než u nových nabídek — ne "since"
@@ -78,11 +78,10 @@ function formatEditedNote(editedDateStr) {
   return `📝 Upraveno na Sreality: ${dateLabel}`;
 }
 
-function formatNewItemMessage(watch, item, extraNote) {
+function formatNewItemMessage(watch, item) {
   const lines = [`${watch.emoji} Nová nabídka — ${watch.label} • ${item.sourceLabel}`, item.title];
   if (item.address) lines.push(`📍 ${item.address}`);
   lines.push(`💰 ${item.price}`);
-  if (extraNote) lines.push(extraNote);
   lines.push(item.url);
   return lines.join("\n");
 }
@@ -142,6 +141,7 @@ async function run() {
   const state = await loadState();
   let totalNew = 0;
   let totalPriceChanges = 0;
+  let totalStaleSkipped = 0;
   let hadError = false;
 
   for (const watch of watches) {
@@ -191,10 +191,20 @@ async function run() {
           // Jen pro Sreality — jediný zdroj, kde víme, že "nejnovější" může
           // znamenat "jen upraveno", ne "nově zveřejněno" (viz komentáře
           // výše a v sources/sreality.js). Fail-soft: když se since nepodaří
-          // zjistit, notifikace jde ven i tak, jen bez upozornění navíc.
-          const sinceNote =
-            item.source === "sreality" ? formatSinceNote((await fetchListingDates(item.url)).since) : null;
-          await sendTelegramMessage(formatNewItemMessage(watch, item, sinceNote));
+          // zjistit, bereme to jako "neznámé stáří" a notifikace jde ven
+          // (radši ukázat i nejistou nabídku, než aby unikla ta jedna nová).
+          if (item.source === "sreality") {
+            const { since } = await fetchListingDates(item.url);
+            const days = daysSince(since);
+            if (days != null && days >= STALE_LISTING_THRESHOLD_DAYS) {
+              totalStaleSkipped += 1;
+              console.log(
+                `[${stateKey}] přeskakuji "novou" nabídku ${item.id} — na trhu už ${days} dní (since=${since}), Sreality ji jen upravila.`
+              );
+              continue;
+            }
+          }
+          await sendTelegramMessage(formatNewItemMessage(watch, item));
           totalNew += 1;
           await sleep(400);
         } catch (err) {
@@ -221,7 +231,9 @@ async function run() {
   }
 
   await saveState(state);
-  console.log(`Hotovo. Odesláno ${totalNew} notifikací o nových nabídkách, ${totalPriceChanges} o změně ceny.`);
+  console.log(
+    `Hotovo. Odesláno ${totalNew} notifikací o nových nabídkách, ${totalPriceChanges} o změně ceny (${totalStaleSkipped} "nových" přeskočeno jako neaktuální).`
+  );
 
   if (hadError) {
     console.warn("Během běhu došlo k dílčím chybám — zkontroluj log výše.");
