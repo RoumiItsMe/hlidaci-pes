@@ -19,9 +19,24 @@
 // zdroj) právě selhává — když ano, pošle se Telegram alert (a znovu až po
 // 12 hodinách, ať to při dlouhodobém výpadku nespamuje každých 15 minut).
 // Jakmile se zdroj zase rozchodí, pošle se zpráva o zotavení.
+//
+// Stejná nemovitost se často inzeruje na víc portálech najednou (realitka
+// nahodí tu samou nabídku na Sreality i Bezrealitky i jinam) — bez zásahu
+// by to znamenalo až 5 notifikací o "nové nabídce" pro jednu reálnou věc.
+// `computeFingerprint` z toho udělá otisk (cena + plocha v m² z titulku) a
+// sdílí se napříč VŠEMI zdroji v rámci jednoho sledování (state klíč
+// `<watch.key>:__fingerprints`) — druhý a další portál se stejným otiskem
+// se potichu přeskočí, bez ohledu na to, kdy a odkud přišel první.
 
 import { watches, maxSeenPerSource } from "./config.js";
-import { loadState, saveState, getSourceItems, setSourceItems } from "./lib/state.js";
+import {
+  loadState,
+  saveState,
+  getSourceItems,
+  setSourceItems,
+  getFingerprintMap,
+  setFingerprintMap,
+} from "./lib/state.js";
 import { sendTelegramMessage, sleep } from "./lib/telegram.js";
 import { fetchSreality, fetchListingDates } from "./sources/sreality.js";
 import { fetchBezrealitky } from "./sources/bezrealitky.js";
@@ -76,6 +91,26 @@ function formatEditedNote(editedDateStr) {
   const dateLabel = formatDateCzk(editedDateStr);
   if (!dateLabel) return null;
   return `📝 Upraveno na Sreality: ${dateLabel}`;
+}
+
+// Otisk stejné reálné nemovitosti napříč portály: cena (přesná, agenti ji
+// typicky kopírují beze změny na všechny portály) + plocha v m² vytažená
+// z titulku (formát "X m²"/"X m2" je napříč všemi zdroji konzistentní).
+// Bez adresy/lokality — ty se mezi portály liší formátem příliš na to, aby
+// šly spolehlivě porovnat, a v našem malém geografickém okruhu je shoda
+// ceny + plochy sama o sobě už dost silný signál, že jde o tu samou věc.
+// Když cenu nebo plochu nejde zjistit, radši nededuplikovat vůbec (vrátí
+// null → nikdy se nepřiřadí k jiné položce) než riskovat, že se dvě různé
+// nemovitosti mylně sloučí a jedna z nich zmizí.
+const AREA_M2_RE = /(\d+(?:[.,]\d+)?)\s*m[²2]/i;
+
+function computeFingerprint(item) {
+  if (item.priceCzk == null) return null;
+  const m = item.title?.match(AREA_M2_RE);
+  if (!m) return null;
+  const areaM2 = Math.round(parseFloat(m[1].replace(",", ".")));
+  if (!Number.isFinite(areaM2)) return null;
+  return `${item.priceCzk}_${areaM2}`;
 }
 
 function formatNewItemMessage(watch, item) {
@@ -142,9 +177,13 @@ async function run() {
   let totalNew = 0;
   let totalPriceChanges = 0;
   let totalStaleSkipped = 0;
+  let totalCrossPortalSkipped = 0;
   let hadError = false;
 
   for (const watch of watches) {
+    const fpKey = `${watch.key}:__fingerprints`;
+    const seenFingerprints = getFingerprintMap(state, fpKey);
+
     for (const src of SOURCES) {
       const stateKey = `${watch.key}:${src.name}`;
       const label = `${watch.label} • ${src.label}`;
@@ -188,6 +227,19 @@ async function run() {
 
       for (const item of newItems) {
         try {
+          const fingerprint = computeFingerprint(item);
+
+          // Napříč portály nejlevnější kontrola první (žádný HTTP request)
+          // — když už tuhle nemovitost nahlásil jiný zdroj, není důvod
+          // utrácet extra request na Sreality since-check níže.
+          if (fingerprint && seenFingerprints.has(fingerprint)) {
+            totalCrossPortalSkipped += 1;
+            console.log(
+              `[${stateKey}] přeskakuji nabídku ${item.id} — stejná nemovitost (${item.priceCzk} Kč, otisk ${fingerprint}) už nahlášena přes ${seenFingerprints.get(fingerprint)}.`
+            );
+            continue;
+          }
+
           // Jen pro Sreality — jediný zdroj, kde víme, že "nejnovější" může
           // znamenat "jen upraveno", ne "nově zveřejněno" (viz komentáře
           // výše a v sources/sreality.js). Fail-soft: když se since nepodaří
@@ -201,10 +253,15 @@ async function run() {
               console.log(
                 `[${stateKey}] přeskakuji "novou" nabídku ${item.id} — na trhu už ${days} dní (since=${since}), Sreality ji jen upravila.`
               );
+              // I stálou nabídku počítáme jako "vyřešenou" pro tenhle otisk,
+              // ať ji jiný portál (bez since/edited údajů) nenahlásí znovu.
+              if (fingerprint) seenFingerprints.set(fingerprint, src.label);
               continue;
             }
           }
+
           await sendTelegramMessage(formatNewItemMessage(watch, item));
+          if (fingerprint) seenFingerprints.set(fingerprint, src.label);
           totalNew += 1;
           await sleep(400);
         } catch (err) {
@@ -228,11 +285,14 @@ async function run() {
         }
       }
     }
+
+    setFingerprintMap(state, fpKey, seenFingerprints, maxSeenPerSource);
   }
 
   await saveState(state);
   console.log(
-    `Hotovo. Odesláno ${totalNew} notifikací o nových nabídkách, ${totalPriceChanges} o změně ceny (${totalStaleSkipped} "nových" přeskočeno jako neaktuální).`
+    `Hotovo. Odesláno ${totalNew} notifikací o nových nabídkách, ${totalPriceChanges} o změně ceny ` +
+      `(${totalStaleSkipped} "nových" přeskočeno jako neaktuální, ${totalCrossPortalSkipped} přeskočeno jako duplicita z jiného portálu).`
   );
 
   if (hadError) {
