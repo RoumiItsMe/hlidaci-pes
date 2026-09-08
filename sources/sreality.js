@@ -19,7 +19,6 @@ import { haversineKm } from "../lib/geo.js";
 import { fetchText } from "../lib/http.js";
 import { withinPriceCap } from "../lib/price.js";
 import { mergeUniqueById } from "../lib/merge.js";
-import { sleep } from "../lib/telegram.js";
 
 const DISTRICT_SLUG = "usti-nad-orlici";
 
@@ -146,19 +145,16 @@ export async function fetchSreality(watch) {
 // "úprava", co inzerát vytáhne nahoru). Volá se jen pro položky, co jsme
 // právě vyhodnotili jako nové/změněné, ne pro každý inzerát v každém běhu.
 export async function fetchListingDates(url) {
-  // Retry navíc jako pojistka (síť je síť), i když hlavní příčinu (viz
-  // fetchText skipAcceptHeader) už řešíme přímo.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const html = await fetchText(url, { skipAcceptHeader: true });
-      const data = extractNextData(html);
-      const dh = data?.props?.pageProps?.dehydratedState;
-      const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
-      const params = q?.state?.data?.params;
-      return { since: params?.since || null, edited: params?.edited || null };
-    } catch {
-      if (attempt === 0) await sleep(1000);
-    }
+  // fetchText už sama zkouší 5xx/síťové chyby znovu (viz lib/http.js) —
+  // tady stačí zachytit, kdyby selhala i po těch pokusech.
+  try {
+    const html = await fetchText(url, { skipAcceptHeader: true });
+    const data = extractNextData(html);
+    const dh = data?.props?.pageProps?.dehydratedState;
+    const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
+    const params = q?.state?.data?.params;
+    return { since: params?.since || null, edited: params?.edited || null };
+  } catch {
+    return { since: null, edited: null }; // best-effort — ať kvůli tomuhle neselže celá notifikace
   }
-  return { since: null, edited: null }; // best-effort — ať kvůli tomuhle neselže celá notifikace
 }
