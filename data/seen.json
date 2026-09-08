@@ -887,6 +887,10 @@
     {
       "id": "223563299",
       "price": 275496
+    },
+    {
+      "id": "223567892",
+      "price": 226695
     }
   ],
   "byty:__fingerprints": [
@@ -910,6 +914,10 @@
     },
     {
       "fingerprint": "275496_494",
+      "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "226695_171",
       "source": "Bazoš.cz"
     }
   ]
