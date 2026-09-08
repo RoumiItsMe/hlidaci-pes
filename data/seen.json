@@ -101,6 +101,10 @@
     {
       "id": "2125131852",
       "price": 4850000
+    },
+    {
+      "id": "2189869132",
+      "price": 4290000
     }
   ],
   "byty:bezrealitky": [
@@ -901,6 +905,10 @@
     {
       "fingerprint": "4200000_70",
       "source": "Reality.iDNES.cz"
+    },
+    {
+      "fingerprint": "4290000_70",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
