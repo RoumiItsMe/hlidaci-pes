@@ -871,6 +871,10 @@
     {
       "id": "223499405",
       "price": 862450
+    },
+    {
+      "id": "223557082",
+      "price": 979000
     }
   ],
   "byty:__fingerprints": [
@@ -883,5 +887,10 @@
       "source": "Reality.iDNES.cz"
     }
   ],
-  "pozemky-glamping:__fingerprints": []
+  "pozemky-glamping:__fingerprints": [
+    {
+      "fingerprint": "979000_461",
+      "source": "Bazoš.cz"
+    }
+  ]
 }
