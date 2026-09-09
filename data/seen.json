@@ -105,6 +105,10 @@
     {
       "id": "2189869132",
       "price": 4290000
+    },
+    {
+      "id": "482730060",
+      "price": 3950000
     }
   ],
   "byty:bezrealitky": [
@@ -916,6 +920,10 @@
     },
     {
       "fingerprint": "4290000_70",
+      "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "3950000_70",
       "source": "Sreality.cz"
     }
   ],
