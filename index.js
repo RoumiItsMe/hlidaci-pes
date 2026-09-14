@@ -20,6 +20,13 @@
 // 12 hodinách, ať to při dlouhodobém výpadku nespamuje každých 15 minut).
 // Jakmile se zdroj zase rozchodí, pošle se zpráva o zotavení.
 //
+// Alert i neúspěšný exit kód běhu čekají na DRUHÉ selhání po sobě (viz
+// consecutiveFailures u alertFailure) — jeden ojedinělý "fetch failed", co
+// se sám spraví do příštího běhu o 15 minut později, tak zůstane jen tiše
+// v logu, ne jako ⚠️/✅ pár na Telegramu a červený běh v GitHub Actions
+// (viděno naostro: iDNES, září 2026 — 5× stejný jednorázový síťový zádrhel
+// za 5 dní, pokaždé samo zotavené v dalším běhu).
+//
 // Stejná nemovitost se často inzeruje na víc portálech najednou (realitka
 // nahodí tu samou nabídku na Sreality i Bezrealitky i jinam) — bez zásahu
 // by to znamenalo až 5 notifikací o "nové nabídce" pro jednu reálnou věc.
@@ -138,17 +145,37 @@ function formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk, extraNo
 
 function getHealth(state, key) {
   if (!state.__health) state.__health = {};
-  if (!state.__health[key]) state.__health[key] = { failing: false, lastAlertAt: null };
+  if (!state.__health[key]) {
+    state.__health[key] = { failing: false, lastAlertAt: null, consecutiveFailures: 0 };
+  }
+  // Zpětná kompatibilita se starším state souborem bez tohohle pole.
+  if (state.__health[key].consecutiveFailures == null) state.__health[key].consecutiveFailures = 0;
   return state.__health[key];
 }
 
-/** Pošle Telegram alert o selhání — hned při první chybě, pak nejvýš 1x za 12 h. */
+/**
+ * Zaznamená selhání a vrátí, jestli se kvůli němu poslal Telegram alert
+ * (= jestli se tenhle běh má počítat jako "vážné" selhání pro exit kód).
+ *
+ * Nealertuje hned při první chybě — `fetchText` už sama zkouší network-level
+ * chyby 2x znovu uvnitř jednoho běhu (viz lib/http.js), takže cokoli, co
+ * projde až sem, je buď 4xx (trvalé), nebo network chyba, co přežila i tři
+ * pokusy. I tak se ale ukázalo, že jde občas o krátkodobý zádrhel (blok/
+ * timeout ze strany portálu), co zmizí sám do dalšího běhu o 15 minut
+ * později — proto se čeká na DRUHÉ selhání PO SOBĚ (napříč běhy), než se to
+ * nahlásí jako "přestal fungovat". Cena je 15minutové zpoždění v detekci
+ * SKUTEČNÉHO výpadku, výhra je žádný ⚠️/✅ pár za samo-vyřešitelný blip.
+ */
 async function alertFailure(health, label, err) {
+  health.consecutiveFailures += 1;
+  health.failing = true;
+
+  if (health.consecutiveFailures < 2) return false; // první selhání — dej šanci, ať se samo spraví
+
   const now = Date.now();
   const alreadyAlertedRecently =
-    health.failing && health.lastAlertAt && now - Date.parse(health.lastAlertAt) < REALERT_COOLDOWN_MS;
-  health.failing = true;
-  if (alreadyAlertedRecently) return;
+    health.lastAlertAt && now - Date.parse(health.lastAlertAt) < REALERT_COOLDOWN_MS;
+  if (alreadyAlertedRecently) return true;
 
   health.lastAlertAt = new Date(now).toISOString();
   try {
@@ -158,12 +185,21 @@ async function alertFailure(health, label, err) {
   } catch (alertErr) {
     console.error(`Nepodařilo se odeslat alert o selhání (${label}): ${alertErr.message}`);
   }
+  return true;
 }
 
-/** Pošle Telegram zprávu o zotavení, pokud předtím selhávalo. */
+/**
+ * Pošle Telegram zprávu o zotavení — ale jen pokud se předtím opravdu
+ * poslal alert o selhání (`lastAlertAt`). Ojedinělý, tiše přečkaný blip
+ * (jedno selhání, žádný alert) se tak vrátí do klidu beze zprávy — nemá
+ * smysl hlásit "zase funguje" u něčeho, o čem uživatel vůbec nevěděl.
+ */
 async function alertRecoveryIfNeeded(health, label) {
-  if (!health.failing) return;
+  const wasAlerted = health.lastAlertAt != null;
   health.failing = false;
+  health.consecutiveFailures = 0;
+  if (!wasAlerted) return;
+
   health.lastAlertAt = null;
   try {
     await sendTelegramMessage(`✅ Hlídací pes: ${label} zase funguje.`);
@@ -178,7 +214,8 @@ async function run() {
   let totalPriceChanges = 0;
   let totalStaleSkipped = 0;
   let totalCrossPortalSkipped = 0;
-  let hadError = false;
+  let hadError = false; // jakákoli chyba — jen pro log hlášku na konci
+  let hadSeriousError = false; // chyba, co má shodit exit kód běhu (viz níže)
 
   for (const watch of watches) {
     const fpKey = `${watch.key}:__fingerprints`;
@@ -197,7 +234,8 @@ async function run() {
       } catch (err) {
         hadError = true;
         console.error(`[${stateKey}] CHYBA při stahování: ${err.message}`);
-        await alertFailure(health, label, err);
+        const alerted = await alertFailure(health, label, err);
+        if (alerted) hadSeriousError = true;
         continue;
       }
 
@@ -265,7 +303,12 @@ async function run() {
           totalNew += 1;
           await sleep(400);
         } catch (err) {
+          // Na rozdíl od selhání stahování (viz alertFailure výše) se tohle
+          // nedebounceuje — pokud vázne odesílání NA Telegram, nemá smysl
+          // čekat na "druhé selhání po sobě", protože notifikace se rovnou
+          // ztrácí, ne že by se za 15 minut samy dohnaly.
           hadError = true;
+          hadSeriousError = true;
           console.error(`[${stateKey}] CHYBA při odesílání Telegram zprávy (nová nabídka): ${err.message}`);
         }
       }
@@ -281,6 +324,7 @@ async function run() {
           await sleep(400);
         } catch (err) {
           hadError = true;
+          hadSeriousError = true; // stejný důvod jako u nové nabídky výše
           console.error(`[${stateKey}] CHYBA při odesílání Telegram zprávy (změna ceny): ${err.message}`);
         }
       }
@@ -295,13 +339,21 @@ async function run() {
       `(${totalStaleSkipped} "nových" přeskočeno jako neaktuální, ${totalCrossPortalSkipped} přeskočeno jako duplicita z jiného portálu).`
   );
 
-  if (hadError) {
-    console.warn("Během běhu došlo k dílčím chybám — zkontroluj log výše.");
+  if (hadSeriousError) {
+    console.warn("Během běhu došlo k vážné chybě — zkontroluj log výše.");
     // Nenulový exit kód → GitHub Actions označí běh jako neúspěšný (červený),
     // což (mimo Telegram alert výše) spustí i výchozí e-mailové upozornění
     // GitHubu vlastníkovi repa. Krok, co commituje stav, běží i tak (viz
     // `if: always()` ve workflow.yml) — stav a health-tracking se uloží vždy.
     process.exitCode = 1;
+  } else if (hadError) {
+    // Ojedinělá, tiše přečkaná chyba (viz alertFailure) — do logu ať jde
+    // dohledat, ale běh se nehlásí jako selhání (žádný Telegram alert,
+    // žádný červený běh v Actions). Když se to zopakuje i příští běh,
+    // teprve to se stane hadSeriousError.
+    console.warn(
+      "Během běhu došlo k ojedinělé chybě, která se pravděpodobně sama spraví do příštího běhu — zkontroluj log výše (běh se ale nehlásí jako selhání)."
+    );
   }
 }
 

@@ -162,16 +162,26 @@ nějaká nová položka byla) vyhodí chybu — používá se to schválně jako
 
 Zdravotní stav každé dvojice (sledování, zdroj) se sleduje v
 `data/seen.json` (`__health`).
-- **⚠️ Přestal fungovat** — alert hned při první chybě, pak nejvýš 1× za
-  12 hodin, dokud je pořád rozbitý (ať to při dlouhém výpadku nespamuje
-  každých 15 minut).
-- **✅ Zase funguje** — jakmile se předtím rozbitý zdroj rozchodí (sám,
-  nebo po opravě), přijde zpráva o zotavení.
-- **🔴 Neočekávaný pád celého běhu** — best-effort alert i tady.
-- Běh, ve kterém nastala chyba, skončí nenulovým exit kódem → GitHub
-  Actions ho označí jako neúspěšný (červený), což navíc spustí i výchozí
-  e-mailové upozornění GitHubu vlastníkovi repa (záložní kanál nezávislý
-  na tom, jestli se podaří odeslat Telegram zprávu).
+- **⚠️ Přestal fungovat** — alert až při DRUHÉM selhání PO SOBĚ (napříč
+  běhy, tedy zdroj nefunguje i v běhu následujícím po prvním selhání), pak
+  nejvýš 1× za 12 hodin, dokud je pořád rozbitý (ať to při dlouhém výpadku
+  nespamuje každých 15 minut). Jeden ojedinělý "fetch failed", co se sám
+  spraví do příštího běhu o 15 minut později, tak zůstane jen tiše v logu
+  Action — žádný Telegram alert, žádný červený běh (viz [Známá
+  omezení](#známá-omezení--možná-vylepšení)). `fetchText` už předtím sama
+  zkouší network-level chyby 2× znovu uvnitř jednoho běhu (viz
+  `lib/http.js`) — tenhle druhý stupeň řeší zádrhely, co přežijí i to.
+- **✅ Zase funguje** — jakmile se zdroj, u kterého se PŘEDTÍM opravdu
+  poslal ⚠️ alert, zase rozchodí, přijde zpráva o zotavení. Tichý,
+  jednorázový blip (bez alertu) se vrátí do klidu beze zprávy.
+- **🔴 Neočekávaný pád celého běhu** — best-effort alert i tady, bez
+  debounce (jde o celý běh, ne o jeden zdroj).
+- Běh skončí nenulovým exit kódem (→ GitHub Actions ho označí jako
+  neúspěšný/červený, + výchozí e-mailové upozornění GitHubu vlastníkovi
+  repa) jen když šlo o vážnou chybu — tedy zdroj selhal 2× po sobě, nebo
+  selhalo samotné odeslání Telegram zprávy (tam se nedebounceuje, protože
+  notifikace by se jinak ztratila tiše). Ojedinělá, tiše přečkaná chyba
+  stahování zůstane zelená.
 
 **🛎️ Kontrola, jestli hlídací pes vůbec běží** ([`heartbeat.yml`](.github/workflows/heartbeat.yml)):
 výše popsané alerty pokrývají "zdroj/portál nefunguje", ale ne scénář, kdy
@@ -233,3 +243,13 @@ jsou uložené jako GitHub Secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 - Portály mění strukturu stránek bez upozornění — pokud se scraper
   najednou "utne" (chyba v logu Action, Telegram alert), je potřeba znovu
   prověřit strukturu dané stránky a upravit příslušný soubor v `sources/`.
+- **iDNES občas vrátí "fetch failed"** (síťová chyba bez HTTP statusu —
+  typicky krátkodobý blok/timeout ze strany portálu vůči GitHub Actions
+  runneru), i po 3 pokusech uvnitř `fetchText` (zjištěno naostro: 5× za
+  5 dní v září 2026, pokaždé samo zotavené hned v dalším běhu o 15 minut
+  později). Žádná ztráta dat — výsledky se přenačítají celé znovu každý
+  běh — jen dřív to zbytečně posílalo ⚠️/✅ Telegram pár a barvilo běh na
+  červeno. Řeší to debounce na 2 selhání po sobě, viz [Upozornění při
+  výpadku](#upozornění-při-výpadku). Pokud by se frekvence zvýšila natolik,
+  že by i tohle začalo alertovat často, je namístě zvážit vyšší timeout
+  nebo delší retry backoff přímo pro iDNES v `lib/http.js`.
