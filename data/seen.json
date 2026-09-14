@@ -2,43 +2,53 @@
   "__health": {
     "byty:sreality": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "byty:bezrealitky": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "byty:idnes": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "byty:realitymix": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "byty:bazos": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "pozemky-glamping:sreality": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "pozemky-glamping:bezrealitky": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "pozemky-glamping:idnes": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "pozemky-glamping:realitymix": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     },
     "pozemky-glamping:bazos": {
       "failing": false,
-      "lastAlertAt": null
+      "lastAlertAt": null,
+      "consecutiveFailures": 0
     }
   },
   "byty:sreality": [
