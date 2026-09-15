@@ -127,6 +127,10 @@
     {
       "id": "4023726156",
       "price": 2895000
+    },
+    {
+      "id": "344649804",
+      "price": 5840000
     }
   ],
   "byty:bezrealitky": [
@@ -1055,6 +1059,10 @@
     {
       "fingerprint": "2895000_57",
       "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "5840000_82",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
