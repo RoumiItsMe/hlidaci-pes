@@ -199,6 +199,30 @@ o "hlídací pes vůbec neběžel", ne o "portál nefunguje". Zbytkové riziko:
 najednou — tohle konkrétní riziko ale řeší už to, že primární spouštěč
 (cron-job.org) je mimo GitHub úplně, viz [Proč externí cron](#proč-externí-cron-a-ne-githubův-schedule).
 
+## Proč je repo veřejné
+
+**Zjištěno naostro, září 2026:** GitHub účtuje minuty Actions **minimálně
+1 minutu za každý běh** bez ohledu na to, jak rychle doběhne (i pár vteřin
+trvající `heartbeat.yml` stojí celou minutu). Při intervalu 15 minut
+(`watch.yml`) + hodinovém `heartbeat.yml` to dělalo až ~3 600 min/měsíc —
+na **privátním** repu, kde GitHub dává zdarma jen 2 000 min/měsíc, to
+během pár týdnů vyčerpalo 90 % kvóty a hrozilo zpoplatnění. **Veřejné**
+repo má Actions minuty **neomezené a zdarma** napořád, takže je to nejjed-
+nodušší trvalé řešení bez nutnosti zpomalovat detekci nových nabídek nebo
+přidávat další službu.
+
+Repo je bezpečné zveřejnit — `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` i
+GitHub PAT pro cron-job.org žijí výhradně jako GitHub Secrets (nikdy
+commitované do repa) a celá historie byla před zveřejněním prověřena, že
+žádný token v ní neuvízl. `config.js` prozrazuje jen sledovanou lokalitu a
+cenový strop — nic citlivějšího.
+
+Jako dodatečnou pojistku proti jakémukoli budoucímu zpoplatnění (kdyby na
+účtu časem přibyl další soukromý repo s Actions) je vhodné mít v
+[github.com/settings/billing/budgets](https://github.com/settings/billing/budgets)
+nastavený **$0 budget pro Actions** — při dosažení limitu se běhy jen
+zastaví, místo aby se cokoli účtovalo.
+
 ## Telegram bot
 
 Bot: **[@Peshlidaci_bot](https://t.me/Peshlidaci_bot)**. Token a chat ID
