@@ -30,10 +30,15 @@
 // Stejná nemovitost se často inzeruje na víc portálech najednou (realitka
 // nahodí tu samou nabídku na Sreality i Bezrealitky i jinam) — bez zásahu
 // by to znamenalo až 5 notifikací o "nové nabídce" pro jednu reálnou věc.
-// `computeFingerprint` z toho udělá otisk (cena + plocha v m² z titulku) a
-// sdílí se napříč VŠEMI zdroji v rámci jednoho sledování (state klíč
+// Stejně tak když se cena reálně změní, RK/prodejce ji typicky opraví na
+// všech portálech zároveň — bez zásahu by přišla stejná zpráva o slevě/
+// zdražení vícekrát, jednou z každého portálu (viděno naostro: 3x stejná
+// sleva bytu). `computeFingerprint` z toho udělá otisk (cena + plocha v m²
+// z titulku) a sdílí se napříč VŠEMI zdroji A OBĚMA typy notifikací (nová
+// nabídka i změna ceny) v rámci jednoho sledování (state klíč
 // `<watch.key>:__fingerprints`) — druhý a další portál se stejným otiskem
-// se potichu přeskočí, bez ohledu na to, kdy a odkud přišel první.
+// se potichu přeskočí, bez ohledu na to, kdy, odkud a jako co (nová/změna)
+// přišel první.
 
 import { watches, maxSeenPerSource } from "./config.js";
 import {
@@ -315,11 +320,30 @@ async function run() {
 
       for (const { item, oldPriceCzk, newPriceCzk } of priceChanges) {
         try {
+          const fingerprint = computeFingerprint(item);
+
+          // Stejná cross-portal dedup jako u nových nabídek výše — když se
+          // cena reálně změní, RK/prodejce ji typicky opraví na všech
+          // portálech zároveň, takže by jinak přišla stejná zpráva o slevě
+          // 3x, jednou z každého portálu (viděno naostro, viz uživatelské
+          // hlášení). Fingerprint se počítá z NOVÉ (už změněné) ceny, takže
+          // je napříč portály shodný, a sdílí stejnou mapu `seenFingerprints`
+          // jako nové nabídky — ať je otisk zapsaný odkudkoli, druhý portál
+          // se stejnou nemovitostí se potichu přeskočí.
+          if (fingerprint && seenFingerprints.has(fingerprint)) {
+            totalCrossPortalSkipped += 1;
+            console.log(
+              `[${stateKey}] přeskakuji změnu ceny u nabídky ${item.id} — stejná nemovitost (${item.priceCzk} Kč, otisk ${fingerprint}) už nahlášena přes ${seenFingerprints.get(fingerprint)}.`
+            );
+            continue;
+          }
+
           // Tady naopak zajímá "edited" (kdy se cena reálně změnila), ne
           // "since" — viz formatEditedNote výše.
           const editedNote =
             item.source === "sreality" ? formatEditedNote((await fetchListingDates(item.url)).edited) : null;
           await sendTelegramMessage(formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk, editedNote));
+          if (fingerprint) seenFingerprints.set(fingerprint, src.label);
           totalPriceChanges += 1;
           await sleep(400);
         } catch (err) {
