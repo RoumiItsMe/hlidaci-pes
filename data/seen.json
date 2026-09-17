@@ -385,6 +385,10 @@
     {
       "id": "8697041",
       "price": 2895000
+    },
+    {
+      "id": "8700961",
+      "price": 3990000
     }
   ],
   "byty:bazos": [
@@ -1091,6 +1095,10 @@
     {
       "fingerprint": "6990000_90",
       "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "3990000_57",
+      "source": "RealityMIX.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
