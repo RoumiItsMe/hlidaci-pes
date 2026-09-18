@@ -86,7 +86,7 @@
     },
     {
       "id": "527286348",
-      "price": 4200000
+      "price": 3990000
     },
     {
       "id": "1895026764",
@@ -291,6 +291,10 @@
     {
       "id": "6aa8d9520ece491bee060838",
       "price": 2895000
+    },
+    {
+      "id": "6aad1d545923dcb1df00105b",
+      "price": 3990000
     }
   ],
   "byty:realitymix": [
@@ -575,6 +579,10 @@
     {
       "id": "223955318",
       "price": 3950000
+    },
+    {
+      "id": "223975077",
+      "price": 3990000
     }
   ],
   "pozemky-glamping:sreality": [
@@ -1139,6 +1147,10 @@
     {
       "fingerprint": "3100000_50",
       "source": "Reality.iDNES.cz"
+    },
+    {
+      "fingerprint": "3990000_70",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
