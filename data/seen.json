@@ -713,6 +713,10 @@
     {
       "id": "3039096908",
       "price": 1321600
+    },
+    {
+      "id": "4188955468",
+      "price": 1499000
     }
   ],
   "pozemky-glamping:bezrealitky": [
@@ -1177,6 +1181,10 @@
     {
       "fingerprint": "164800_4204",
       "source": "Bezrealitky.cz"
+    },
+    {
+      "fingerprint": "1499000_1692",
+      "source": "Sreality.cz"
     }
   ]
 }
