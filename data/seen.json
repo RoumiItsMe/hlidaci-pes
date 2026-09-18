@@ -731,6 +731,14 @@
     {
       "id": "949297",
       "price": 839000
+    },
+    {
+      "id": "1068480",
+      "price": 82400
+    },
+    {
+      "id": "1068479",
+      "price": 164800
     }
   ],
   "pozemky-glamping:idnes": [
@@ -1161,6 +1169,14 @@
     {
       "fingerprint": "862450_734",
       "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "82400_807",
+      "source": "Bezrealitky.cz"
+    },
+    {
+      "fingerprint": "164800_4204",
+      "source": "Bezrealitky.cz"
     }
   ]
 }
