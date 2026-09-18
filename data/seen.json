@@ -194,7 +194,7 @@
     },
     {
       "id": "6a2c16b4f7858f04610d0e3e",
-      "price": 3300000
+      "price": 3100000
     },
     {
       "id": "6a955ac3c1b8e476c800b456",
@@ -300,7 +300,7 @@
     },
     {
       "id": "8584525",
-      "price": 3300000
+      "price": 3100000
     },
     {
       "id": "8181589",
@@ -1131,6 +1131,10 @@
     {
       "fingerprint": "3990000_57",
       "source": "RealityMIX.cz"
+    },
+    {
+      "fingerprint": "3100000_50",
+      "source": "Reality.iDNES.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
