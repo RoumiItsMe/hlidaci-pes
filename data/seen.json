@@ -11,9 +11,9 @@
       "consecutiveFailures": 0
     },
     "byty:idnes": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     },
     "byty:realitymix": {
       "failing": false,
