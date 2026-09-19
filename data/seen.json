@@ -603,6 +603,10 @@
     {
       "id": "223979359",
       "price": 2650000
+    },
+    {
+      "id": "224008050",
+      "price": 3120000
     }
   ],
   "pozemky-glamping:sreality": [
@@ -1187,6 +1191,10 @@
     {
       "fingerprint": "20900000_320",
       "source": "RealityMIX.cz"
+    },
+    {
+      "fingerprint": "3120000_32",
+      "source": "Bazoš.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
