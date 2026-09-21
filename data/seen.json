@@ -118,7 +118,7 @@
     },
     {
       "id": "482730060",
-      "price": 3950000
+      "price": 3750000
     },
     {
       "id": "2632986700",
@@ -210,7 +210,7 @@
     },
     {
       "id": "6a5f060e8d5d5a32190efc35",
-      "price": 3950000
+      "price": 3750000
     },
     {
       "id": "6a207724d622a1ba3c03fdd2",
@@ -594,7 +594,7 @@
     },
     {
       "id": "223955318",
-      "price": 3950000
+      "price": 3750000
     },
     {
       "id": "223975077",
@@ -1211,6 +1211,10 @@
     {
       "fingerprint": "3120000_32",
       "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "3750000_70",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
