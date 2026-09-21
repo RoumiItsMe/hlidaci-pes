@@ -628,7 +628,7 @@
     },
     {
       "id": "1999355980",
-      "price": 550000
+      "price": 450000
     },
     {
       "id": "3814510668",
@@ -1268,6 +1268,10 @@
     },
     {
       "fingerprint": "850000_1376",
+      "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "450000_825",
       "source": "Sreality.cz"
     }
   ]
