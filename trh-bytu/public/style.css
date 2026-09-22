@@ -40,7 +40,7 @@ main {
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }
 
-.filters { margin-bottom: 1rem; display: flex; gap: 0.5rem; }
+.filters { margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .filter {
   padding: 0.3rem 0.8rem;
   border-radius: 999px;
@@ -50,6 +50,26 @@ h2 { font-size: 1.1rem; margin-top: 2rem; }
   font-size: 0.85rem;
 }
 .filter.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Řádek pod stavovými filtry — řazení vlevo, výběr město/vlastnictví
+   vpravo. Zalomí se pod sebe na užší obrazovce. */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.select-filters { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.select-filters select {
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.85rem;
+}
 
 table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; }
 th, td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
@@ -98,6 +118,26 @@ th, td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(
 }
 .row-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: auto; padding-top: 0.15rem; }
 .row-meta .muted { font-size: 0.8rem; }
+
+/* "V nabídce od" / "Poslední změna" — schválně jiný vizuální jazyk než
+   zbytek řádku (odznaky s pozadím, ne obyčejný šedý text), ať jsou na
+   první pohled vidět. "Beze změny" zůstává tlumené šedé; jakmile SE něco
+   reálně stalo (změna ceny/zmizení/návrat/rezervace), odznak zežloutne —
+   oko tak v přehledu snadno najde, kde se od zaevidování něco děje. */
+.row-updates, .description + .row-updates { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.1rem 0; }
+.update-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.update-chip--since { background: #eef2ff; color: #4338ca; }
+.update-chip--change { background: #fef3c7; color: #92400e; }
+.update-chip--none { background: var(--bg); color: var(--muted); border: 1px dashed var(--border); font-weight: 500; }
 
 @media (max-width: 520px) {
   .row { flex-direction: column; }

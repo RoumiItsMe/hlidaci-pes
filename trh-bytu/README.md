@@ -57,6 +57,33 @@ sama uviděla se vlastníma očima mezi dvěma sběrnými běhy — když se od
 zaevidování nic takového nestalo, řádek ukáže "Poslední změna: zatím
 žádná", ne vymyšlené/portálové datum.
 
+Vizuálně jde o dva odznaky, ne splývající text — "V nabídce od" je vždy
+modrý; "Poslední změna" je **šedý/tečkovaný**, dokud se opravdu nic
+nestalo ("Zatím beze změny"), a **zežloutne**, jakmile appka zaznamená
+skutečnou událost — v přehledu tak jde okem snadno najít, u kterých bytů
+se od zaevidování něco děje.
+
+## Filtrování a řazení
+
+Nad seznamem bytů: stavové filtry (Vše/V nabídce/Rezervováno/Zmizelo z
+nabídky, jako dřív), řazení **podle ceny** (nejnovější první je výchozí,
+nebo nejlevnější/nejdražší první) a dva výběry — **město** a
+**vlastnictví** — co se automaticky naplní jen hodnotami, které se v
+datech opravdu vyskytují (appka nikdy nenabídne volbu, po které by nic
+nenašla). Všechny filtry/řazení se kombinují a odkazy mezi sebou
+zachovávají zvolený stav ostatních (klik na "Cena ↑" nezruší zvolené
+město).
+
+Město se vytahuje z adresy (viz `extractCity` v `parse.js`) — nejdřív
+zkusí, jestli adresa obsahuje jméno některého ze 4 hlavních sledovaných
+měst (i uvnitř delšího řetězce jako "Česká Třebová, okr. Ústí nad
+Orlicí"), jinak spadne na poslední rozumný segment adresy (typicky
+zachytí i okolní města mimo hlavní 4, např. Pardubice). Vlastnictví jde
+jen ze strukturovaných parametrů (tedy jen ze Sreality/Bezrealitky, viz
+Parametry výš) — u zbylých portálů je pole ownership prázdné, takže
+tahle skupina bytů se v konkrétním výběru vlastnictví neukáže (ale
+zůstane vidět u "Vlastnictví (vše)").
+
 **Chybějící dispozice/plocha/cena/adresa se zkusí dohledat i v popisu**
 (viz `parse.js`), ne jen v titulku — u nového inzerátu appka detail
 stejně stahuje kvůli fotkám, takže popis má vždy k dispozici. Pořadí

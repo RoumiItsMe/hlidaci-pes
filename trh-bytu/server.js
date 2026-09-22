@@ -9,6 +9,10 @@ import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, latestChange } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
+import { extractCity } from "./parse.js";
+import { watches } from "../config.js";
+
+const BYTY_WATCH = watches.find((w) => w.key === "byty");
 
 const PORT = 4321;
 const SOURCE_LABELS = {
@@ -58,13 +62,19 @@ function formatDateOnly(iso) {
   return new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
 }
 
-// "V nabídce od" + "Poslední změna" — poslední jmenovaná NIKDY z
-// portálového "naposledy upraveno" (to si RK bumpují bez reálné změny),
-// vždy z vlastní historie appky (viz group.js latestChange).
-function updatesLine(firstSeenAt, change) {
-  const parts = [`V nabídce od ${formatDateOnly(firstSeenAt)}`];
-  parts.push(change ? `Poslední změna: ${formatDateOnly(change.occurred_at)} (${EVENT_LABELS[change.event_type] || change.event_type})` : "Poslední změna: zatím žádná");
-  return parts.join(" · ");
+// "V nabídce od" + "Poslední změna" jako dva samostatné odznaky, ne
+// splývající text — uživatel je chtěl na první pohled odlišitelné od
+// zbytku řádku. "Poslední změna" NIKDY z portálového "naposledy
+// upraveno" (to si RK bumpují bez reálné změny), vždy z vlastní historie
+// appky (viz group.js latestChange). Odznak beze změny je schválně
+// tlumený/šedý — barevně (žlutě) vystupuje jen odznak, kde SE něco
+// opravdu stalo, ať se dá v přehledu rychle zrakem najít, co je "živé".
+function updatesChips(firstSeenAt, change) {
+  const since = `<span class="update-chip update-chip--since">📅 V nabídce od ${esc(formatDateOnly(firstSeenAt))}</span>`;
+  const changeChip = change
+    ? `<span class="update-chip update-chip--change">🔄 Poslední změna ${esc(formatDateOnly(change.occurred_at))} · ${esc(EVENT_LABELS[change.event_type] || change.event_type)}</span>`
+    : `<span class="update-chip update-chip--none">Zatím beze změny</span>`;
+  return `${since}${changeChip}`;
 }
 
 function layout(title, body) {
@@ -113,16 +123,39 @@ function truncate(text, maxLen) {
   return `${cut.slice(0, lastSpace > 40 ? lastSpace : maxLen)}…`;
 }
 
-function renderTable(db, statusFilter) {
+// Sestaví "/?..." se stávajícími filtry + přepsáním jen zadaných klíčů —
+// každý filtrovací/řadicí odkaz tak zachová VŠECHNY ostatní aktivní
+// filtry (klik na "Cena ↑" nesmí zapomenout zvolené město atd.).
+function buildQuery(current, overrides) {
+  const merged = { ...current, ...overrides };
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(merged)) {
+    if (v) params.set(k, v);
+  }
+  const qs = params.toString();
+  return qs ? `/?${qs}` : "/";
+}
+
+const SORTERS = {
+  newest: (a, b) => (b.firstSeenAt < a.firstSeenAt ? -1 : 1),
+  price_asc: (a, b) => (a.rep.price_czk ?? Infinity) - (b.rep.price_czk ?? Infinity),
+  price_desc: (a, b) => (b.rep.price_czk ?? -Infinity) - (a.rep.price_czk ?? -Infinity),
+};
+const SORT_LABELS = [
+  ["newest", "Nejnovější"],
+  ["price_asc", "Cena ↑"],
+  ["price_desc", "Cena ↓"],
+];
+
+function renderTable(db, filters) {
+  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter } = filters;
   const allListings = db.prepare("SELECT * FROM listings").all();
   // Skupiny (ne syrové řádky) — stejná nemovitost napříč portály se ukáže
   // jen jednou, viz group.js.
-  let groups = groupListings(allListings);
-  if (statusFilter) groups = groups.filter((g) => mergedStatus(g.members) === statusFilter);
-  groups.sort((a, b) => (earliestFirstSeen(b.members) < earliestFirstSeen(a.members) ? -1 : 1));
+  const allGroups = groupListings(allListings);
 
   // Jedna náhledová fotka na inzerát (ta s nejnižším id = první stažená),
-  // jedním dotazem pro všechny skupiny najednou — ne 70 samostatných.
+  // jedním dotazem pro všechny skupiny najednou — ne N samostatných.
   const firstPhotoByListing = new Map(
     db
       .prepare(`SELECT listing_id, local_path FROM photos WHERE id IN (SELECT MIN(id) FROM photos GROUP BY listing_id)`)
@@ -149,31 +182,67 @@ function renderTable(db, statusFilter) {
     return members.flatMap((m) => eventsByListing.get(m.id) || []);
   }
 
+  // Odvozené údaje spočítané JEDNOU za skupinu — filtr, řazení i
+  // vykreslení pak jen čtou, žádné opakované JSON.parse/reduce nad
+  // stejnou skupinou vícekrát.
+  const entries = allGroups.map((g) => ({
+    g,
+    rep: primaryListing(g.members),
+    params: mergeParams(g.members),
+    address: bestAddress(g.members),
+    status: mergedStatus(g.members),
+    firstSeenAt: earliestFirstSeen(g.members),
+  }));
+  for (const e of entries) e.city = extractCity(e.address, BYTY_WATCH);
+
+  // Volby pro "Město"/"Vlastnictví" — jen hodnoty, co se v datech opravdu
+  // vyskytují (ze SEBE, ne z hardcoded seznamu, ať appka nenabízí volbu,
+  // po které nic nenajde). Z CELÉ sady, ne z už filtrované — jinak by
+  // volby při kombinaci filtrů mizely a přehled by nedával smysl.
+  const cityOptions = [...new Set(entries.map((e) => e.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
+  const ownershipOptions = [...new Set(entries.map((e) => e.params.ownership).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
+
+  let filtered = entries;
+  if (statusFilter) filtered = filtered.filter((e) => e.status === statusFilter);
+  if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
+  if (ownershipFilter) filtered = filtered.filter((e) => e.params.ownership === ownershipFilter);
+  filtered = [...filtered].sort(SORTERS[sort] || SORTERS.newest);
+
+  const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter };
+
   const filterLinks = ["", "active", "reserved", "removed"]
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
       const active = statusFilter === s || (!statusFilter && !s) ? "active" : "";
-      return `<a class="filter ${active}" href="/?status=${s}">${esc(label)}</a>`;
+      return `<a class="filter ${active}" href="${buildQuery(current, { status: s })}">${esc(label)}</a>`;
     })
     .join("");
 
-  const rows = groups
-    .map((g) => {
-      const rep = primaryListing(g.members); // nejdůvěryhodnější zdroj (Sreality/iDNES > Bezrealitky > RealityMIX/Bazoš), viz group.js
-      const status = mergedStatus(g.members);
+  const sortLinks = SORT_LABELS.map(
+    ([key, label]) => `<a class="filter ${sort === key ? "active" : ""}" href="${buildQuery(current, { sort: key })}">${esc(label)}</a>`
+  ).join("");
+
+  const cityOptionsHtml = [`<option value="">Všechna města</option>`]
+    .concat(cityOptions.map((c) => `<option value="${esc(c)}" ${cityFilter === c ? "selected" : ""}>${esc(c)}</option>`))
+    .join("");
+  const ownershipOptionsHtml = [`<option value="">Vlastnictví (vše)</option>`]
+    .concat(ownershipOptions.map((o) => `<option value="${esc(o)}" ${ownershipFilter === o ? "selected" : ""}>${esc(o)}</option>`))
+    .join("");
+
+  const rows = filtered
+    .map(({ g, rep, params, address, status, firstSeenAt }) => {
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
       const sourceLabel = g.members.map((m) => SOURCE_LABELS[m.source] || m.source).join(" + ");
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
-      const address = bestAddress(g.members);
       const thumb = groupThumbnail(g.members);
       const photo = thumb
         ? `<img src="/photos/${encodeURIComponent(thumb.replace(/^photos[\\/]/, ""))}" loading="lazy" alt="">`
         : `<div class="row-photo-empty">Bez fotky</div>`;
 
-      const paramsLine = paramsSummaryLine(mergeParams(g.members));
+      const paramsLine = paramsSummaryLine(params);
       const descriptionSource = pickDescription(g.members);
       const snippet = descriptionSource ? truncate(descriptionSource.description, 220) : "";
-      const updates = updatesLine(earliestFirstSeen(g.members), latestChange(groupEvents(g.members)));
+      const updates = updatesChips(firstSeenAt, latestChange(groupEvents(g.members)));
 
       return `<a class="row" href="/byt/${encodeURIComponent(rep.id)}">
         <div class="row-photo">${photo}</div>
@@ -181,7 +250,7 @@ function renderTable(db, statusFilter) {
           <div class="row-title">${esc(cardTitle(rep, address))}</div>
           ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
           ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
-          <div class="row-updates muted">${esc(updates)}</div>
+          <div class="row-updates">${updates}</div>
           <div class="row-meta">
             <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
             <span class="muted">${esc(sourceLabel)}${linkBadge}</span>
@@ -192,9 +261,20 @@ function renderTable(db, statusFilter) {
     .join("");
 
   return `
-    <h1>Byty (${groups.length})</h1>
+    <h1>Byty (${filtered.length})</h1>
     <div class="filters">${filterLinks}</div>
-    <div class="rows">${rows || `<p class="empty">Zatím žádná data — spusť <code>npm run track-sales</code>.</p>`}</div>`;
+    <div class="toolbar">
+      <div class="filters">${sortLinks}</div>
+      <form method="get" action="/" class="select-filters">
+        <input type="hidden" name="status" value="${esc(statusFilter || "")}">
+        <input type="hidden" name="sort" value="${esc(sort)}">
+        <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
+        <select name="ownership" onchange="this.form.submit()">${ownershipOptionsHtml}</select>
+      </form>
+    </div>
+    <div class="rows">${
+      rows || `<p class="empty">${allGroups.length === 0 ? `Zatím žádná data — spusť <code>npm run track-sales</code>.` : "Nic nenalezeno pro zvolené filtry."}</p>`
+    }</div>`;
 }
 
 function renderDetail(db, id) {
@@ -256,7 +336,7 @@ function renderDetail(db, id) {
     .join("");
 
   const address = bestAddress(members) || "";
-  const updates = updatesLine(earliestFirstSeen(members), latestChange(events));
+  const updates = updatesChips(earliestFirstSeen(members), latestChange(events));
 
   return `
     <p><a href="/">← Zpět na seznam</a></p>
@@ -268,7 +348,7 @@ function renderDetail(db, id) {
     <ul class="source-links">${sourceLinks}</ul>
     <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${formatCzk(rep.price_czk)}</p>
     <p>${esc(address)}</p>
-    <p class="muted">${esc(updates)}</p>
+    <div class="row-updates">${updates}</div>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
     ${paramRows ? `<h2>Parametry</h2><table class="params">${paramRows}</table>` : ""}
     ${descriptionHtml ? `<h2>Popis</h2>${descriptionHtml}` : ""}
@@ -369,9 +449,14 @@ const server = createServer(async (req, res) => {
   }
 
   if (url.pathname === "/" && req.method === "GET") {
-    const status = url.searchParams.get("status") || null;
+    const filters = {
+      status: url.searchParams.get("status") || null,
+      sort: url.searchParams.get("sort") || "newest",
+      city: url.searchParams.get("city") || null,
+      ownership: url.searchParams.get("ownership") || null,
+    };
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Trh bytů", renderTable(db, status)));
+    return res.end(layout("Trh bytů", renderTable(db, filters)));
   }
 
   if (url.pathname === "/stats" && req.method === "GET") {

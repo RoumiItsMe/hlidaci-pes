@@ -77,3 +77,44 @@ export function parseAddressFromTitle(title) {
   const m = title?.match(ADDRESS_AFTER_AREA_RE);
   return m ? m[1].trim() : null;
 }
+
+// Kraj/okres v adrese je pro filtr "město" šum, ne hodnota ("Pardubický
+// kraj" není město) — při hledání posledního rozumného segmentu adresy
+// se přeskočí.
+const NON_CITY_SEGMENT_RE = /(kraj|okres|^okr\.)/i;
+
+/**
+ * Vytáhne "město" z adresy pro filtrování v UI — ne přesná municipalita,
+ * jen rozumná skupina pro řazení nabídek do kbelíků. Nejdřív zkusí, jestli
+ * adresa obsahuje jméno některého ze SLEDOVANÝCH měst (ze stejné
+ * konfigurace jako watch "byty" v config.js) — i uvnitř delšího řetězce
+ * jako "Ústí nad Orlicí - Hylváty" nebo "Česká Třebová, okr. Ústí nad
+ * Orlicí" chceme jednu společnou skupinu, ne desítky mikro-lokalit podle
+ * čtvrti. Když adresa žádné sledované město nezmiňuje (typicky
+ * RealityMIX-only nabídky z okolních měst mimo hlavní 4, např.
+ * Pardubice), spadne na poslední rozumně vyhlížející segment adresy.
+ * Fail-soft — vrátí `null`, když adresu vůbec nemáme.
+ */
+export function extractCity(address, watch) {
+  if (!address) return null;
+  // "okr(es) X" je jen okresní kvalifikátor, ne město — celý sledovaný
+  // region spadá pod okres Ústí nad Orlicí, takže i nabídka v Žamberku
+  // nebo Letohradu má tenhle text v adrese. Bez odstranění by substring
+  // hledání níž vždycky "vyhrálo" na "Ústí nad Orlicí" (první v seznamu,
+  // viz watch.locations) místo skutečného města — ověřeno naostro na
+  // "Křib, Česká Třebová, okr. Ústí nad Orlicí", co bez tohohle vracelo
+  // špatně "Ústí nad Orlicí" místo "Česká Třebová".
+  const withoutDistrict = address.replace(/,?\s*okr(?:es)?\.?\s+[^,]+/gi, "");
+  for (const loc of watch.locations) {
+    if (withoutDistrict.includes(loc.label)) return loc.label;
+  }
+  const parts = withoutDistrict.split(",").map((s) => s.trim()).filter(Boolean);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i];
+    // Min. délka je pojistka proti uťatým Bazoš titulkům (viz
+    // parseAddressFromTitle) — "ul. Potoční, Ú" by jinak vyrobilo
+    // jednopísmenné "město" (reálný případ, ne teorie).
+    if (part && part.length >= 3 && !NON_CITY_SEGMENT_RE.test(part)) return part;
+  }
+  return null;
+}
