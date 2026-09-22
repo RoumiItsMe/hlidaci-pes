@@ -22,7 +22,7 @@ import { fetchIdnes } from "../sources/idnes.js";
 import { fetchRealitymix } from "../sources/realitymix.js";
 import { fetchBazos } from "../sources/bazos.js";
 import { openDb, nowIso, getListing, insertListing, updateListingFields, insertEvent, insertPhoto, getActiveListingIdsForSource, DATA_DIR } from "./db.js";
-import { parseDisposition, parseAreaM2, parseAddressFromTitle } from "./parse.js";
+import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace } from "./parse.js";
 import { downloadPhotos } from "./photos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
@@ -78,23 +78,35 @@ async function processSource(db, source, watch) {
       const detail = await source.fetchDetail(item.url);
       const status = detail.reserved ? "reserved" : "active";
 
+      // Titulek bývá stručný a někdy dispozici/plochu vůbec nemá (hlavně
+      // Bazoš/RealityMIX) — v tom případě appka zkusí totéž vytáhnout z
+      // popisu na detailu, ten je skoro vždy zmiňuje taky. Cena stejně:
+      // "Cena na vyžádání"/"Dohodou" u samotné nabídky, ale popis přesto
+      // často konkrétní číslo obsahuje. Adresa má tři úrovně: pole od
+      // portálu → konec titulku (jen Bazoš) → aspoň název sledovaného
+      // města zmíněný v popisu (viz parse.js).
+      const disposition = parseDisposition(item.title) ?? parseDisposition(detail.description);
+      const areaM2 = parseAreaM2(item.title) ?? parseAreaM2(detail.description);
+      const priceCzk = item.priceCzk ?? parsePriceFromDescription(detail.description);
+      const address = item.address || parseAddressFromTitle(item.title) || findKnownPlace(detail.description, watch) || null;
+
       insertListing(db, {
         id: listingId,
         source: source.name,
         source_id: item.id,
         url: item.url,
         title: item.title,
-        disposition: parseDisposition(item.title),
-        area_m2: parseAreaM2(item.title),
-        address: item.address || parseAddressFromTitle(item.title) || null,
+        disposition,
+        area_m2: areaM2,
+        address,
         description: detail.description,
-        price_czk: item.priceCzk ?? null,
+        price_czk: priceCzk,
         status,
         first_seen_at: now,
         last_seen_at: now,
         params_json: JSON.stringify(detail.params || {}),
       });
-      insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: item.priceCzk ?? null, occurred_at: now });
+      insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: priceCzk, occurred_at: now });
       if (status === "reserved") {
         insertEvent(db, { listing_id: listingId, event_type: "reserved", occurred_at: now });
       }
