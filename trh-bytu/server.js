@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing } from "./group.js";
 
 const PORT = 4321;
 const SOURCE_LABELS = {
@@ -60,14 +61,12 @@ function layout(title, body) {
 }
 
 function renderTable(db, statusFilter) {
-  let query = "SELECT * FROM listings";
-  const params = [];
-  if (statusFilter) {
-    query += " WHERE status = ?";
-    params.push(statusFilter);
-  }
-  query += " ORDER BY first_seen_at DESC";
-  const rows = db.prepare(query).all(...params);
+  const allListings = db.prepare("SELECT * FROM listings").all();
+  // Skupiny (ne syrové řádky) — stejná nemovitost napříč portály se ukáže
+  // jen jednou, viz group.js.
+  let groups = groupListings(allListings);
+  if (statusFilter) groups = groups.filter((g) => mergedStatus(g.members) === statusFilter);
+  groups.sort((a, b) => (earliestFirstSeen(b.members) < earliestFirstSeen(a.members) ? -1 : 1));
 
   const filterLinks = ["", "active", "reserved", "removed"]
     .map((s) => {
@@ -77,22 +76,26 @@ function renderTable(db, statusFilter) {
     })
     .join("");
 
-  const tableRows = rows
-    .map((r) => {
-      const st = STATUS_LABELS[r.status] || { text: r.status, color: "#000" };
-      return `<tr onclick="location.href='/byt/${encodeURIComponent(r.id)}'">
-        <td>${esc(r.disposition || "—")}</td>
-        <td>${r.area_m2 ? `${r.area_m2} m²` : "—"}</td>
-        <td>${formatCzk(r.price_czk)}</td>
+  const tableRows = groups
+    .map((g) => {
+      const rep = primaryListing(g.members);
+      const status = mergedStatus(g.members);
+      const st = STATUS_LABELS[status] || { text: status, color: "#000" };
+      const sourceLabel = g.members.map((m) => SOURCE_LABELS[m.source] || m.source).join(" + ");
+      const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
+      return `<tr onclick="location.href='/byt/${encodeURIComponent(rep.id)}'">
+        <td>${esc(rep.disposition || "—")}</td>
+        <td>${rep.area_m2 ? `${rep.area_m2} m²` : "—"}</td>
+        <td>${formatCzk(rep.price_czk)}</td>
         <td><span class="badge" style="background:${st.color}">${esc(st.text)}</span></td>
-        <td>${esc(SOURCE_LABELS[r.source] || r.source)}</td>
-        <td>${formatDate(r.first_seen_at)}</td>
+        <td>${esc(sourceLabel)}${linkBadge}</td>
+        <td>${formatDate(earliestFirstSeen(g.members))}</td>
       </tr>`;
     })
     .join("");
 
   return `
-    <h1>Byty (${rows.length})</h1>
+    <h1>Byty (${groups.length})</h1>
     <div class="filters">${filterLinks}</div>
     <table>
       <thead><tr><th>Dispozice</th><th>Plocha</th><th>Cena</th><th>Stav</th><th>Portál</th><th>Přidáno</th></tr></thead>
@@ -101,66 +104,124 @@ function renderTable(db, statusFilter) {
 }
 
 function renderDetail(db, id) {
-  const listing = db.prepare("SELECT * FROM listings WHERE id = ?").get(id);
-  if (!listing) return null;
+  const allListings = db.prepare("SELECT * FROM listings").all();
+  const group = findGroupForListing(allListings, id);
+  if (!group) return null;
 
-  const events = db.prepare("SELECT * FROM events WHERE listing_id = ? ORDER BY occurred_at ASC").all(id);
-  const photos = db.prepare("SELECT * FROM photos WHERE listing_id = ? ORDER BY id ASC").all(id);
-  const st = STATUS_LABELS[listing.status] || { text: listing.status, color: "#000" };
+  const members = group.members;
+  const rep = primaryListing(members); // nese notes/verified_sale_* — jeden sdílený záznam za skupinu
+  const status = mergedStatus(members);
+  const st = STATUS_LABELS[status] || { text: status, color: "#000" };
+  const sourceById = Object.fromEntries(members.map((m) => [m.id, m.source]));
 
-  const gallery = photos.map((p) => `<img src="/photos/${encodeURIComponent(p.local_path.replace(/^photos[\\/]/, ""))}" loading="lazy">`).join("");
+  const memberIds = members.map((m) => m.id);
+  const placeholders = memberIds.map(() => "?").join(",");
+  const photos = db.prepare(`SELECT * FROM photos WHERE listing_id IN (${placeholders}) ORDER BY listing_id, id`).all(...memberIds);
+  const events = db.prepare(`SELECT * FROM events WHERE listing_id IN (${placeholders}) ORDER BY occurred_at ASC`).all(...memberIds);
+
+  // Fotky se sčítají napříč VŠEMI členy skupiny — když je jeden zdroj
+  // (typicky Sreality, jejíž CDN fotky odmítá stahovat, viz photos.js)
+  // bez fotek, ale jiný portál se stejnou nemovitostí je má, appka je
+  // ukáže odtud. Přesně tohle uživatel chtěl.
+  const gallery = photos
+    .map((p) => {
+      const src = `/photos/${encodeURIComponent(p.local_path.replace(/^photos[\\/]/, ""))}`;
+      const label = SOURCE_LABELS[sourceById[p.listing_id]] || sourceById[p.listing_id];
+      return `<img src="${src}" loading="lazy" title="${esc(label)}">`;
+    })
+    .join("");
+
+  const sourceLinks = members
+    .map((m) => {
+      const mst = STATUS_LABELS[m.status] || { text: m.status, color: "#000" };
+      return `<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(SOURCE_LABELS[m.source] || m.source)} ↗</a> <span class="badge small" style="background:${mst.color}">${esc(mst.text)}</span></li>`;
+    })
+    .join("");
+
+  const descriptions = members
+    .filter((m) => m.description)
+    .map(
+      (m) =>
+        `<div class="description">${group.merged ? `<p class="description-source">${esc(SOURCE_LABELS[m.source] || m.source)}</p>` : ""}<p>${esc(m.description)}</p></div>`
+    )
+    .join("");
 
   const timeline = events
     .map((e) => {
       let detail = "";
       if (e.event_type === "price_change") detail = `${formatCzk(e.old_price_czk)} → ${formatCzk(e.new_price_czk)}`;
-      return `<li><strong>${formatDate(e.occurred_at)}</strong> — ${esc(EVENT_LABELS[e.event_type] || e.event_type)} ${detail}</li>`;
+      const srcLabel = group.merged ? ` <span class="muted">(${esc(SOURCE_LABELS[sourceById[e.listing_id]] || sourceById[e.listing_id])})</span>` : "";
+      return `<li><strong>${formatDate(e.occurred_at)}</strong> — ${esc(EVENT_LABELS[e.event_type] || e.event_type)}${srcLabel} ${detail}</li>`;
     })
     .join("");
 
+  const address = members.find((m) => m.address)?.address || "";
+
   return `
     <p><a href="/">← Zpět na seznam</a></p>
-    <h1>${esc(listing.title || listing.disposition || listing.id)}</h1>
+    <h1>${esc(rep.disposition || "")} ${rep.area_m2 ? `${rep.area_m2} m²` : ""}</h1>
     <p>
       <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
-      · ${esc(SOURCE_LABELS[listing.source] || listing.source)}
-      · <a href="${esc(listing.url)}" target="_blank" rel="noopener">otevřít inzerát ↗</a>
+      ${group.merged ? `· nalezeno na ${members.length} portálech` : ""}
     </p>
-    <p>${esc(listing.disposition || "—")} · ${listing.area_m2 ? `${listing.area_m2} m²` : "—"} · ${formatCzk(listing.price_czk)}</p>
-    <p>${esc(listing.address || "")}</p>
+    <ul class="source-links">${sourceLinks}</ul>
+    <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${formatCzk(rep.price_czk)}</p>
+    <p>${esc(address)}</p>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
-    ${listing.description ? `<h2>Popis</h2><p class="description">${esc(listing.description)}</p>` : ""}
+    ${descriptions ? `<h2>Popis</h2>${descriptions}` : ""}
 
     <h2>Časová osa</h2>
     <ul class="timeline">${timeline}</ul>
 
     <h2>Vlastní poznámky</h2>
-    <form method="post" action="/byt/${encodeURIComponent(listing.id)}/notes">
-      <label>Ověřená prodejní cena (Kč)<input type="number" name="verified_sale_price_czk" value="${listing.verified_sale_price_czk ?? ""}"></label>
-      <label>Datum prodeje<input type="date" name="verified_sale_date" value="${listing.verified_sale_date ?? ""}"></label>
-      <label>Poznámka<textarea name="notes" rows="3">${esc(listing.notes)}</textarea></label>
+    <form method="post" action="/byt/${encodeURIComponent(rep.id)}/notes">
+      <label>Ověřená prodejní cena (Kč)<input type="number" name="verified_sale_price_czk" value="${rep.verified_sale_price_czk ?? ""}"></label>
+      <label>Datum prodeje<input type="date" name="verified_sale_date" value="${rep.verified_sale_date ?? ""}"></label>
+      <label>Poznámka<textarea name="notes" rows="3">${esc(rep.notes)}</textarea></label>
       <button type="submit">Uložit</button>
     </form>`;
 }
 
 function renderStats(db) {
-  const counts = db.prepare("SELECT status, COUNT(*) as n FROM listings GROUP BY status").all();
-  const countRows = counts.map((c) => `<li>${esc(STATUS_LABELS[c.status]?.text || c.status)}: <strong>${c.n}</strong></li>`).join("");
+  const allListings = db.prepare("SELECT * FROM listings").all();
+  const groups = groupListings(allListings);
 
-  const avg = db
-    .prepare(
-      `SELECT ROUND(AVG(price_czk * 1.0 / area_m2)) as avg_per_m2, COUNT(*) as n
-       FROM listings WHERE status = 'removed' AND price_czk IS NOT NULL AND area_m2 IS NOT NULL
-       AND removed_at >= datetime('now', '-90 days')`
-    )
-    .get();
+  // Počítáno na SKUPINY (skutečné nemovitosti), ne syrové řádky — jinak by
+  // stejný byt nalezený na 2 portálech vyšel v součtu jako 2 byty.
+  const counts = { active: 0, reserved: 0, removed: 0 };
+  for (const g of groups) counts[mergedStatus(g.members)]++;
+  const countRows = Object.entries(counts)
+    .map(([k, n]) => `<li>${esc(STATUS_LABELS[k].text)}: <strong>${n}</strong></li>`)
+    .join("");
+  const mergedCount = groups.filter((g) => g.merged).length;
+
+  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const removedRecentWithData = groups
+    .filter((g) => mergedStatus(g.members) === "removed")
+    .filter((g) => {
+      // Skupina "zmizela" datem POSLEDNÍHO zmizení mezi jejími členy —
+      // dokud byla vidět aspoň na jednom portálu, pořád byla na trhu.
+      const latest = g.members.reduce((max, m) => (m.removed_at && m.removed_at > max ? m.removed_at : max), "");
+      return latest && new Date(latest).getTime() >= cutoff;
+    })
+    .map((g) => primaryListing(g.members))
+    .filter((r) => r.price_czk != null && r.area_m2 != null);
+
+  const avgPerM2 = removedRecentWithData.length
+    ? Math.round(removedRecentWithData.reduce((sum, r) => sum + r.price_czk / r.area_m2, 0) / removedRecentWithData.length)
+    : null;
 
   return `
     <p><a href="/">← Zpět na seznam</a></p>
     <h1>Statistiky</h1>
     <ul>${countRows}</ul>
+    <p class="muted">Z toho ${mergedCount} nemovitostí nalezeno na víc portálech zároveň.</p>
     <h2>Zmizelé z nabídky za posledních 90 dní</h2>
-    <p>${avg?.n ? `${avg.n} bytů, průměr ${formatCzk(avg.avg_per_m2)}/m² (z poslední evidované ceny, ne nutně skutečná prodejní cena)` : "Zatím žádná data."}</p>`;
+    <p>${
+      removedRecentWithData.length
+        ? `${removedRecentWithData.length} bytů, průměr ${formatCzk(avgPerM2)}/m² (z poslední evidované ceny, ne nutně skutečná prodejní cena)`
+        : "Zatím žádná data."
+    }</p>`;
 }
 
 function serveStatic(res, filePath, contentType) {

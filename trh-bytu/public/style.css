@@ -65,6 +65,16 @@ tbody tr:hover { background: #f0f4ff; }
   font-size: 0.78rem;
   font-weight: 600;
 }
+.badge.small { padding: 0.05rem 0.5rem; font-size: 0.72rem; }
+
+.link-badge { cursor: help; }
+.muted { color: var(--muted); font-size: 0.85rem; }
+
+.source-links { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem; margin: 0.5rem 0 1rem; }
+.source-links li { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+
+.description { margin-bottom: 0.8rem; }
+.description-source { font-weight: 600; font-size: 0.8rem; color: var(--muted); margin: 0 0 0.2rem; text-transform: uppercase; letter-spacing: 0.03em; }
 
 .gallery { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
 .gallery img { width: 160px; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }

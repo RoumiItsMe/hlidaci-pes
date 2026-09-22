@@ -7,6 +7,13 @@ kdy se objevily, jak se jim vyvíjela cena, kdy zmizely z nabídky
 appka to nikdy netvrdí jistě). U každého bytu drží dispozici, plochu,
 popis, fotky a odkaz na inzerát.
 
+**Stejná nemovitost inzerovaná na víc portálech se ukáže jen jednou**
+(shoda dispozice+plochy+ceny napříč zdroji, viz [`group.js`](group.js)) —
+appka ji spojí do jednoho záznamu se všemi odkazy, sloučenou galerií fotek
+(když jeden portál fotky nemá — typicky Sreality, viz níž — appka je
+ukáže z jiného portálu se stejnou nemovitostí) a společnou časovou osou
+napříč portály.
+
 **Na rozdíl od hlídacího psa běží čistě lokálně** — žádný GitHub Actions,
 žádné Telegram notifikace. Data (SQLite databáze + stažené fotky) zůstávají
 jen na tomhle počítači v `data/` (gitignored, negitovaná).
@@ -59,12 +66,27 @@ prodeje a volnou poznámku** — až si sám dohledáš skutečnou cenu (např. 
 katastru nemovitostí), zapiš si ji tam. Appka sama žádná data z katastru
 nestahuje.
 
+## Sloučení stejné nemovitosti napříč portály
+
+Appka porovnává VŠECHNY inzeráty podle (dispozice, plocha zaokrouhlená na
+celé m², cena) — když se dva inzeráty z RŮZNÝCH portálů shodují ve všech
+třech, bere je jako jednu nemovitost. Vědomě konzervativní: shoda v rámci
+JEDNOHO portálu (dva různé byty na Bazoši náhodou se stejnými parametry)
+se nikdy neslučuje — radši dva řádky pro tutéž nemovitost navíc, než
+omylem sloučit dva různé byty do jednoho a jeden tiše "zmizet" z přehledu.
+
+Počítá se vždy čerstvě při zobrazení (appka si nikde neukládá "tohle patří
+k tamtomu") — funguje okamžitě i na starších datech a nemůže se rozejít
+se skutečností.
+
+Důsledek pro stav: pokud je nemovitost aktivní byť jen na JEDNOM portálu,
+appka ji ukáže jako "V nabídce" (dá se pořád reálně sehnat), i kdyby na
+jiném portálu mezitím zmizela nebo byla označená jako rezervovaná —
+detail bytu ale ukazuje stav KAŽDÉHO portálu zvlášť, takže nic nezůstává
+skryté.
+
 ## Vědomá omezení (v1)
 
-- **Žádné sloučení stejného bytu napříč portály** — pokud je stejná
-  nemovitost inzerovaná na dvou portálech, appka ji povede jako dva
-  samostatné záznamy. Pro odhad rozsahu prodejních cen v okolí to nevadí
-  (jen mírně nadhodnotí počet nabídek).
 - **"Rezervováno" appka pozná spolehlivě jen u Bezrealitky** (má to přímo v
   datech). U ostatních portálů se stav pozná až zmizením z nabídky
   (`removed`) — bez rozlišení, jestli šlo o rezervaci, prodej, nebo že
