@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, latestChange } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
 
 const PORT = 4321;
@@ -51,6 +51,20 @@ function formatCzk(n) {
 function formatDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateOnly(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
+}
+
+// "V nabídce od" + "Poslední změna" — poslední jmenovaná NIKDY z
+// portálového "naposledy upraveno" (to si RK bumpují bez reálné změny),
+// vždy z vlastní historie appky (viz group.js latestChange).
+function updatesLine(firstSeenAt, change) {
+  const parts = [`V nabídce od ${formatDateOnly(firstSeenAt)}`];
+  parts.push(change ? `Poslední změna: ${formatDateOnly(change.occurred_at)} (${EVENT_LABELS[change.event_type] || change.event_type})` : "Poslední změna: zatím žádná");
+  return parts.join(" · ");
 }
 
 function layout(title, body) {
@@ -123,6 +137,18 @@ function renderTable(db, statusFilter) {
     return null;
   }
 
+  // Všechny eventy jedním dotazem, seskupené podle inzerátu — latestChange
+  // (group.js) si z nich pro danou skupinu vybere nejnovější SKUTEČNOU
+  // změnu (viz komentář tam, proč ne portálové "naposledy upraveno").
+  const eventsByListing = new Map();
+  for (const e of db.prepare("SELECT listing_id, event_type, occurred_at FROM events").all()) {
+    if (!eventsByListing.has(e.listing_id)) eventsByListing.set(e.listing_id, []);
+    eventsByListing.get(e.listing_id).push(e);
+  }
+  function groupEvents(members) {
+    return members.flatMap((m) => eventsByListing.get(m.id) || []);
+  }
+
   const filterLinks = ["", "active", "reserved", "removed"]
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
@@ -147,6 +173,7 @@ function renderTable(db, statusFilter) {
       const paramsLine = paramsSummaryLine(mergeParams(g.members));
       const descriptionSource = pickDescription(g.members);
       const snippet = descriptionSource ? truncate(descriptionSource.description, 220) : "";
+      const updates = updatesLine(earliestFirstSeen(g.members), latestChange(groupEvents(g.members)));
 
       return `<a class="row" href="/byt/${encodeURIComponent(rep.id)}">
         <div class="row-photo">${photo}</div>
@@ -154,6 +181,7 @@ function renderTable(db, statusFilter) {
           <div class="row-title">${esc(cardTitle(rep, address))}</div>
           ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
           ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
+          <div class="row-updates muted">${esc(updates)}</div>
           <div class="row-meta">
             <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
             <span class="muted">${esc(sourceLabel)}${linkBadge}</span>
@@ -227,7 +255,8 @@ function renderDetail(db, id) {
     })
     .join("");
 
-  const address = members.find((m) => m.address)?.address || "";
+  const address = bestAddress(members) || "";
+  const updates = updatesLine(earliestFirstSeen(members), latestChange(events));
 
   return `
     <p><a href="/">← Zpět na seznam</a></p>
@@ -239,6 +268,7 @@ function renderDetail(db, id) {
     <ul class="source-links">${sourceLinks}</ul>
     <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${formatCzk(rep.price_czk)}</p>
     <p>${esc(address)}</p>
+    <p class="muted">${esc(updates)}</p>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
     ${paramRows ? `<h2>Parametry</h2><table class="params">${paramRows}</table>` : ""}
     ${descriptionHtml ? `<h2>Popis</h2>${descriptionHtml}` : ""}

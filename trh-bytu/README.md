@@ -36,9 +36,26 @@ sekce Parametry skrytá.
 holá tabulka: náhledová fotka (nebo "Bez fotky", když ji appka nemá u
 žádného sloučeného zdroje), čitelný nadpis ve tvaru
 `Byt 2+1, 55 m², Letohrad, ul. U dvora — 3 750 000 Kč`, kompaktní shrnutí
-parametrů (jen popisné hodnoty + vybavení, co je "Ano" — ne "Ne") a
-úryvek popisu (~220 znaků, uťatý na hranici slova), ať je na první pohled
-jasné, o co jde a kde to je, bez nutnosti klikat do detailu.
+parametrů (jen popisné hodnoty + vybavení, co je "Ano" — ne "Ne"), úryvek
+popisu (~220 znaků, uťatý na hranici slova) a řádek **"V nabídce od" +
+"Poslední změna"** (viz níž), ať je na první pohled jasné, o co jde, kde
+to je a jak dlouho/jestli se s tím něco děje — bez nutnosti klikat do
+detailu.
+
+## "V nabídce od" a "Poslední změna" — jen vlastní historie appky
+
+"V nabídce od" = kdy appka nemovitost poprvé zaevidovala (nejstarší
+`first_seen_at` napříč sloučenými zdroji). "Poslední změna" je datum
+poslední **skutečné** události, co appka SAMA zaznamenala do vlastní
+historie (`events`, viz `db.js`) — změna ceny, zmizení z nabídky, návrat
+do nabídky, nebo (jen u Bezrealitky) označení jako rezervováno. Nikdy ne
+"naposledy upraveno" od portálu (Sreality `params.edited` apod.) — to si
+realitky bumpují i bez reálné změny nabídky, přesně ten samý problém,
+kvůli kterému hlídací pes dřív hlásil roky staré inzeráty jako "nové" (viz
+komentáře v `sources/sreality.js` a `group.js`). Appka věří jen tomu, co
+sama uviděla se vlastníma očima mezi dvěma sběrnými běhy — když se od
+zaevidování nic takového nestalo, řádek ukáže "Poslední změna: zatím
+žádná", ne vymyšlené/portálové datum.
 
 **Chybějící dispozice/plocha/cena/adresa se zkusí dohledat i v popisu**
 (viz `parse.js`), ne jen v titulku — u nového inzerátu appka detail

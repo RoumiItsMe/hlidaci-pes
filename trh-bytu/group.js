@@ -89,6 +89,35 @@ export function earliestFirstSeen(members) {
   return members.reduce((min, m) => (m.first_seen_at < min ? m.first_seen_at : min), members[0].first_seen_at);
 }
 
+// Typy událostí, co appka počítá jako SKUTEČNOU pozdější změnu u už
+// zaevidovaného inzerátu — výhradně z VLASTNÍ historie appky (změna ceny,
+// zmizení z nabídky, návrat do nabídky, a Bezrealitky-only "označeno jako
+// rezervováno", jediný spolehlivý reserved příznak napříč portály — viz
+// detail/bezrealitky.js). "created" (prvotní zaevidování) se nepočítá,
+// to není změna, to je začátek historie.
+//
+// Záměrně NIKDY "naposledy upraveno od portálu" (Sreality `params.edited`
+// apod.) — realitky si tohle pole bumpují i bez reálné změny nabídky
+// (přesně důvod, proč to hlídací pes taky nikdy nebral jako signál "nová
+// nabídka", viz sources/sreality.js). Appka věří jen tomu, co sama
+// zaznamenala.
+const CHANGE_EVENT_TYPES = new Set(["price_change", "removed", "reactivated", "reserved"]);
+
+/**
+ * Poslední skutečná změna napříč danými událostmi (viz CHANGE_EVENT_TYPES
+ * výš) — `null`, když k žádné zatím nedošlo. Bere se přímo pole `events`
+ * (typicky spojené ze všech členů skupiny), ne mapa — volající si eventy
+ * pro skupinu poskládá sám (viz server.js).
+ */
+export function latestChange(events) {
+  let best = null;
+  for (const e of events) {
+    if (!CHANGE_EVENT_TYPES.has(e.event_type)) continue;
+    if (!best || e.occurred_at > best.occurred_at) best = e;
+  }
+  return best;
+}
+
 /** Skupinu, do které patří daný listing (podle ID), z pole VŠECH inzerátů. */
 export function findGroupForListing(allListings, listingId) {
   const groups = groupListings(allListings);
