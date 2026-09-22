@@ -66,13 +66,38 @@ se od zaevidování něco děje.
 ## Filtrování a řazení
 
 Nad seznamem bytů: stavové filtry (Vše/V nabídce/Rezervováno/Zmizelo z
-nabídky, jako dřív), řazení **podle ceny** (nejnovější první je výchozí,
-nebo nejlevnější/nejdražší první) a dva výběry — **město** a
+nabídky, jako dřív), řazení **podle ceny** (nebo nejlevnější/nejdražší
+první — výchozí "Nejnovější" je popsané níž) a dva výběry — **město** a
 **vlastnictví** — co se automaticky naplní jen hodnotami, které se v
 datech opravdu vyskytují (appka nikdy nenabídne volbu, po které by nic
 nenašla). Všechny filtry/řazení se kombinují a odkazy mezi sebou
 zachovávají zvolený stav ostatních (klik na "Cena ↑" nezruší zvolené
 město).
+
+**Výchozí řazení ("Nejnovější") dává přednost TOP bytům** (viz níž) — ty
+jsou vždy nahoře, bez ohledu na datum. Uvnitř toho (a u bytů bez TOP
+označení) rozhoduje **poslední aktivita** = novější z dvojice (kdy byl byt
+zaevidován, kdy u něj appka zaznamenala poslední skutečnou změnu — viz
+"Poslední změna" výš) — čerstvě přidaný byt i dávno zaevidovaný byt s
+dnešní změnou ceny se tak oba objeví nahoře. Řazení podle ceny naopak TOP
+nijak nezvýhodňuje — je to čistě cena, jak by čtenář čekal.
+
+## Vyřadit (✕) a TOP (⭐)
+
+Každý řádek (i detail bytu) má dvě malá kolečka v pravém horním rohu:
+
+- **✕ Skrýt z přehledu** — byt zmizí ze VŠECH běžných pohledů (appka nic
+  nemaže, jen ho přestane defaultně ukazovat, stejná filozofie jako u
+  `status = removed`, viz níž). Skryté byty jdou zpátky najít přes pilulku
+  **"🚫 Skryté (N)"** nad seznamem, kde má tlačítko místo ✕ **↺ Obnovit**.
+- **⭐/☆ Označit jako TOP** — byty, které uživatel sleduje nejvíc. Pilulka
+  **"⭐ TOP"** nad seznamem je filtruje na jedno kliknutí; TOP byty navíc
+  dostávají zlatý okraj řádku a hvězdičku před titulkem, ať jsou vidět i
+  bez filtru.
+
+Obě jsou nezávislé na sobě i na stavu appky (aktivní/rezervováno/zmizelo)
+a ukládají se stejně jako poznámky v detailu — appka o nich nikdy nic
+sama nerozhoduje.
 
 Město se vytahuje z adresy (viz `extractCity` v `parse.js`) — nejdřív
 zkusí, jestli adresa obsahuje jméno některého ze 4 hlavních sledovaných

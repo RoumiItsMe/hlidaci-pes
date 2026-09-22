@@ -65,7 +65,11 @@ let db;
 // tabulky (DB tady žije napříč verzemi appky, ne že by se zakládala
 // pokaždé znovu) — nové sloupce se proto přidávají tady, idempotentně
 // (kontrola existence, ne "IF NOT EXISTS" — SQLite ho u ADD COLUMN nemá).
-const COLUMN_MIGRATIONS = [{ table: "listings", column: "params_json", ddl: "TEXT" }];
+const COLUMN_MIGRATIONS = [
+  { table: "listings", column: "params_json", ddl: "TEXT" },
+  { table: "listings", column: "hidden", ddl: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "listings", column: "starred", ddl: "INTEGER NOT NULL DEFAULT 0" },
+];
 
 function runMigrations(db) {
   for (const { table, column, ddl } of COLUMN_MIGRATIONS) {

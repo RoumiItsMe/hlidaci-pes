@@ -144,6 +144,20 @@ export function bestAddress(members) {
   return withAddress ? withAddress.address : null;
 }
 
+// Skrytí (křížek) a TOP (hvězdička) jsou uživatelovy vlastní příznaky, ne
+// data z portálu — ukládají se na jednotlivé listingy (stejně jako
+// notes/verified_sale_*, viz db.js), ale ČTOU se přes CELOU skupinu, ne jen
+// z primaryListing. Důvod: kdyby se pořadí SOURCE_PRIORITY pro danou
+// nemovitost v čase přerovnalo (např. přibude Sreality inzerát tam, kde
+// dřív byl primární jen Bazoš), příznak zapsaný na starém primárním
+// listingu by jinak "zmizel", i když ho uživatel nikdy nezrušil.
+export function isStarred(members) {
+  return members.some((m) => m.starred);
+}
+export function isHidden(members) {
+  return members.some((m) => m.hidden);
+}
+
 /**
  * Sloučí strukturované parametry (vlastnictví, stav, podlaží...) napříč
  * členy skupiny — pro každé pole se bere hodnota od nejdůvěryhodnějšího

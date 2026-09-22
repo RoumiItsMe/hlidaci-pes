@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, latestChange } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, latestChange, isStarred, isHidden } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
 import { extractCity } from "./parse.js";
 import { watches } from "../config.js";
@@ -77,6 +77,20 @@ function updatesChips(firstSeenAt, change) {
   return `${since}${changeChip}`;
 }
 
+// Tlačítka TOP (hvězdička) / Skrýt (křížek) — sdílené mezi řádkem přehledu
+// a detailem. Každé je vlastní POST formulář (žádný klientský JS potřeba
+// pro toggle) — a v řádku je vědomě SOUROZENEC obalujícího odkazu na
+// detail (`.row-link`), ne jeho potomek: `<button>` uvnitř `<a>` je
+// neplatné HTML a klik by bublal i na navigaci na detail.
+function rowActionButtons(id, starred, hidden) {
+  const encId = encodeURIComponent(id);
+  const starBtn = `<form method="post" action="/byt/${encId}/star" class="row-action-form"><button type="submit" class="icon-btn${starred ? " icon-btn--active" : ""}" title="${starred ? "Odebrat z TOP" : "Označit jako TOP"}">${starred ? "⭐" : "☆"}</button></form>`;
+  const hideBtn = hidden
+    ? `<form method="post" action="/byt/${encId}/hide" class="row-action-form"><button type="submit" class="icon-btn" title="Vrátit do přehledu">↺</button></form>`
+    : `<form method="post" action="/byt/${encId}/hide" class="row-action-form"><button type="submit" class="icon-btn" title="Skrýt z přehledu">✕</button></form>`;
+  return `${starBtn}${hideBtn}`;
+}
+
 function layout(title, body) {
   return `<!doctype html>
 <html lang="cs">
@@ -136,8 +150,16 @@ function buildQuery(current, overrides) {
   return qs ? `/?${qs}` : "/";
 }
 
+// Výchozí řazení: TOP (hvězdička) vždy nahoře, uvnitř toho podle
+// "aktivity" — novější z (kdy zaevidováno, kdy poslední skutečná změna) —
+// viz entry.activityAt níž. TOP-pinning platí jen pro "newest" (výchozí)
+// řazení; u řazení podle ceny by míchání TOP dovnitř popřelo smysl "seřaď
+// čistě podle ceny", který si uživatel explicitně zvolil.
 const SORTERS = {
-  newest: (a, b) => (b.firstSeenAt < a.firstSeenAt ? -1 : 1),
+  newest: (a, b) => {
+    if (a.starred !== b.starred) return a.starred ? -1 : 1;
+    return b.activityAt < a.activityAt ? -1 : 1;
+  },
   price_asc: (a, b) => (a.rep.price_czk ?? Infinity) - (b.rep.price_czk ?? Infinity),
   price_desc: (a, b) => (b.rep.price_czk ?? -Infinity) - (a.rep.price_czk ?? -Infinity),
 };
@@ -148,7 +170,8 @@ const SORT_LABELS = [
 ];
 
 function renderTable(db, filters) {
-  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter } = filters;
+  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView } = filters;
+  const showHidden = hiddenView === "show";
   const allListings = db.prepare("SELECT * FROM listings").all();
   // Skupiny (ne syrové řádky) — stejná nemovitost napříč portály se ukáže
   // jen jednou, viz group.js.
@@ -185,14 +208,25 @@ function renderTable(db, filters) {
   // Odvozené údaje spočítané JEDNOU za skupinu — filtr, řazení i
   // vykreslení pak jen čtou, žádné opakované JSON.parse/reduce nad
   // stejnou skupinou vícekrát.
-  const entries = allGroups.map((g) => ({
-    g,
-    rep: primaryListing(g.members),
-    params: mergeParams(g.members),
-    address: bestAddress(g.members),
-    status: mergedStatus(g.members),
-    firstSeenAt: earliestFirstSeen(g.members),
-  }));
+  const entries = allGroups.map((g) => {
+    const firstSeenAt = earliestFirstSeen(g.members);
+    const change = latestChange(groupEvents(g.members));
+    return {
+      g,
+      rep: primaryListing(g.members),
+      params: mergeParams(g.members),
+      address: bestAddress(g.members),
+      status: mergedStatus(g.members),
+      firstSeenAt,
+      change,
+      // "Aktivita" pro výchozí řazení = novější z (zaevidováno, poslední
+      // skutečná změna) — čerstvě přidaný byt i dávno zaevidovaný byt s
+      // dnešní změnou ceny mají oba vyjít jako "nahoře".
+      activityAt: change && change.occurred_at > firstSeenAt ? change.occurred_at : firstSeenAt,
+      starred: isStarred(g.members),
+      hidden: isHidden(g.members),
+    };
+  });
   for (const e of entries) e.city = extractCity(e.address, BYTY_WATCH);
 
   // Volby pro "Město"/"Vlastnictví" — jen hodnoty, co se v datech opravdu
@@ -201,22 +235,39 @@ function renderTable(db, filters) {
   // volby při kombinaci filtrů mizely a přehled by nedával smysl.
   const cityOptions = [...new Set(entries.map((e) => e.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
   const ownershipOptions = [...new Set(entries.map((e) => e.params.ownership).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
+  const hiddenCount = entries.filter((e) => e.hidden).length;
 
+  // Skryté (křížkem vyřazené) položky se z běžného přehledu vylučují VŽDY
+  // — dokud si je uživatel výslovně nevyžádá přes "Skryté" (?hidden=show).
+  // V tom pohledu naopak ukazujeme JEN skryté (kvůli případnému obnovení)
+  // a stavový filtr se ignoruje — "V nabídce"/"Rezervováno"/... nedává u
+  // skrytých položek smysl kombinovat.
   let filtered = entries;
-  if (statusFilter) filtered = filtered.filter((e) => e.status === statusFilter);
+  if (showHidden) {
+    filtered = filtered.filter((e) => e.hidden);
+  } else {
+    filtered = filtered.filter((e) => !e.hidden);
+    if (statusFilter) filtered = filtered.filter((e) => e.status === statusFilter);
+  }
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
   if (ownershipFilter) filtered = filtered.filter((e) => e.params.ownership === ownershipFilter);
+  if (topFilter) filtered = filtered.filter((e) => e.starred);
   filtered = [...filtered].sort(SORTERS[sort] || SORTERS.newest);
 
-  const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter };
+  const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView };
 
   const filterLinks = ["", "active", "reserved", "removed"]
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
-      const active = statusFilter === s || (!statusFilter && !s) ? "active" : "";
-      return `<a class="filter ${active}" href="${buildQuery(current, { status: s })}">${esc(label)}</a>`;
+      const active = !showHidden && (statusFilter === s || (!statusFilter && !s)) ? "active" : "";
+      // Klik na stavový filtr vždy opustí pohled "Skryté" — kombinace by
+      // neměla smysl (skryté položky appka stavem netřídí).
+      return `<a class="filter ${active}" href="${buildQuery(current, { status: s, hidden: null })}">${esc(label)}</a>`;
     })
     .join("");
+
+  const topLink = `<a class="filter ${topFilter ? "active" : ""}" href="${buildQuery(current, { top: topFilter ? null : "1" })}">⭐ TOP</a>`;
+  const hiddenLink = `<a class="filter ${showHidden ? "active" : ""}" href="${buildQuery(current, { hidden: showHidden ? null : "show", status: null })}">🚫 Skryté (${hiddenCount})</a>`;
 
   const sortLinks = SORT_LABELS.map(
     ([key, label]) => `<a class="filter ${sort === key ? "active" : ""}" href="${buildQuery(current, { sort: key })}">${esc(label)}</a>`
@@ -230,7 +281,7 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, status, firstSeenAt }) => {
+    .map(({ g, rep, params, address, status, firstSeenAt, change, starred, hidden }) => {
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
       const sourceLabel = g.members.map((m) => SOURCE_LABELS[m.source] || m.source).join(" + ");
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
@@ -242,38 +293,50 @@ function renderTable(db, filters) {
       const paramsLine = paramsSummaryLine(params);
       const descriptionSource = pickDescription(g.members);
       const snippet = descriptionSource ? truncate(descriptionSource.description, 220) : "";
-      const updates = updatesChips(firstSeenAt, latestChange(groupEvents(g.members)));
+      const updates = updatesChips(firstSeenAt, change);
 
-      return `<a class="row" href="/byt/${encodeURIComponent(rep.id)}">
-        <div class="row-photo">${photo}</div>
-        <div class="row-body">
-          <div class="row-title">${esc(cardTitle(rep, address))}</div>
-          ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
-          ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
-          <div class="row-updates">${updates}</div>
-          <div class="row-meta">
-            <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
-            <span class="muted">${esc(sourceLabel)}${linkBadge}</span>
+      return `<div class="row${starred ? " row--starred" : ""}">
+        <div class="row-actions">${rowActionButtons(rep.id, starred, hidden)}</div>
+        <a class="row-link" href="/byt/${encodeURIComponent(rep.id)}">
+          <div class="row-photo">${photo}</div>
+          <div class="row-body">
+            <div class="row-title">${starred ? "⭐ " : ""}${esc(cardTitle(rep, address))}</div>
+            ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
+            ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
+            <div class="row-updates">${updates}</div>
+            <div class="row-meta">
+              <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
+              <span class="muted">${esc(sourceLabel)}${linkBadge}</span>
+            </div>
           </div>
-        </div>
-      </a>`;
+        </a>
+      </div>`;
     })
     .join("");
 
   return `
     <h1>Byty (${filtered.length})</h1>
-    <div class="filters">${filterLinks}</div>
+    <div class="filters">${filterLinks}${topLink}${hiddenLink}</div>
     <div class="toolbar">
       <div class="filters">${sortLinks}</div>
       <form method="get" action="/" class="select-filters">
         <input type="hidden" name="status" value="${esc(statusFilter || "")}">
         <input type="hidden" name="sort" value="${esc(sort)}">
+        <input type="hidden" name="top" value="${esc(topFilter || "")}">
+        <input type="hidden" name="hidden" value="${esc(hiddenView || "")}">
         <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
         <select name="ownership" onchange="this.form.submit()">${ownershipOptionsHtml}</select>
       </form>
     </div>
     <div class="rows">${
-      rows || `<p class="empty">${allGroups.length === 0 ? `Zatím žádná data — spusť <code>npm run track-sales</code>.` : "Nic nenalezeno pro zvolené filtry."}</p>`
+      rows ||
+      `<p class="empty">${
+        showHidden
+          ? "Žádné byty nejsou skryté."
+          : allGroups.length === 0
+          ? `Zatím žádná data — spusť <code>npm run track-sales</code>.`
+          : "Nic nenalezeno pro zvolené filtry."
+      }</p>`
     }</div>`;
 }
 
@@ -286,6 +349,8 @@ function renderDetail(db, id) {
   const rep = primaryListing(members); // nese notes/verified_sale_* — jeden sdílený záznam za skupinu
   const status = mergedStatus(members);
   const st = STATUS_LABELS[status] || { text: status, color: "#000" };
+  const starred = isStarred(members);
+  const hidden = isHidden(members);
   const sourceById = Object.fromEntries(members.map((m) => [m.id, m.source]));
 
   const memberIds = members.map((m) => m.id);
@@ -340,7 +405,10 @@ function renderDetail(db, id) {
 
   return `
     <p><a href="/">← Zpět na seznam</a></p>
-    <h1>${esc(rep.disposition || "")} ${rep.area_m2 ? `${rep.area_m2} m²` : ""}</h1>
+    <div class="detail-heading">
+      <h1>${starred ? "⭐ " : ""}${esc(rep.disposition || "")} ${rep.area_m2 ? `${rep.area_m2} m²` : ""}</h1>
+      <div class="row-actions row-actions--detail">${rowActionButtons(rep.id, starred, hidden)}</div>
+    </div>
     <p>
       <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
       ${group.merged ? `· nalezeno na ${members.length} portálech` : ""}
@@ -367,7 +435,9 @@ function renderDetail(db, id) {
 
 function renderStats(db) {
   const allListings = db.prepare("SELECT * FROM listings").all();
-  const groups = groupListings(allListings);
+  // Skryté (křížkem vyřazené) položky se do statistik nepočítají — hidden
+  // je uživatelovo "tohle mě nezajímá", stejná úvaha jako v přehledu.
+  const groups = groupListings(allListings).filter((g) => !isHidden(g.members));
 
   // Počítáno na SKUPINY (skutečné nemovitosti), ne syrové řádky — jinak by
   // stejný byt nalezený na 2 portálech vyšel v součtu jako 2 byty.
@@ -454,6 +524,8 @@ const server = createServer(async (req, res) => {
       sort: url.searchParams.get("sort") || "newest",
       city: url.searchParams.get("city") || null,
       ownership: url.searchParams.get("ownership") || null,
+      top: url.searchParams.get("top") || null,
+      hidden: url.searchParams.get("hidden") || null,
     };
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(layout("Trh bytů", renderTable(db, filters)));
@@ -474,6 +546,30 @@ const server = createServer(async (req, res) => {
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(layout("Byt — Trh bytů", body));
+  }
+
+  // TOP (hvězdička) a Skrýt (křížek) jsou prosté toggly — přečti si
+  // aktuální hodnotu a přehoď ji. Uloženo na LISTING, do kterého ukazuje
+  // ID v URL (tj. primaryListing skupiny v okamžiku vykreslení stránky,
+  // ze které se kliklo) — čtení je pak robustnější přes isStarred/isHidden
+  // nad celou skupinou (viz group.js), takže se příznak "neztratí", i
+  // kdyby se mezitím přerovnalo pořadí SOURCE_PRIORITY pro tu nemovitost.
+  const starMatch = url.pathname.match(/^\/byt\/([^/]+)\/star$/);
+  if (starMatch && req.method === "POST") {
+    const id = decodeURIComponent(starMatch[1]);
+    const row = db.prepare("SELECT starred FROM listings WHERE id = ?").get(id);
+    if (row) db.prepare("UPDATE listings SET starred = ? WHERE id = ?").run(row.starred ? 0 : 1, id);
+    res.writeHead(302, { Location: req.headers.referer || "/" });
+    return res.end();
+  }
+
+  const hideMatch = url.pathname.match(/^\/byt\/([^/]+)\/hide$/);
+  if (hideMatch && req.method === "POST") {
+    const id = decodeURIComponent(hideMatch[1]);
+    const row = db.prepare("SELECT hidden FROM listings WHERE id = ?").get(id);
+    if (row) db.prepare("UPDATE listings SET hidden = ? WHERE id = ?").run(row.hidden ? 0 : 1, id);
+    res.writeHead(302, { Location: req.headers.referer || "/" });
+    return res.end();
   }
 
   const notesMatch = url.pathname.match(/^\/byt\/([^/]+)\/notes$/);

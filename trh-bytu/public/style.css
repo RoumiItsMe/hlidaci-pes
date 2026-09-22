@@ -80,18 +80,53 @@ th, td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(
    popisu, ať je na první pohled jasné, o co jde, bez nutnosti klikat do
    detailu. */
 .rows { display: flex; flex-direction: column; gap: 0.75rem; }
+/* .row je teď jen pozicovací obal — samotný odkaz na detail je vnořené
+   .row-link (viz níž). Musí to být DVĚ vrstvy, ne jedna: tlačítka TOP/Skrýt
+   (.row-actions) jsou POST formuláře a <button> uvnitř <a> je neplatné
+   HTML (klik by bublal i na navigaci na detail). Jako sourozenec .row-link
+   fungují nezávisle beze stopky JS. */
 .row {
-  display: flex;
-  gap: 1rem;
+  position: relative;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.75rem;
-  text-decoration: none;
-  color: inherit;
   transition: box-shadow 0.15s ease;
 }
 .row:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); }
+.row--starred { border-color: #f5c518; }
+.row-link {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem;
+  text-decoration: none;
+  color: inherit;
+}
+.row-actions {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.3rem;
+  z-index: 1;
+}
+.row-action-form { margin: 0; }
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+}
+.icon-btn:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+.icon-btn--active { color: #b45309; border-color: #f5c518; background: #fffbeb; }
 .row-photo { flex: 0 0 180px; aspect-ratio: 4 / 3; border-radius: 8px; overflow: hidden; background: #eceef1; }
 .row-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .row-photo-empty {
@@ -140,9 +175,12 @@ th, td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(
 .update-chip--none { background: var(--bg); color: var(--muted); border: 1px dashed var(--border); font-weight: 500; }
 
 @media (max-width: 520px) {
-  .row { flex-direction: column; }
+  .row-link { flex-direction: column; }
   .row-photo { flex: none; width: 100%; }
 }
+
+.detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.row-actions--detail { position: static; }
 
 .badge {
   display: inline-block;
