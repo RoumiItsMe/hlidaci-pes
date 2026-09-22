@@ -2,3 +2,6 @@ node_modules/
 .env
 .env.local
 *.log
+
+# Trh bytů (trh-bytu/) — čistě lokální appka, data zůstávají jen na PC
+trh-bytu/data/

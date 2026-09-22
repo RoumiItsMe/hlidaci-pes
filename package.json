@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Hlídací pes na nové nemovitosti — sleduje realitní portály a posílá notifikace na Telegram.",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "track-sales": "node trh-bytu/track.js",
+    "sales-app": "node trh-bytu/server.js"
   },
   "engines": {
     "node": ">=22"
