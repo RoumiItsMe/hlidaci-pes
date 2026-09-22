@@ -3,7 +3,9 @@
 // text se zjevně dotahuje až přes JS hydrataci na klientovi, kterou
 // fetchText logicky nevidí) — description proto zůstává vždy null. Stejný
 // fail-soft přístup jako u zbytku projektu s RealityMIX: raději chybějící
-// pole než shozený běh (viz komentáře v sources/realitymix.js).
+// pole než shozený běh (viz komentáře v sources/realitymix.js). Ze stejného
+// důvodu se nezískají ani strukturovaná pole `params` (viz ../params.js) —
+// vrací se prázdné.
 //
 // Fotky mají konzistentní CDN cestu `st.realitymix.cz/i/...` (zjištěno
 // naostro) — `_nahled` varianta je duplicitní náhled první fotky, vyřazuje
@@ -28,9 +30,9 @@ export async function fetchRealitymixDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description: null, photoUrls, reserved: false };
+    return { description: null, photoUrls, reserved: false, params: {} };
   } catch (err) {
     console.warn(`[detail/realitymix] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false };
+    return { description: null, photoUrls: [], reserved: false, params: {} };
   }
 }

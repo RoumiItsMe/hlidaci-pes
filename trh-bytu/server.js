@@ -7,7 +7,8 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams } from "./group.js";
+import { PARAM_FIELDS } from "./params.js";
 
 const PORT = 4321;
 const SOURCE_LABELS = {
@@ -138,12 +139,18 @@ function renderDetail(db, id) {
     })
     .join("");
 
-  const descriptions = members
-    .filter((m) => m.description)
-    .map(
-      (m) =>
-        `<div class="description">${group.merged ? `<p class="description-source">${esc(SOURCE_LABELS[m.source] || m.source)}</p>` : ""}<p>${esc(m.description)}</p></div>`
-    )
+  // Jen JEDEN popis za skupinu (uživatel ho vícekrát nepotřebuje) — ten
+  // nejdelší, viz group.js.
+  const descriptionSource = pickDescription(members);
+  const descriptionHtml = descriptionSource
+    ? `<div class="description">${group.merged ? `<p class="description-source">${esc(SOURCE_LABELS[descriptionSource.source] || descriptionSource.source)}</p>` : ""}<p>${esc(descriptionSource.description)}</p></div>`
+    : "";
+
+  // Strukturované parametry (vlastnictví, stav, podlaží...) sloučené napříč
+  // skupinou — podobně jako je Sreality/Bazoš ukazují u vlastní nabídky.
+  const params = mergeParams(members);
+  const paramRows = PARAM_FIELDS.filter(([key]) => params[key] != null)
+    .map(([key, label]) => `<tr><th>${esc(label)}</th><td>${esc(params[key])}</td></tr>`)
     .join("");
 
   const timeline = events
@@ -168,7 +175,8 @@ function renderDetail(db, id) {
     <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${formatCzk(rep.price_czk)}</p>
     <p>${esc(address)}</p>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
-    ${descriptions ? `<h2>Popis</h2>${descriptions}` : ""}
+    ${paramRows ? `<h2>Parametry</h2><table class="params">${paramRows}</table>` : ""}
+    ${descriptionHtml ? `<h2>Popis</h2>${descriptionHtml}` : ""}
 
     <h2>Časová osa</h2>
     <ul class="timeline">${timeline}</ul>

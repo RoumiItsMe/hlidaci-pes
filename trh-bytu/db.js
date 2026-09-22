@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS listings (
   removed_at TEXT,
   notes TEXT,
   verified_sale_price_czk INTEGER,
-  verified_sale_date TEXT
+  verified_sale_date TEXT,
+  params_json TEXT          -- strukturované parametry (vlastnictví, stav, podlaží...) jako JSON, viz params.js
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -60,6 +61,21 @@ CREATE INDEX IF NOT EXISTS idx_photos_listing ON photos(listing_id);
 
 let db;
 
+// `CREATE TABLE IF NOT EXISTS` nedoplní nový sloupec do UŽ existující
+// tabulky (DB tady žije napříč verzemi appky, ne že by se zakládala
+// pokaždé znovu) — nové sloupce se proto přidávají tady, idempotentně
+// (kontrola existence, ne "IF NOT EXISTS" — SQLite ho u ADD COLUMN nemá).
+const COLUMN_MIGRATIONS = [{ table: "listings", column: "params_json", ddl: "TEXT" }];
+
+function runMigrations(db) {
+  for (const { table, column, ddl } of COLUMN_MIGRATIONS) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!cols.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+    }
+  }
+}
+
 /** Otevře (a při prvním spuštění založí) SQLite databázi + schéma. */
 export function openDb() {
   if (db) return db;
@@ -68,6 +84,7 @@ export function openDb() {
   db = new DatabaseSync(DB_PATH);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(SCHEMA);
+  runMigrations(db);
   return db;
 }
 
@@ -83,8 +100,8 @@ export function insertListing(db, listing) {
   db.prepare(
     `INSERT INTO listings
       (id, source, source_id, url, title, disposition, area_m2, address, description,
-       price_czk, status, first_seen_at, last_seen_at, removed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       price_czk, status, first_seen_at, last_seen_at, removed_at, params_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     listing.id,
     listing.source,
@@ -99,7 +116,8 @@ export function insertListing(db, listing) {
     listing.status,
     listing.first_seen_at,
     listing.last_seen_at,
-    listing.removed_at ?? null
+    listing.removed_at ?? null,
+    listing.params_json ?? null
   );
 }
 

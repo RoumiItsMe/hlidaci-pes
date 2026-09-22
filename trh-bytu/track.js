@@ -92,6 +92,7 @@ async function processSource(db, source, watch) {
         status,
         first_seen_at: now,
         last_seen_at: now,
+        params_json: JSON.stringify(detail.params || {}),
       });
       insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: item.priceCzk ?? null, occurred_at: now });
       if (status === "reserved") {

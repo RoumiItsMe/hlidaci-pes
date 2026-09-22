@@ -15,6 +15,14 @@
 // ohledu na hlavičky, viz komentář v ../photos.js. Necháno tak (fail-soft,
 // zdokumentováno v README) — přepis na headless prohlížeč by pro tenhle
 // jeden zdroj byl nepřiměřeně velký zásah do "jednoduché appky".
+//
+// `params` (viz ../params.js pro seznam polí): Sreality má strukturovaná
+// data — pole končící na "Cb" jsou objekty `{ name, value }` (interní
+// "codebook", value=0 zpravidla znamená "- nezadáno" → bereme jako
+// neznámé, nezobrazí se). `floorNumber` je 0-indexované (0 = přízemí, dál
+// "1. patro" atd. — standardní česká konvence). Booleovská pole (balkón,
+// sklep, terasa, lodžie, garáž) appka převádí na "Ano"/"Ne", s plochou v
+// závorce, pokud je známá.
 
 import { fetchText } from "../../lib/http.js";
 
@@ -28,6 +36,41 @@ function extractNextData(html) {
   }
 }
 
+function cbName(cb) {
+  if (!cb || typeof cb !== "object") return null;
+  if (cb.value === 0 && /nezad[áa]no/i.test(cb.name || "")) return null;
+  return cb.name || null;
+}
+
+function energyLetter(cb) {
+  const name = cbName(cb);
+  return name ? name.split(" - ")[0].trim() : null;
+}
+
+function yesNo(value, areaM2) {
+  if (value == null) return null;
+  const base = value ? "Ano" : "Ne";
+  return value && areaM2 ? `${base} (${areaM2} m²)` : base;
+}
+
+function extractParams(est) {
+  const p = est.params || {};
+  return {
+    ownership: cbName(p.ownership),
+    condition: cbName(p.buildingCondition),
+    buildingType: cbName(p.buildingType),
+    floorInfo: p.floorNumber != null && p.floors != null ? `${p.floorNumber === 0 ? "Přízemí" : `${p.floorNumber}. patro`} z ${p.floors}` : null,
+    energyRating: energyLetter(p.energyEfficiencyRating),
+    elevator: cbName(p.elevator),
+    balcony: yesNo(p.balcony, p.balconyArea),
+    loggia: yesNo(p.loggia, p.loggiaArea),
+    terrace: yesNo(p.terrace, p.terraceArea),
+    cellar: yesNo(p.cellar, p.cellarArea),
+    parking: typeof p.parking === "object" ? cbName(p.parking) : yesNo(p.parking),
+    garage: yesNo(p.garage),
+  };
+}
+
 export async function fetchSrealityDetail(url) {
   try {
     // skipAcceptHeader: Sreality detail stránky občas na "Accept"
@@ -38,15 +81,15 @@ export async function fetchSrealityDetail(url) {
     const dh = data?.props?.pageProps?.dehydratedState;
     const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
     const est = q?.state?.data;
-    if (!est) return { description: null, photoUrls: [], reserved: false };
+    if (!est) return { description: null, photoUrls: [], reserved: false, params: {} };
 
     const photoUrls = (est.images || [])
       .map((img) => (img.url?.startsWith("//") ? `https:${img.url}` : img.url))
       .filter(Boolean);
 
-    return { description: est.description || null, photoUrls, reserved: false };
+    return { description: est.description || null, photoUrls, reserved: false, params: extractParams(est) };
   } catch (err) {
     console.warn(`[detail/sreality] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false };
+    return { description: null, photoUrls: [], reserved: false, params: {} };
   }
 }

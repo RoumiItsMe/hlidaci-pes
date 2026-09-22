@@ -9,10 +9,18 @@ popis, fotky a odkaz na inzerát.
 
 **Stejná nemovitost inzerovaná na víc portálech se ukáže jen jednou**
 (shoda dispozice+plochy+ceny napříč zdroji, viz [`group.js`](group.js)) —
-appka ji spojí do jednoho záznamu se všemi odkazy, sloučenou galerií fotek
+appka ji spojí do jednoho záznamu se všemi odkazy, **jedním popisem**
+(vybere ten nejdelší, ne kopie z každého portálu), sloučenou galerií fotek
 (když jeden portál fotky nemá — typicky Sreality, viz níž — appka je
 ukáže z jiného portálu se stejnou nemovitostí) a společnou časovou osou
 napříč portály.
+
+**Strukturované parametry** (vlastnictví, stav, typ budovy, podlaží,
+energetická náročnost, výtah, balkón/lodžie/terasa/sklep/parkování/garáž)
+— podobně jako je Sreality/Bazoš ukazují u vlastní nabídky, viz
+[`params.js`](params.js). K dispozici jsou jen ze Sreality a Bezrealitky
+(jediné dva portály se strukturovaným JSON na detailu) — u ostatních zůstává
+sekce Parametry skrytá.
 
 **Na rozdíl od hlídacího psa běží čistě lokálně** — žádný GitHub Actions,
 žádné Telegram notifikace. Data (SQLite databáze + stažené fotky) zůstávají
@@ -58,6 +66,14 @@ Ověření, že úloha běží: *Plánovač úloh* → *Knihovna plánovače úl
 
 Nic z `data/` se necommituje do gitu (viz `.gitignore`) — je to čistě
 lokální evidence.
+
+## Data zůstávají i po zmizení z nabídky
+
+Appka nikdy nic nemaže. Když byt zmizí z nabídky (pravděpodobně prodáno/
+rezervováno/staženo), zapíše se jen `status = "removed"` + datum — popis,
+fotky, parametry a celá časová osa zůstávají v databázi navždy, přesně tak,
+jak byly naposledy zaznamenané. V celém kódu appky (`track.js`, `server.js`,
+`db.js`) není jediný `DELETE` nad tabulkami `listings`/`photos`/`events`.
 
 ## Vlastní poznámky u bytu
 

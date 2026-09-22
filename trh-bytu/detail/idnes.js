@@ -1,6 +1,11 @@
 // iDNES detail — server-rendered HTML, žádný embedded JSON (stejně jako
 // sources/idnes.js pro search výpis).
 //
+// `params` (strukturovaná pole jako vlastnictví/stav/podlaží, viz
+// ../params.js) appka odsud nezíská — bez embedded JSON by šly vytáhnout
+// jen nespolehlivě regexem z HTML, proto se vrací prázdné (fail-soft, jen
+// Sreality a Bezrealitky mají pro tohle strukturovaná data).
+//
 // Zjištěno naostro: popis je v `.b-desc.pt-10.mt-10` (obsahuje ale na
 // začátku zopakovaný titulek — ořezává se). Galerie fotek má konzistentní
 // CDN cestu `sta-reality2.1gr.cz/sta/compile/thumbs/...` — placeholder
@@ -33,9 +38,9 @@ export async function fetchIdnesDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description, photoUrls, reserved: false };
+    return { description, photoUrls, reserved: false, params: {} };
   } catch (err) {
     console.warn(`[detail/idnes] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false };
+    return { description: null, photoUrls: [], reserved: false, params: {} };
   }
 }

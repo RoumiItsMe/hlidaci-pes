@@ -71,3 +71,41 @@ export function findGroupForListing(allListings, listingId) {
   const groups = groupListings(allListings);
   return groups.find((g) => g.members.some((m) => m.id === listingId)) || null;
 }
+
+/**
+ * Jeden popis za skupinu, ne od každého portálu zvlášť — uživatel ho
+ * nepotřebuje vícekrát. Vybírá se nejdelší (nejvíc informace), s
+ * deterministickým rozstřelem podle ID, ať se výběr při znovunačtení
+ * stránky neliší. Vrací `null`, když popis nemá žádný člen skupiny.
+ */
+export function pickDescription(members) {
+  const withDescription = members.filter((m) => m.description);
+  if (withDescription.length === 0) return null;
+  return [...withDescription].sort(
+    (a, b) => b.description.length - a.description.length || a.id.localeCompare(b.id)
+  )[0];
+}
+
+/**
+ * Sloučí strukturované parametry (vlastnictví, stav, podlaží...) napříč
+ * členy skupiny — pro každé pole se bere první nalezená hodnota (jen
+ * Sreality a Bezrealitky je vyplňují, viz params.js, takže v drtivé
+ * většině skupin má hodnotu nejvýš jeden člen a "první nalezená" je jediná
+ * k mání). Vrací obyčejný objekt `{ pole: hodnota }` bez `null` položek.
+ */
+export function mergeParams(members) {
+  const merged = {};
+  for (const m of members) {
+    if (!m.params_json) continue;
+    let params;
+    try {
+      params = JSON.parse(m.params_json);
+    } catch {
+      continue;
+    }
+    for (const [key, value] of Object.entries(params)) {
+      if (value != null && merged[key] == null) merged[key] = value;
+    }
+  }
+  return merged;
+}

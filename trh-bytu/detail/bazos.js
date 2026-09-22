@@ -7,7 +7,9 @@
 // `bazos.cz/img/<N>t/...` (miniatury z galerie) — menší soubory než
 // plnohodnotné fotky, ale pro účel appky (rychlý vizuální přehled) stačí a
 // šetří místo na disku. Žádný "rezervováno"/"prodáno" text na vzorku nebyl
-// — reserved-detekce pro Bazoš není k dispozici.
+// — reserved-detekce pro Bazoš není k dispozici. Strukturovaná pole
+// `params` (viz ../params.js) Bazoš vůbec nenabízí — bez embedded JSON by
+// šla vytáhnout jen nespolehlivě z volného textu popisu, vrací se prázdné.
 
 import * as cheerio from "cheerio";
 import { fetchText } from "../../lib/http.js";
@@ -29,9 +31,9 @@ export async function fetchBazosDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description, photoUrls, reserved: false };
+    return { description, photoUrls, reserved: false, params: {} };
   } catch (err) {
     console.warn(`[detail/bazos] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false };
+    return { description: null, photoUrls: [], reserved: false, params: {} };
   }
 }
