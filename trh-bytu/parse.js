@@ -25,3 +25,17 @@ export function parseAreaM2(title) {
   const val = parseFloat(m[1].replace(",", "."));
   return Number.isFinite(val) ? val : null;
 }
+
+// Bazoš nemá samostatné pole s adresou (na rozdíl od ostatních 4 portálů) —
+// lokalita, a často i ulice, bývá připsaná na konci titulku hned za
+// plochou, např. "... 67 m², Ústí nad Orlicí, ul. Quido Kociana". Použije
+// se jen jako záchranná síť, když portál žádnou adresu nedal — ne každý
+// Bazoš titulek ten formát dodrží (řada nemá vůbec lokalitu v titulku), pak
+// zůstává null (fail-soft, žádná nabídka kvůli tomu nezmizí).
+const ADDRESS_AFTER_AREA_RE = /m[²2]\s*,\s*(.+)$/i;
+
+/** Vytáhne lokalitu/adresu z konce titulku (viz komentář výš), nebo null. */
+export function parseAddressFromTitle(title) {
+  const m = title?.match(ADDRESS_AFTER_AREA_RE);
+  return m ? m[1].trim() : null;
+}

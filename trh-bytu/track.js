@@ -22,7 +22,7 @@ import { fetchIdnes } from "../sources/idnes.js";
 import { fetchRealitymix } from "../sources/realitymix.js";
 import { fetchBazos } from "../sources/bazos.js";
 import { openDb, nowIso, getListing, insertListing, updateListingFields, insertEvent, insertPhoto, getActiveListingIdsForSource, DATA_DIR } from "./db.js";
-import { parseDisposition, parseAreaM2 } from "./parse.js";
+import { parseDisposition, parseAreaM2, parseAddressFromTitle } from "./parse.js";
 import { downloadPhotos } from "./photos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
@@ -86,7 +86,7 @@ async function processSource(db, source, watch) {
         title: item.title,
         disposition: parseDisposition(item.title),
         area_m2: parseAreaM2(item.title),
-        address: item.address || null,
+        address: item.address || parseAddressFromTitle(item.title) || null,
         description: detail.description,
         price_czk: item.priceCzk ?? null,
         status,

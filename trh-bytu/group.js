@@ -87,6 +87,18 @@ export function pickDescription(members) {
 }
 
 /**
+ * Nejlepší (nejdelší = zpravidla nejpodrobnější, ideálně vč. ulice) adresa
+ * napříč členy skupiny. Stejná "nejdelší vyhrává" úvaha jako u popisu —
+ * portály dávají adresu v různé podrobnosti ("Ulice, Město" vs. jen
+ * "Město"), delší řetězec skoro vždy nese víc informace, ne míň.
+ */
+export function bestAddress(members) {
+  const candidates = members.map((m) => m.address).filter(Boolean);
+  if (candidates.length === 0) return null;
+  return [...candidates].sort((a, b) => b.length - a.length)[0];
+}
+
+/**
  * Sloučí strukturované parametry (vlastnictví, stav, podlaží...) napříč
  * členy skupiny — pro každé pole se bere první nalezená hodnota (jen
  * Sreality a Bezrealitky je vyplňují, viz params.js, takže v drtivé

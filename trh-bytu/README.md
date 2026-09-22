@@ -22,6 +22,14 @@ energetická náročnost, výtah, balkón/lodžie/terasa/sklep/parkování/gará
 (jediné dva portály se strukturovaným JSON na detailu) — u ostatních zůstává
 sekce Parametry skrytá.
 
+**Hlavní přehled je dlaždicový**, ne tabulkový — každá dlaždice má
+náhledovou fotku (nebo "Bez fotky", když ji appka nemá u žádného
+sloučeného zdroje), stav a čitelný nadpis ve tvaru
+`Byt 2+1, 55 m², Letohrad, ul. U dvora — 3 750 000 Kč`. Adresa je vždy tak
+podrobná, jak ji appka zná — ulice, když je (od portálu nebo vytažená z
+titulku u Bazoše, viz `parse.js`), jinak jen město/městská část; chybí-li
+úplně, appka ji z titulku prostě vynechá.
+
 **Na rozdíl od hlídacího psa běží čistě lokálně** — žádný GitHub Actions,
 žádné Telegram notifikace. Data (SQLite databáze + stažené fotky) zůstávají
 jen na tomhle počítači v `data/` (gitignored, negitovaná).

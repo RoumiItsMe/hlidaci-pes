@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
 
 const PORT = 4321;
@@ -61,6 +61,17 @@ function layout(title, body) {
 </html>`;
 }
 
+// Titulek dlaždice — "Byt 2+1, 55 m², Letohrad, ul. U dvora — 3 750 000 Kč".
+// Adresa (viz group.js bestAddress) je u většiny portálů už "ulice, město"
+// (nebo jen "město", když ulici portál/appka nezná — fail-soft, žádná
+// nabídka kvůli chybějící adrese nezmizí, jen bude titulek o kousek kratší.
+function cardTitle(rep, address) {
+  const specs = [rep.disposition, rep.area_m2 ? `${rep.area_m2} m²` : null].filter(Boolean).join(", ");
+  const head = specs ? `Byt ${specs}` : "Byt";
+  const addressPart = address ? `, ${address}` : "";
+  return `${head}${addressPart} — ${formatCzk(rep.price_czk)}`;
+}
+
 function renderTable(db, statusFilter) {
   const allListings = db.prepare("SELECT * FROM listings").all();
   // Skupiny (ne syrové řádky) — stejná nemovitost napříč portály se ukáže
@@ -68,6 +79,22 @@ function renderTable(db, statusFilter) {
   let groups = groupListings(allListings);
   if (statusFilter) groups = groups.filter((g) => mergedStatus(g.members) === statusFilter);
   groups.sort((a, b) => (earliestFirstSeen(b.members) < earliestFirstSeen(a.members) ? -1 : 1));
+
+  // Jedna náhledová fotka na inzerát (ta s nejnižším id = první stažená),
+  // jedním dotazem pro všechny skupiny najednou — ne 70 samostatných.
+  const firstPhotoByListing = new Map(
+    db
+      .prepare(`SELECT listing_id, local_path FROM photos WHERE id IN (SELECT MIN(id) FROM photos GROUP BY listing_id)`)
+      .all()
+      .map((r) => [r.listing_id, r.local_path])
+  );
+  function groupThumbnail(members) {
+    for (const m of members) {
+      const p = firstPhotoByListing.get(m.id);
+      if (p) return p;
+    }
+    return null;
+  }
 
   const filterLinks = ["", "active", "reserved", "removed"]
     .map((s) => {
@@ -77,31 +104,36 @@ function renderTable(db, statusFilter) {
     })
     .join("");
 
-  const tableRows = groups
+  const cards = groups
     .map((g) => {
       const rep = primaryListing(g.members);
       const status = mergedStatus(g.members);
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
       const sourceLabel = g.members.map((m) => SOURCE_LABELS[m.source] || m.source).join(" + ");
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
-      return `<tr onclick="location.href='/byt/${encodeURIComponent(rep.id)}'">
-        <td>${esc(rep.disposition || "—")}</td>
-        <td>${rep.area_m2 ? `${rep.area_m2} m²` : "—"}</td>
-        <td>${formatCzk(rep.price_czk)}</td>
-        <td><span class="badge" style="background:${st.color}">${esc(st.text)}</span></td>
-        <td>${esc(sourceLabel)}${linkBadge}</td>
-        <td>${formatDate(earliestFirstSeen(g.members))}</td>
-      </tr>`;
+      const address = bestAddress(g.members);
+      const thumb = groupThumbnail(g.members);
+      const photo = thumb
+        ? `<img src="/photos/${encodeURIComponent(thumb.replace(/^photos[\\/]/, ""))}" loading="lazy" alt="">`
+        : `<div class="card-photo-empty">Bez fotky</div>`;
+
+      return `<a class="card" href="/byt/${encodeURIComponent(rep.id)}">
+        <div class="card-photo">${photo}</div>
+        <div class="card-body">
+          <div class="card-title">${esc(cardTitle(rep, address))}</div>
+          <div class="card-meta">
+            <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
+            <span class="muted">${esc(sourceLabel)}${linkBadge}</span>
+          </div>
+        </div>
+      </a>`;
     })
     .join("");
 
   return `
     <h1>Byty (${groups.length})</h1>
     <div class="filters">${filterLinks}</div>
-    <table>
-      <thead><tr><th>Dispozice</th><th>Plocha</th><th>Cena</th><th>Stav</th><th>Portál</th><th>Přidáno</th></tr></thead>
-      <tbody>${tableRows || `<tr><td colspan="6" class="empty">Zatím žádná data — spusť <code>npm run track-sales</code>.</td></tr>`}</tbody>
-    </table>`;
+    <div class="cards">${cards || `<p class="empty">Zatím žádná data — spusť <code>npm run track-sales</code>.</p>`}</div>`;
 }
 
 function renderDetail(db, id) {
