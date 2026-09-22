@@ -180,12 +180,22 @@ nestahuje.
 
 ## Sloučení stejné nemovitosti napříč portály
 
-Appka porovnává VŠECHNY inzeráty podle (dispozice, plocha zaokrouhlená na
-celé m², cena) — když se dva inzeráty z RŮZNÝCH portálů shodují ve všech
-třech, bere je jako jednu nemovitost. Vědomě konzervativní: shoda v rámci
-JEDNOHO portálu (dva různé byty na Bazoši náhodou se stejnými parametry)
-se nikdy neslučuje — radši dva řádky pro tutéž nemovitost navíc, než
-omylem sloučit dva různé byty do jednoho a jeden tiše "zmizet" z přehledu.
+Appka porovnává VŠECHNY inzeráty podle dispozice a ceny **přesně** — a
+plochy **s tolerancí do 1 m²** (`AREA_TOLERANCE_M2` v `group.js`). Přesná
+shoda plochy nestačí, protože portály evidentně měří/zaokrouhlují jinak —
+reálný případ: tentýž byt na Dukelské v Ústí nad Orlicí má na Sreality
+uvedenou plochu 51 m², na iDNES a RealityMIX 52 m². Bez tolerance appka
+tenhle byt ukazovala jako dva samostatné řádky (a horší — Sreality bez
+fotky, protože jejich CDN appce fotky nedá, viz níž — takže jeden ze
+řádků byl zbytečně "Bez fotky", i když appka fotku odjinud měla).
+
+Vědomě konzervativní i tak: shoda v rámci JEDNOHO portálu (dva různé byty
+na Bazoši náhodou se stejnými parametry) se nikdy neslučuje — radši dva
+řádky pro tutéž nemovitost navíc, než omylem sloučit dva různé byty do
+jednoho a jeden tiše "zmizet" z přehledu. Bazoš navíc u stejného bytu
+občas uvádí plochu o dost víc odlišnou (např. "CP 57 m²" u bytu, který má
+jinde 51–52 m²) — to je za hranicí tolerance schválně, ať appka nesloučí
+dva různé byty jen proto, že náhodou vyšly na stejnou dispozici a cenu.
 
 Počítá se vždy čerstvě při zobrazení (appka si nikde neukládá "tohle patří
 k tamtomu") — funguje okamžitě i na starších datech a nemůže se rozejít

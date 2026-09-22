@@ -1,49 +1,89 @@
 // Sloučení "stejné nemovitosti" napříč portály pro ZOBRAZENÍ — dispozice +
-// plocha (zaokrouhlená na celé m², ať drobné rozdíly v přesnosti mezi
-// portály — "67" vs "66,5" vs "67,29" — neminou shodu) + cena u 2+ RŮZNÝCH
-// zdrojů. Stejná úvaha jako fingerprint u hlídacího psa (cena+plocha), jen
-// se tu nepersistuje do state, ale počítá se čerstvě při KAŽDÉM zobrazení
-// — appka žádnou "group_id" neukládá, takže se nikdy nemůže rozejít se
-// skutečností (funguje okamžitě i na datech nasbíraných předtím).
+// cena přesně + plocha S TOLERANCÍ (viz AREA_TOLERANCE_M2 níž) u 2+
+// RŮZNÝCH zdrojů. Stejná úvaha jako fingerprint u hlídacího psa
+// (cena+plocha), jen se tu nepersistuje do state, ale počítá se čerstvě
+// při KAŽDÉM zobrazení — appka žádnou "group_id" neukládá, takže se nikdy
+// nemůže rozejít se skutečností (funguje okamžitě i na datech nasbíraných
+// předtím).
 //
-// Vědomě konzervativní: přesná shoda dispozice+plocha+cena u DVOU RŮZNÝCH
-// portálů. Shoda jen v rámci JEDNOHO portálu (dva různé byty na Bazoši
-// náhodou se stejnými parametry) se NIKDY neslučuje — je to vzácná
-// koincidence, ne signál duplicity, a sloučení by tiše smazalo jeden
-// reálný byt z přehledu. Radši dva řádky pro tutéž nemovitost navíc, než
-// jeden řádek omylem za dvě různé.
+// Vědomě konzervativní: přesná shoda dispozice+cena u DVOU RŮZNÝCH
+// portálů, plocha jen "dost blízko" (ne nutně přesně stejná po
+// zaokrouhlení — reálný případ: tentýž byt na Dukelské má na Sreality
+// uvedenou plochu 51 m², na iDNES/RealityMIX 52 m², protože portály
+// evidentně měří/zaokrouhlují jinak). Shoda jen v rámci JEDNOHO portálu
+// (dva různé byty na Bazoši náhodou se stejnými parametry) se NIKDY
+// neslučuje — je to vzácná koincidence, ne signál duplicity, a sloučení
+// by tiše smazalo jeden reálný byt z přehledu. Radši dva řádky pro tutéž
+// nemovitost navíc, než jeden řádek omylem za dvě různé.
 
-function groupKey(listing) {
-  if (listing.disposition == null || listing.area_m2 == null || listing.price_czk == null) return null;
-  return `${listing.disposition}_${Math.round(listing.area_m2)}_${listing.price_czk}`;
+// Max. rozdíl v ploše (m²), co appka ještě bere jako "tentýž byt" napříč
+// portály. 1 m² pokrývá pozorovaný reálný rozdíl (51 vs 52 m² pro
+// identický inzerát); víc než to už je riziko, že jde o dva různé byty se
+// shodou disponice+ceny čistou náhodou (viz komentář výš).
+const AREA_TOLERANCE_M2 = 1;
+
+// Rozdělí členy JEDNOHO bucketu (stejná dispozice+cena, viz níž) na shluky
+// podle plochy — dva inzeráty se shlukují, když je jejich plocha od sebe
+// max. AREA_TOLERANCE_M2. Union-find nad malým polem (typicky jednotky
+// prvků na bucket), ne nad celým datasetem — výkonnostně bezvýznamné.
+function clusterByArea(members) {
+  const parent = members.map((_, i) => i);
+  function find(i) {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  }
+  function union(a, b) {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  }
+  for (let i = 0; i < members.length; i++) {
+    for (let j = i + 1; j < members.length; j++) {
+      if (Math.abs(members[i].area_m2 - members[j].area_m2) <= AREA_TOLERANCE_M2) union(i, j);
+    }
+  }
+  const clusters = new Map();
+  for (let i = 0; i < members.length; i++) {
+    const root = find(i);
+    if (!clusters.has(root)) clusters.set(root, []);
+    clusters.get(root).push(members[i]);
+  }
+  return [...clusters.values()];
 }
 
 /**
  * Vrátí pole skupin `{ key, members, merged }` — `merged: true` jen když
- * skupina spojuje 2+ různé zdroje. Cokoli bez jednoznačného klíče nebo se
- * shodou jen v rámci jednoho zdroje zůstává jako samostatná skupina o
- * jednom členovi.
+ * skupina spojuje 2+ různé zdroje. Cokoli bez jednoznačného klíče (chybí
+ * dispozice/plocha/cena) nebo se shodou jen v rámci jednoho zdroje zůstává
+ * jako samostatná skupina o jednom členovi.
  */
 export function groupListings(listings) {
-  const byKey = new Map();
+  // Bucket = přesná shoda dispozice+cena (silný signál sám o sobě —
+  // plocha se pak řeší až uvnitř bucketu s tolerancí, viz clusterByArea).
+  const buckets = new Map();
   const groups = [];
 
   for (const l of listings) {
-    const key = groupKey(l);
-    if (key == null) {
+    if (l.disposition == null || l.area_m2 == null || l.price_czk == null) {
       groups.push({ key: l.id, members: [l], merged: false });
       continue;
     }
-    if (!byKey.has(key)) byKey.set(key, []);
-    byKey.get(key).push(l);
+    const bucketKey = `${l.disposition}_${l.price_czk}`;
+    if (!buckets.has(bucketKey)) buckets.set(bucketKey, []);
+    buckets.get(bucketKey).push(l);
   }
 
-  for (const [key, members] of byKey) {
-    const distinctSources = new Set(members.map((m) => m.source));
-    if (distinctSources.size > 1) {
-      groups.push({ key, members, merged: true });
-    } else {
-      for (const m of members) groups.push({ key: m.id, members: [m], merged: false });
+  for (const [bucketKey, bucketMembers] of buckets) {
+    for (const cluster of clusterByArea(bucketMembers)) {
+      const distinctSources = new Set(cluster.map((m) => m.source));
+      if (distinctSources.size > 1) {
+        groups.push({ key: `${bucketKey}_${cluster.map((m) => m.id).sort().join(",")}`, members: cluster, merged: true });
+      } else {
+        for (const m of cluster) groups.push({ key: m.id, members: [m], merged: false });
+      }
     }
   }
 
