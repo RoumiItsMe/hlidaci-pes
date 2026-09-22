@@ -50,9 +50,32 @@ export function groupListings(listings) {
   return groups;
 }
 
-/** Deterministický "hlavní" záznam skupiny (pro poznámky/URL) — vždy stejný bez ohledu na pořadí. */
+// Pořadí důvěryhodnosti dat napříč portály, u sloučené nemovitosti se z
+// něj odvozuje "primární" zdroj — na výslovné přání uživatele ("brát
+// primárně data z Sreality/iDNES, až potom Bazoš nebo RealityMIX — na
+// těch 2 serverech bývá nejvíc dat"). Bezrealitky uživatel nejmenoval
+// (v tomhle regionu má appka zatím jen 1 její inzerát), ale datově patří
+// vedle Sreality — je to jediný další zdroj se strukturovanými parametry
+// (viz params.js) — takže je zařazená hned za dvojici, kterou uživatel
+// výslovně chtěl nahoře.
+const SOURCE_PRIORITY = ["sreality", "idnes", "bezrealitky", "realitymix", "bazos"];
+
+function sourceRank(source) {
+  const idx = SOURCE_PRIORITY.indexOf(source);
+  return idx === -1 ? SOURCE_PRIORITY.length : idx;
+}
+
+/** Členové skupiny seřazení podle důvěryhodnosti zdroje (viz SOURCE_PRIORITY), s deterministickým rozstřelem podle ID. */
+function byPriority(members) {
+  return [...members].sort((a, b) => sourceRank(a.source) - sourceRank(b.source) || a.id.localeCompare(b.id));
+}
+
+/**
+ * Deterministický "hlavní" záznam skupiny — nejdůvěryhodnější zdroj podle
+ * SOURCE_PRIORITY (pro poznámky, URL a základní údaje v titulku dlaždice).
+ */
 export function primaryListing(members) {
-  return [...members].sort((a, b) => a.id.localeCompare(b.id))[0];
+  return byPriority(members)[0];
 }
 
 /** V nabídce, pokud je aktivní ALESPOŇ na jednom portálu; jinak rezervováno; jinak zmizelo všude. */
@@ -74,40 +97,35 @@ export function findGroupForListing(allListings, listingId) {
 
 /**
  * Jeden popis za skupinu, ne od každého portálu zvlášť — uživatel ho
- * nepotřebuje vícekrát. Vybírá se nejdelší (nejvíc informace), s
- * deterministickým rozstřelem podle ID, ať se výběr při znovunačtení
- * stránky neliší. Vrací `null`, když popis nemá žádný člen skupiny.
+ * nepotřebuje vícekrát. Bere se od nejdůvěryhodnějšího zdroje, co popis
+ * MÁ (viz SOURCE_PRIORITY) — když ho nemá Sreality/iDNES, ale má ho
+ * Bazoš/RealityMIX, appka radši ukáže ten, než nic. Vrací `null`, když
+ * popis nemá žádný člen skupiny.
  */
 export function pickDescription(members) {
-  const withDescription = members.filter((m) => m.description);
-  if (withDescription.length === 0) return null;
-  return [...withDescription].sort(
-    (a, b) => b.description.length - a.description.length || a.id.localeCompare(b.id)
-  )[0];
+  return byPriority(members).find((m) => m.description) || null;
 }
 
 /**
- * Nejlepší (nejdelší = zpravidla nejpodrobnější, ideálně vč. ulice) adresa
- * napříč členy skupiny. Stejná "nejdelší vyhrává" úvaha jako u popisu —
- * portály dávají adresu v různé podrobnosti ("Ulice, Město" vs. jen
- * "Město"), delší řetězec skoro vždy nese víc informace, ne míň.
+ * Nejlepší dostupná adresa napříč členy skupiny — stejná úvaha jako u
+ * popisu: bere se od nejdůvěryhodnějšího zdroje, co adresu vůbec má.
  */
 export function bestAddress(members) {
-  const candidates = members.map((m) => m.address).filter(Boolean);
-  if (candidates.length === 0) return null;
-  return [...candidates].sort((a, b) => b.length - a.length)[0];
+  const withAddress = byPriority(members).find((m) => m.address);
+  return withAddress ? withAddress.address : null;
 }
 
 /**
  * Sloučí strukturované parametry (vlastnictví, stav, podlaží...) napříč
- * členy skupiny — pro každé pole se bere první nalezená hodnota (jen
- * Sreality a Bezrealitky je vyplňují, viz params.js, takže v drtivé
- * většině skupin má hodnotu nejvýš jeden člen a "první nalezená" je jediná
- * k mání). Vrací obyčejný objekt `{ pole: hodnota }` bez `null` položek.
+ * členy skupiny — pro každé pole se bere hodnota od nejdůvěryhodnějšího
+ * zdroje, co ho má (v praxi jde skoro vždy jen o volbu mezi Sreality a
+ * Bezrealitky — jediné dva zdroje s params vůbec, viz params.js — a
+ * Sreality je v SOURCE_PRIORITY výš). Vrací obyčejný objekt
+ * `{ pole: hodnota }` bez `null` položek.
  */
 export function mergeParams(members) {
   const merged = {};
-  for (const m of members) {
+  for (const m of byPriority(members)) {
     if (!m.params_json) continue;
     let params;
     try {

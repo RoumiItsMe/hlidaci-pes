@@ -9,11 +9,21 @@ popis, fotky a odkaz na inzerát.
 
 **Stejná nemovitost inzerovaná na víc portálech se ukáže jen jednou**
 (shoda dispozice+plochy+ceny napříč zdroji, viz [`group.js`](group.js)) —
-appka ji spojí do jednoho záznamu se všemi odkazy, **jedním popisem**
-(vybere ten nejdelší, ne kopie z každého portálu), sloučenou galerií fotek
-(když jeden portál fotky nemá — typicky Sreality, viz níž — appka je
-ukáže z jiného portálu se stejnou nemovitostí) a společnou časovou osou
-napříč portály.
+appka ji spojí do jednoho záznamu se všemi odkazy, **jedním popisem**,
+**jednou sadou parametrů**, sloučenou galerií fotek (když jeden portál
+fotky nemá — typicky Sreality, viz níž — appka je ukáže z jiného portálu
+se stejnou nemovitostí) a společnou časovou osou napříč portály.
+
+**Pořadí důvěryhodnosti zdrojů** (`SOURCE_PRIORITY` v `group.js`):
+**Sreality → iDNES → Bezrealitky → RealityMIX → Bazoš**. U sloučené
+nemovitosti se popis/parametry/adresa/základní údaje berou vždy od
+nejvýš postaveného zdroje, co je má — teprve když ho nemá (např. Sreality
+u téhle konkrétní nemovitosti žádný popis nestáhla), sestoupí appka níž.
+Sreality a iDNES uživatel označil za nejspolehlivější zdroj dat;
+Bezrealitky je zařazená hned za ně, protože je to jediný další portál se
+stejně strukturovanými daty jako Sreality (viz Parametry níž) — v tomhle
+regionu má ale appka zatím jen 1 její inzerát, takže v praxi rozhoduje
+většinou jen Sreality vs. iDNES vs. zbytek.
 
 **Strukturované parametry** (vlastnictví, stav, typ budovy, podlaží,
 energetická náročnost, výtah, balkón/lodžie/terasa/sklep/parkování/garáž)
@@ -22,19 +32,22 @@ energetická náročnost, výtah, balkón/lodžie/terasa/sklep/parkování/gará
 (jediné dva portály se strukturovaným JSON na detailu) — u ostatních zůstává
 sekce Parametry skrytá.
 
-**Hlavní přehled je dlaždicový**, ne tabulkový — každá dlaždice má
-náhledovou fotku (nebo "Bez fotky", když ji appka nemá u žádného
-sloučeného zdroje), stav a čitelný nadpis ve tvaru
-`Byt 2+1, 55 m², Letohrad, ul. U dvora — 3 750 000 Kč`.
+**Hlavní přehled je řádkový** — 1 nemovitost = 1 řádek, ale hustší než
+holá tabulka: náhledová fotka (nebo "Bez fotky", když ji appka nemá u
+žádného sloučeného zdroje), čitelný nadpis ve tvaru
+`Byt 2+1, 55 m², Letohrad, ul. U dvora — 3 750 000 Kč`, kompaktní shrnutí
+parametrů (jen popisné hodnoty + vybavení, co je "Ano" — ne "Ne") a
+úryvek popisu (~220 znaků, uťatý na hranici slova), ať je na první pohled
+jasné, o co jde a kde to je, bez nutnosti klikat do detailu.
 
 **Chybějící dispozice/plocha/cena/adresa se zkusí dohledat i v popisu**
 (viz `parse.js`), ne jen v titulku — u nového inzerátu appka detail
 stejně stahuje kvůli fotkám, takže popis má vždy k dispozici. Pořadí
-zdrojů: pole od portálu → titulek → popis. U adresy appka bere prostě
-nejdelší (nejpodrobnější) nalezenou hodnotu; když se nenajde ani ulice v
-titulku, zkusí v popisu aspoň JMÉNO sledovaného města — přesná adresa
-ne vždy, ale "aspoň víme, kde to je". Nic z toho není zaručené (fail-soft)
-— když ani popis nic neříká, políčko v dlaždici prostě chybí.
+zdrojů dat pro jedno pole: pole od portálu → titulek → popis. U adresy,
+když se nenajde ani ulice v titulku, zkusí appka v popisu aspoň JMÉNO
+sledovaného města — přesná adresa ne vždy, ale "aspoň víme, kde to je".
+Nic z toho není zaručené (fail-soft) — když ani popis nic neříká, políčko
+v řádku prostě chybí.
 
 **Na rozdíl od hlídacího psa běží čistě lokálně** — žádný GitHub Actions,
 žádné Telegram notifikace. Data (SQLite databáze + stažené fotky) zůstávají

@@ -31,6 +31,14 @@ const EVENT_LABELS = {
   reactivated: "Znovu v nabídce",
 };
 
+// Pro řádek v přehledu se z plné sady parametrů (viz params.js) skládá
+// jen kompaktní shrnutí — popisné hodnoty (vlastnictví, stav, typ budovy,
+// podlaží, energ. třída) rovnou, ano/ne vybavení (balkón, sklep...) jen
+// když je "Ano" (ne "Balkón: Ne" — to jen zabírá místo bez užitku).
+const PARAM_LABEL_BY_KEY = Object.fromEntries(PARAM_FIELDS);
+const AMENITY_KEYS = ["balcony", "loggia", "terrace", "cellar", "parking", "garage"];
+const DESCRIPTIVE_KEYS = ["ownership", "condition", "buildingType", "floorInfo", "energyRating"];
+
 function esc(s) {
   if (s == null) return "";
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -61,7 +69,7 @@ function layout(title, body) {
 </html>`;
 }
 
-// Titulek dlaždice — "Byt 2+1, 55 m², Letohrad, ul. U dvora — 3 750 000 Kč".
+// Titulek řádku — "Byt 2+1, 55 m², Letohrad, ul. U dvora — 3 750 000 Kč".
 // Adresa (viz group.js bestAddress) je u většiny portálů už "ulice, město"
 // (nebo jen "město", když ulici portál/appka nezná — fail-soft, žádná
 // nabídka kvůli chybějící adrese nezmizí, jen bude titulek o kousek kratší.
@@ -70,6 +78,25 @@ function cardTitle(rep, address) {
   const head = specs ? `Byt ${specs}` : "Byt";
   const addressPart = address ? `, ${address}` : "";
   return `${head}${addressPart} — ${formatCzk(rep.price_czk)}`;
+}
+
+// Kompaktní shrnutí parametrů pro řádek přehledu — plná tabulka se všemi
+// popisky je až v detailu (viz PARAM_FIELDS tam), tady jde jen o rychlou
+// orientaci na první pohled.
+function paramsSummaryLine(params) {
+  const bits = DESCRIPTIVE_KEYS.filter((k) => params[k] != null).map((k) =>
+    k === "energyRating" ? `Energ. tř. ${params[k]}` : params[k]
+  );
+  const amenities = AMENITY_KEYS.filter((k) => params[k]?.startsWith("Ano")).map((k) => PARAM_LABEL_BY_KEY[k]);
+  if (amenities.length) bits.push(amenities.join(", "));
+  return bits.join(" · ");
+}
+
+function truncate(text, maxLen) {
+  if (!text || text.length <= maxLen) return text || "";
+  const cut = text.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${cut.slice(0, lastSpace > 40 ? lastSpace : maxLen)}…`;
 }
 
 function renderTable(db, statusFilter) {
@@ -104,9 +131,9 @@ function renderTable(db, statusFilter) {
     })
     .join("");
 
-  const cards = groups
+  const rows = groups
     .map((g) => {
-      const rep = primaryListing(g.members);
+      const rep = primaryListing(g.members); // nejdůvěryhodnější zdroj (Sreality/iDNES > Bezrealitky > RealityMIX/Bazoš), viz group.js
       const status = mergedStatus(g.members);
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
       const sourceLabel = g.members.map((m) => SOURCE_LABELS[m.source] || m.source).join(" + ");
@@ -115,13 +142,19 @@ function renderTable(db, statusFilter) {
       const thumb = groupThumbnail(g.members);
       const photo = thumb
         ? `<img src="/photos/${encodeURIComponent(thumb.replace(/^photos[\\/]/, ""))}" loading="lazy" alt="">`
-        : `<div class="card-photo-empty">Bez fotky</div>`;
+        : `<div class="row-photo-empty">Bez fotky</div>`;
 
-      return `<a class="card" href="/byt/${encodeURIComponent(rep.id)}">
-        <div class="card-photo">${photo}</div>
-        <div class="card-body">
-          <div class="card-title">${esc(cardTitle(rep, address))}</div>
-          <div class="card-meta">
+      const paramsLine = paramsSummaryLine(mergeParams(g.members));
+      const descriptionSource = pickDescription(g.members);
+      const snippet = descriptionSource ? truncate(descriptionSource.description, 220) : "";
+
+      return `<a class="row" href="/byt/${encodeURIComponent(rep.id)}">
+        <div class="row-photo">${photo}</div>
+        <div class="row-body">
+          <div class="row-title">${esc(cardTitle(rep, address))}</div>
+          ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
+          ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
+          <div class="row-meta">
             <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
             <span class="muted">${esc(sourceLabel)}${linkBadge}</span>
           </div>
@@ -133,7 +166,7 @@ function renderTable(db, statusFilter) {
   return `
     <h1>Byty (${groups.length})</h1>
     <div class="filters">${filterLinks}</div>
-    <div class="cards">${cards || `<p class="empty">Zatím žádná data — spusť <code>npm run track-sales</code>.</p>`}</div>`;
+    <div class="rows">${rows || `<p class="empty">Zatím žádná data — spusť <code>npm run track-sales</code>.</p>`}</div>`;
 }
 
 function renderDetail(db, id) {
