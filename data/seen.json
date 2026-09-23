@@ -1153,6 +1153,10 @@
     {
       "id": "224201463",
       "price": 520000
+    },
+    {
+      "id": "224208100",
+      "price": 870000
     }
   ],
   "byty:__fingerprints": [
@@ -1332,6 +1336,10 @@
     },
     {
       "fingerprint": "520000_484",
+      "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "870000_346",
       "source": "Bazoš.cz"
     }
   ]
