@@ -69,6 +69,8 @@ const COLUMN_MIGRATIONS = [
   { table: "listings", column: "params_json", ddl: "TEXT" },
   { table: "listings", column: "hidden", ddl: "INTEGER NOT NULL DEFAULT 0" },
   { table: "listings", column: "starred", ddl: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "listings", column: "replaced_by", ddl: "TEXT" }, // ID inzerátu, který tenhle nahradil při opětovném vložení na portálu, viz relist.js
+  { table: "listings", column: "missed_since", ddl: "TEXT" }, // kdy se inzerát poprvé nenašel ve výpisu; "zmizel" se potvrdí až dalším během, viz relist.js
 ];
 
 function runMigrations(db) {

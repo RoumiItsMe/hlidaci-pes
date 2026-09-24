@@ -33,6 +33,7 @@ const EVENT_LABELS = {
   reserved: "Označeno jako rezervováno",
   removed: "Zmizelo z nabídky",
   reactivated: "Znovu v nabídce",
+  relisted: "Inzerát znovu vložen pod novým ID",
 };
 
 // Pro řádek v přehledu se z plné sady parametrů (viz params.js) skládá
@@ -71,10 +72,27 @@ function formatDateOnly(iso) {
 // opravdu stalo, ať se dá v přehledu rychle zrakem najít, co je "živé".
 function updatesChips(firstSeenAt, change) {
   const since = `<span class="update-chip update-chip--since">📅 V nabídce od ${esc(formatDateOnly(firstSeenAt))}</span>`;
+  const detail = change ? eventDetail(change) : "";
   const changeChip = change
-    ? `<span class="update-chip update-chip--change">🔄 Poslední změna ${esc(formatDateOnly(change.occurred_at))} · ${esc(EVENT_LABELS[change.event_type] || change.event_type)}</span>`
+    ? `<span class="update-chip update-chip--change">🔄 Poslední změna ${esc(formatDateOnly(change.occurred_at))} · ${esc(EVENT_LABELS[change.event_type] || change.event_type)}${detail ? ` · ${esc(detail)}` : ""}</span>`
     : `<span class="update-chip update-chip--none">Zatím beze změny</span>`;
   return `${since}${changeChip}`;
+}
+
+// "Cena na vyžádání" je u portálů cena bez čísla (Dohodou, V textu...) —
+// v události ji appka drží jako null, tady se jen pojmenuje.
+function priceText(price) {
+  return price == null ? "na vyžádání" : formatCzk(price);
+}
+
+// Doplňující údaj k události (kolik se změnilo) — sdílí ho časová osa v
+// detailu i odznak "Poslední změna" v přehledu, ať oba říkají totéž.
+function eventDetail(e) {
+  if (e.event_type === "price_change") return `${formatCzk(e.old_price_czk)} → ${formatCzk(e.new_price_czk)}`;
+  if (e.event_type === "relisted" && e.old_price_czk !== e.new_price_czk) {
+    return `cena ${priceText(e.old_price_czk)} → ${priceText(e.new_price_czk)}`;
+  }
+  return "";
 }
 
 // Tlačítka TOP (hvězdička) / Skrýt (křížek) — sdílené mezi řádkem přehledu
@@ -197,7 +215,7 @@ function renderTable(db, filters) {
   // (group.js) si z nich pro danou skupinu vybere nejnovější SKUTEČNOU
   // změnu (viz komentář tam, proč ne portálové "naposledy upraveno").
   const eventsByListing = new Map();
-  for (const e of db.prepare("SELECT listing_id, event_type, occurred_at FROM events").all()) {
+  for (const e of db.prepare("SELECT listing_id, event_type, old_price_czk, new_price_czk, occurred_at FROM events").all()) {
     if (!eventsByListing.has(e.listing_id)) eventsByListing.set(e.listing_id, []);
     eventsByListing.get(e.listing_id).push(e);
   }
@@ -283,7 +301,7 @@ function renderTable(db, filters) {
   const rows = filtered
     .map(({ g, rep, params, address, status, firstSeenAt, change, starred, hidden }) => {
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
-      const sourceLabel = g.members.map((m) => SOURCE_LABELS[m.source] || m.source).join(" + ");
+      const sourceLabel = [...new Set(g.members.map((m) => SOURCE_LABELS[m.source] || m.source))].join(" + ");
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
       const thumb = groupThumbnail(g.members);
       const photo = thumb
@@ -393,8 +411,7 @@ function renderDetail(db, id) {
 
   const timeline = events
     .map((e) => {
-      let detail = "";
-      if (e.event_type === "price_change") detail = `${formatCzk(e.old_price_czk)} → ${formatCzk(e.new_price_czk)}`;
+      const detail = eventDetail(e);
       const srcLabel = group.merged ? ` <span class="muted">(${esc(SOURCE_LABELS[sourceById[e.listing_id]] || sourceById[e.listing_id])})</span>` : "";
       return `<li><strong>${formatDate(e.occurred_at)}</strong> — ${esc(EVENT_LABELS[e.event_type] || e.event_type)}${srcLabel} ${detail}</li>`;
     })
@@ -411,7 +428,7 @@ function renderDetail(db, id) {
     </div>
     <p>
       <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
-      ${group.merged ? `· nalezeno na ${members.length} portálech` : ""}
+      ${group.merged ? `· nalezeno na ${new Set(members.map((m) => m.source)).size} portálech` : ""}
     </p>
     <ul class="source-links">${sourceLinks}</ul>
     <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${formatCzk(rep.price_czk)}</p>

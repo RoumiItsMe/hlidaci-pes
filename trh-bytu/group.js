@@ -20,14 +20,10 @@
 // portály. 1 m² pokrývá pozorovaný reálný rozdíl (51 vs 52 m² pro
 // identický inzerát); víc než to už je riziko, že jde o dva různé byty se
 // shodou disponice+ceny čistou náhodou (viz komentář výš).
-const AREA_TOLERANCE_M2 = 1;
+export const AREA_TOLERANCE_M2 = 1;
 
-// Rozdělí členy JEDNOHO bucketu (stejná dispozice+cena, viz níž) na shluky
-// podle plochy — dva inzeráty se shlukují, když je jejich plocha od sebe
-// max. AREA_TOLERANCE_M2. Union-find nad malým polem (typicky jednotky
-// prvků na bucket), ne nad celým datasetem — výkonnostně bezvýznamné.
-function clusterByArea(members) {
-  const parent = members.map((_, i) => i);
+function unionFind(size) {
+  const parent = Array.from({ length: size }, (_, i) => i);
   function find(i) {
     while (parent[i] !== i) {
       parent[i] = parent[parent[i]];
@@ -40,6 +36,15 @@ function clusterByArea(members) {
     const rb = find(b);
     if (ra !== rb) parent[ra] = rb;
   }
+  return { find, union };
+}
+
+// Rozdělí členy JEDNOHO bucketu (stejná dispozice+cena, viz níž) na shluky
+// podle plochy — dva inzeráty se shlukují, když je jejich plocha od sebe
+// max. AREA_TOLERANCE_M2. Union-find nad malým polem (typicky jednotky
+// prvků na bucket), ne nad celým datasetem — výkonnostně bezvýznamné.
+function clusterByArea(members) {
+  const { find, union } = unionFind(members.length);
   for (let i = 0; i < members.length; i++) {
     for (let j = i + 1; j < members.length; j++) {
       if (Math.abs(members[i].area_m2 - members[j].area_m2) <= AREA_TOLERANCE_M2) union(i, j);
@@ -87,7 +92,47 @@ export function groupListings(listings) {
     }
   }
 
-  return groups;
+  return mergeRelistedGroups(groups, listings);
+}
+
+// Znovu vložený inzeráty (viz relist.js: starý inzerát má `replaced_by`
+// ukazující na nový) patří k sobě, i když se ve výše spočítaném klíči
+// nepotkají — nový bývá bez ceny ("Dohodou"), takže by zůstal samostatným
+// řádkem vedle původního. Skupiny, které jsou takhle propojené, se spojí.
+// `merged` (= nalezeno na víc PORTÁLECH) se přepočítá — dvě ID téhož portálu
+// ho nezapínají.
+function mergeRelistedGroups(groups, listings) {
+  const groupIndexById = new Map();
+  groups.forEach((g, i) => g.members.forEach((m) => groupIndexById.set(m.id, i)));
+
+  const { find, union } = unionFind(groups.length);
+  let anyLink = false;
+  for (const l of listings) {
+    if (!l.replaced_by) continue;
+    const a = groupIndexById.get(l.id);
+    const b = groupIndexById.get(l.replaced_by);
+    if (a == null || b == null) continue;
+    union(a, b);
+    anyLink = true;
+  }
+  if (!anyLink) return groups;
+
+  const byRoot = new Map();
+  groups.forEach((g, i) => {
+    const root = find(i);
+    if (!byRoot.has(root)) byRoot.set(root, []);
+    byRoot.get(root).push(g);
+  });
+
+  return [...byRoot.values()].map((parts) => {
+    if (parts.length === 1) return parts[0];
+    const members = parts.flatMap((g) => g.members);
+    return {
+      key: `relist_${members.map((m) => m.id).sort().join(",")}`,
+      members,
+      merged: new Set(members.map((m) => m.source)).size > 1,
+    };
+  });
 }
 
 // Pořadí důvěryhodnosti dat napříč portály, u sloučené nemovitosti se z
@@ -131,7 +176,8 @@ export function earliestFirstSeen(members) {
 
 // Typy událostí, co appka počítá jako SKUTEČNOU pozdější změnu u už
 // zaevidovaného inzerátu — výhradně z VLASTNÍ historie appky (změna ceny,
-// zmizení z nabídky, návrat do nabídky, a Bezrealitky-only "označeno jako
+// zmizení z nabídky, návrat do nabídky, znovu vložení inzerátu pod novým
+// ID, a Bezrealitky-only "označeno jako
 // rezervováno", jediný spolehlivý reserved příznak napříč portály — viz
 // detail/bezrealitky.js). "created" (prvotní zaevidování) se nepočítá,
 // to není změna, to je začátek historie.
@@ -141,7 +187,7 @@ export function earliestFirstSeen(members) {
 // (přesně důvod, proč to hlídací pes taky nikdy nebral jako signál "nová
 // nabídka", viz sources/sreality.js). Appka věří jen tomu, co sama
 // zaznamenala.
-const CHANGE_EVENT_TYPES = new Set(["price_change", "removed", "reactivated", "reserved"]);
+const CHANGE_EVENT_TYPES = new Set(["price_change", "removed", "reactivated", "reserved", "relisted"]);
 
 /**
  * Poslední skutečná změna napříč danými událostmi (viz CHANGE_EVENT_TYPES

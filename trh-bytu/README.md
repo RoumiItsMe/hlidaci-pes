@@ -154,6 +154,43 @@ uvážení (např. 8:00) → akce *Spustit program* → Program: `node`, Argumen
 Ověření, že úloha běží: *Plánovač úloh* → *Knihovna plánovače úloh* → najdi
 úlohu → záložka *Historie*. Log samotného sběru je v `data/track.log`.
 
+### Dohnání zmeškaného běhu (PC spal/byl vypnutý v 8:00)
+
+Prostý denní spouštěč se **nespustí**, když počítač v 8:00 spí nebo je
+vypnutý — `StartWhenAvailable` v praxi nedožene spolehlivě ani po probuzení
+(ověřeno naostro: 10 minut po probuzení se úloha pořád nespustila). Řešení
+bez nutnosti budit počítač: přidat úloze DALŠÍ dva spouštěče — "probuzení ze
+spánku" (event trigger na Event ID 1 / `Microsoft-Windows-Power-Troubleshooter`)
+a "start počítače" (pro úplné vypnutí) — vedle stávajícího denního v 8:00.
+`track.js` je idempotentní (ověřeno), takže občasné vícenásobné spuštění za
+den nevadí.
+
+**Registrace event/startup spouštěče vyžaduje administrátorská práva**
+(na rozdíl od prostého denního spouštěče výše) — spusť v PowerShellu
+**jako správce** (pravým tlačítkem → Spustit jako správce):
+
+```powershell
+$taskName = "Trh bytu - sber dat"
+$action = New-ScheduledTaskAction -Execute "node" -Argument "trh-bytu\track.js" -WorkingDirectory "C:\Users\roman\Documents\Hlídací pes"
+
+$dailyTrigger = New-ScheduledTaskTrigger -Daily -At 8:00am
+
+$startupTrigger = New-ScheduledTaskTrigger -AtStartup
+$startupTrigger.Delay = "PT2M"   # 2 min zpoždění, ať je síť připravená
+
+$eventTriggerClass = Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace Root/Microsoft/Windows/TaskScheduler
+$eventTrigger = New-CimInstance -CimClass $eventTriggerClass -ClientOnly
+$eventTrigger.Subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Power-Troubleshooter''] and EventID=1]]</Select></Query></QueryList>'
+$eventTrigger.Enabled = $true
+
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($dailyTrigger, $startupTrigger, $eventTrigger) -Settings $settings -Description "Denni sber dat o bytech na prodej (Trh bytu appka) - 8:00 + dohani start/probuzeni PC" -Force
+```
+
+Ověření: `(Get-ScheduledTask -TaskName "Trh bytu - sber dat").Triggers` má
+mít 3 položky (`MSFT_TaskDailyTrigger`, `MSFT_TaskBootTrigger`,
+`MSFT_TaskEventTrigger`).
+
 ## Kde jsou data
 
 - `data/trh-bytu.sqlite` — databáze (inzeráty, časová osa událostí, fotky).
@@ -170,6 +207,32 @@ rezervováno/staženo), zapíše se jen `status = "removed"` + datum — popis,
 fotky, parametry a celá časová osa zůstávají v databázi navždy, přesně tak,
 jak byly naposledy zaznamenané. V celém kódu appky (`track.js`, `server.js`,
 `db.js`) není jediný `DELETE` nad tabulkami `listings`/`photos`/`events`.
+
+## Kdy appka řekne „zmizelo z nabídky"
+
+Že se inzerát nenašel ve výpisu portálu, ještě neznamená, že zmizel — appka
+to dřív brala jako jistotu a mýlila se ve třech případech:
+
+- **Neúplný výpis (Sreality).** Sreality řadí výsledky podle poslední úpravy
+  a má jich v okrese přes 100 po ~21 na stránku. Appka stahovala jen 1.
+  stránku, takže inzerát, který novější úpravy vytlačily na 2. stránku, se
+  tvářil jako zmizelý, i když byl pořád v nabídce (a navíc appka většinu
+  Sreality bytů vůbec neevidovala). Teď se stahují **všechny stránky**
+  (`fetchSrealityAllPages` v `sources/sreality.js`); pokud by některá
+  stránka byla prázdná nebo chyběla, sběr u Sreality raději selže, než aby
+  vyhodnotil zmizení z neúplného seznamu. Ostatní portály (iDNES,
+  RealityMIX, Bazoš, Bezrealitky) mají v těchto lokalitách všechny výsledky
+  na jedné stránce — ověřeno porovnáním s počtem výsledků, které portál uvádí.
+- **Znovu vložený inzerát.** Portál (typicky Bazoš) dá při opětovném vložení
+  inzerátu nové ID. Když se ve stejném běhu u téhož portálu objeví nový
+  inzerát se stejnou dispozicí, plochou (±1 m²) a stejným začátkem popisu,
+  appka je spojí (`replaced_by`) a do časové osy zapíše událost **„Inzerát
+  znovu vložen pod novým ID"** i s případnou změnou ceny (např. `2 290 000 Kč
+  → na vyžádání`) — místo falešného „zmizelo z nabídky". Obě ID pak tvoří
+  jeden řádek. Při nejednoznačné shodě (víc kandidátů) appka nespojuje nic.
+- **Přechodný výpadek.** Zmizení se potvrzuje až tím, že inzerát chybí ve
+  **dvou po sobě jdoucích bězích** (`missed_since` v DB). Mezitím zůstává v
+  nabídce; potvrzené zmizení se datuje od prvního nenalezení.
 
 ## Vlastní poznámky u bytu
 

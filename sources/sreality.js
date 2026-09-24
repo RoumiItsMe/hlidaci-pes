@@ -85,8 +85,7 @@ function formatAddress(locality) {
   return city || "";
 }
 
-async function fetchOneUrl(url, watch) {
-  const html = await fetchText(url);
+function parsePage(html, watch) {
   const data = extractNextData(html);
   const dehydrated = data?.props?.pageProps?.dehydratedState;
   if (!dehydrated) {
@@ -94,6 +93,7 @@ async function fetchOneUrl(url, watch) {
   }
   const query = dehydrated.queries.find((q) => q.queryKey?.[0] === "estatesSearch");
   const results = query?.state?.data?.results || [];
+  const pagination = query?.state?.data?.pagination || null;
 
   const items = [];
   for (const r of results) {
@@ -119,7 +119,12 @@ async function fetchOneUrl(url, watch) {
       url: buildDetailUrl(r),
     });
   }
-  return items;
+  return { items, pagination, resultCount: results.length };
+}
+
+async function fetchOneUrl(url, watch) {
+  const html = await fetchText(url);
+  return parsePage(html, watch).items;
 }
 
 export async function fetchSreality(watch) {
@@ -129,6 +134,44 @@ export async function fetchSreality(watch) {
     perUrl.push(await fetchOneUrl(url, watch));
   }
   return mergeUniqueById(perUrl);
+}
+
+// Stránkovaný výpis pro Trh bytů (../trh-bytu/). Hlídací pes si vystačí s
+// fetchSreality výš (na "co je nové" stačí 1. stránka), jenže Trh bytů z
+// výpisu odvozuje i ZMIZENÍ z nabídky — a okres má přes 100 bytů, 1. stránka
+// jich ukáže jen ~21, řazených podle poslední úpravy. Inzerát, který
+// novější úpravy vytlačí na 2. stránku, by pak vypadal jako zmizelý, i když
+// je pořád v nabídce (ověřeno naostro).
+//
+// Cokoli podezřelého (prázdná stránka, chybějící stránkování) radši
+// vyhodí chybu, než aby vrátilo neúplný seznam — volající při chybě žádné
+// zmizení nevyhodnocuje, takže neúplný výpis je horší než žádný.
+const PAGE_DELAY_MS = 400; // zdvořilost vůči portálu mezi stránkami
+const MAX_PAGES = 20; // pojistka proti nekonečné smyčce
+
+export async function fetchSrealityAllPages(watch) {
+  const perPage = [];
+  for (const baseUrl of buildSearchUrls(watch)) {
+    let page = 1;
+    let lastPage = 1;
+    do {
+      if (page > 1) await new Promise((resolve) => setTimeout(resolve, PAGE_DELAY_MS));
+      const url = page === 1 ? baseUrl : `${baseUrl}?strana=${page}`;
+      const { items, pagination, resultCount } = parsePage(await fetchText(url), watch);
+      if (resultCount === 0) {
+        throw new Error(`sreality: stránka ${page} výpisu je prázdná — výpis by byl neúplný.`);
+      }
+      if (page === 1) {
+        if (!pagination?.total || !pagination?.limit) {
+          throw new Error("sreality: ve výpisu chybí stránkování — struktura stránky se změnila.");
+        }
+        lastPage = Math.min(Math.ceil(pagination.total / pagination.limit), MAX_PAGES);
+      }
+      perPage.push(items);
+      page++;
+    } while (page <= lastPage);
+  }
+  return mergeUniqueById(perPage);
 }
 
 // Sreality řadí "nejnovější" podle data POSLEDNÍ ÚPRAVY inzerátu, ne podle
