@@ -74,12 +74,17 @@ nenašla). Všechny filtry/řazení se kombinují a odkazy mezi sebou
 zachovávají zvolený stav ostatních (klik na "Cena ↑" nezruší zvolené
 město).
 
-**Výchozí řazení ("Nejnovější") dává přednost TOP bytům** (viz níž) — ty
-jsou vždy nahoře, bez ohledu na datum. Uvnitř toho (a u bytů bez TOP
-označení) rozhoduje **poslední aktivita** = novější z dvojice (kdy byl byt
-zaevidován, kdy u něj appka zaznamenala poslední skutečnou změnu — viz
-"Poslední změna" výš) — čerstvě přidaný byt i dávno zaevidovaný byt s
-dnešní změnou ceny se tak oba objeví nahoře. Řazení podle ceny naopak TOP
+**Výchozí řazení ("Nejnovější") jde ve čtyřech skupinách za sebou:**
+1. byty **se změnou, které jsou zároveň TOP** (viz níž),
+2. byty **se změnou**,
+3. byty **TOP** bez změny,
+4. ostatní.
+
+"Se změnou" = appka u bytu zaznamenala skutečnou událost (změna ceny,
+zmizení/návrat do nabídky, znovu vložený inzerát — viz "Poslední změna"
+výš). Uvnitř každé skupiny rozhoduje **poslední aktivita** = novější z
+dvojice (kdy byl byt zaevidován, kdy u něj proběhla poslední změna), takže
+nejčerstvější změna je vždy nahoře. Řazení podle ceny naopak změny ani TOP
 nijak nezvýhodňuje — je to čistě cena, jak by čtenář čekal.
 
 ## Vyřadit (✕) a TOP (⭐)

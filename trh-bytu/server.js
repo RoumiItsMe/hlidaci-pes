@@ -168,15 +168,22 @@ function buildQuery(current, overrides) {
   return qs ? `/?${qs}` : "/";
 }
 
-// Výchozí řazení: TOP (hvězdička) vždy nahoře, uvnitř toho podle
-// "aktivity" — novější z (kdy zaevidováno, kdy poslední skutečná změna) —
-// viz entry.activityAt níž. TOP-pinning platí jen pro "newest" (výchozí)
-// řazení; u řazení podle ceny by míchání TOP dovnitř popřelo smysl "seřaď
-// čistě podle ceny", který si uživatel explicitně zvolil.
+// Výchozí řazení ve čtyřech skupinách za sebou:
+//   1. se změnou + TOP  2. se změnou  3. TOP  4. ostatní
+// ("změna" = appka u bytu zaznamenala skutečnou událost, viz group.js
+// latestChange). Uvnitř skupiny podle "aktivity" — novější z (kdy
+// zaevidováno, kdy poslední změna), viz entry.activityAt níž. Tohle
+// pořadí platí jen pro "newest" (výchozí) řazení; u řazení podle ceny by
+// míchání změn/TOP dovnitř popřelo smysl "seřaď čistě podle ceny", který
+// si uživatel explicitně zvolil.
+function defaultSortGroup(e) {
+  return (e.change ? 0 : 2) + (e.starred ? 0 : 1);
+}
 const SORTERS = {
   newest: (a, b) => {
-    if (a.starred !== b.starred) return a.starred ? -1 : 1;
-    return b.activityAt < a.activityAt ? -1 : 1;
+    const groupDiff = defaultSortGroup(a) - defaultSortGroup(b);
+    if (groupDiff !== 0) return groupDiff;
+    return a.activityAt < b.activityAt ? 1 : a.activityAt > b.activityAt ? -1 : 0;
   },
   price_asc: (a, b) => (a.rep.price_czk ?? Infinity) - (b.rep.price_czk ?? Infinity),
   price_desc: (a, b) => (b.rep.price_czk ?? -Infinity) - (a.rep.price_czk ?? -Infinity),
