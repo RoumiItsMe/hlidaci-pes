@@ -5,6 +5,8 @@
 // (data/seen.json), a pošle notifikaci na Telegram o:
 //  (a) nových inzerátech,
 //  (b) změně ceny u inzerátů, které už dřív sledoval.
+// Nakonec projde i úřední desky okolních měst (záměr prodeje bytu, dražby…) —
+// to je samostatná věc s vlastním stavem a filtrem, viz lib/boards-runner.js.
 //
 // Při úplně prvním běhu pro danou dvojici (sledování, zdroj) — žádný
 // předchozí stav — se aktuální nabídka jen "zabaseline" jako už viděná —

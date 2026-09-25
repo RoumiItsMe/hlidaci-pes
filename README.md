@@ -3,7 +3,9 @@
 Automatický hlídač nových nabídek nemovitostí. Každých ~15 minut projde
 nastavené realitní portály a pošle notifikaci na Telegram o (a) nových
 inzerátech odpovídajících filtru a (b) **změně ceny** u inzerátů, které už
-dřív sledoval.
+dřív sledoval. Navíc hlídá **úřední desky** pěti okolních měst, jestli se tam
+neobjevil záměr prodeje bytu nebo dražba (viz [Úřední desky
+obcí](#úřední-desky-obcí)).
 
 ## Aktuální sledování
 
@@ -65,6 +67,73 @@ Výsledky z jednotlivých lokalit/podtypů/měst se u každého zdroje slučují
 deduplikují (`lib/merge.js`) — inzerát na pomezí dvou dotazů se nahlásí jen
 jednou. Cenový strop se vždy kontroluje i klientsky (`lib/price.js`), i u
 zdrojů, které umí filtrovat cenu přímo v URL (Bazoš) — jako pojistka.
+
+## Úřední desky obcí
+
+Města někdy vyvěšují záměr prodeje obecního bytu a na úředních deskách visí
+také dražební a aukční vyhlášky (exekutoři, Úřad pro zastupování státu ve
+věcech majetkových…). Hlídací pes tyhle desky čte při každém běhu a pošle
+Telegram, když se objeví zajímavé oznámení.
+
+**Sledované desky** (pole **`noticeBoards`** v [`config.js`](config.js)):
+
+| Město | Systém desky | Jak se čte |
+|---|---|---|
+| Ústí nad Orlicí | Joomla | tabulka, posledních 100 oznámení (`?limit=100`) |
+| Letohrad | Vismo | chronologický výpis `/vismo/zobraz_dok.asp`, posledních 100 |
+| Žamberk | Vismo | totéž |
+| Česká Třebová | Vismo | totéž |
+| Lanškroun | GINIS (`ude.ginis.cloud`) | celý seznam vyvěšených dokumentů na jedné stránce |
+
+Parsery jsou v [`sources/uredni-desky.js`](sources/uredni-desky.js). Nová obec
+se stejným systémem = jeden záznam v `noticeBoards` (`key` je klíč ve stavovém
+souboru, po nasazení ho neměnit).
+
+**Co se hlásí** ([`lib/notice-filter.js`](lib/notice-filter.js)) — filtruje se
+podle textu oznámení (název, popisek, kategorie), bez ohledu na diakritiku a
+skloňování:
+
+| Zpráva | Kdy |
+|---|---|
+| 🏠 **Prodej bytu** | prodejní slovo je u bytu / bytové jednotky / bytového domu ("záměr prodeje bytu", "byt k prodeji") |
+| 🔨 **Dražba / aukce** | dražba, dražební nebo aukční vyhláška — kromě dražby čistě movitých věcí. Z titulku dražby nemovitých věcí se často nepozná, jestli je v ní byt, proto se hlásí všechny |
+| 🏢 **Prodej domu / nemovitosti** | prodejní slovo je u domu, budovy, objektu, areálu (obecná "nemovitost" jen když se v textu nemluví o pozemku) |
+| ❓ **Možný prodej majetku** | krátký nic neříkající název ("Vyhláška č. 190") v kategorii věnované prodejům/aukcím — z titulku nepoznáme, čeho se týká, kategorie napovídá |
+
+**Záměrně se NEhlásí:** pronájmy a výpůjčky (i "Vyhlášení bytu k pronájmu" —
+nájem obecního bytu není prodej), směny a **prodej samotných pozemků**
+(nejčastější majetkové oznámení, ale není to byt ani dům). Pozemky jde do
+filtru přidat úpravou `lib/notice-filter.js`.
+
+**Rozdíly proti portálům:**
+- **První běh desky není tichý.** Oznámení o prodeji/dražbě visí na desce
+  týdny a uživatel o nich chce vědět i tehdy, když byla vyvěšená těsně před
+  zapnutím sledování. Při prvním běhu se proto pošlou zajímavá oznámení, která
+  jsou ještě vyvěšená (s poznámkou "Už vyvěšené v okamžiku zapnutí
+  sledování"); skončená se jen zapamatují.
+- Do stavu (`data/seen.json`, klíč `board:<key>`) se ukládají ID všech
+  oznámení, ale zajímavé oznámení se do stavu zapíše **až po úspěšném
+  odeslání** — když Telegram zrovna nejde, zpráva se neztratí a zkusí se
+  příště.
+- "Nové" oznámení s datem vyvěšení starším než 30 dní se nehlásí: u desek se
+  čtou jen poslední oznámení a když některá vyprší, vyjede do okna nějaké
+  staré trvalé (smlouva o dotaci z roku 2021) a vypadalo by to jako nové.
+- Nejvýš 10 zpráv na desku a běh, zbytek se shrne do jedné (pojistka proti
+  záplavě, kdyby se změnil formát ID).
+- Selhání desky (změna webu, výpadek, nula nalezených oznámení) jde přes
+  stejné upozornění jako u portálů, viz [Upozornění při
+  výpadku](#upozornění-při-výpadku) — s popiskem "Úřední deska • <město>".
+
+**Ruční kontrola** — co by se teď nahlásilo, bez odesílání a bez zápisu stavu:
+
+```bash
+node scripts/check-boards.js          # jen zajímavá oznámení
+node scripts/check-boards.js --all    # všechna oznámení i s vyhodnocením
+```
+
+Hodí se po úpravě filtru nebo při podezření, že některá obec předělala web.
+Dostupnost všech pěti desek z GitHub Actions byla ověřena (září 2026) — žádná
+obec zahraniční IP neblokuje.
 
 ## Jak to funguje
 
@@ -157,6 +226,12 @@ Bez nastavených env proměnných skript baseline krok (stažení + uložení
 stavu) provede v pořádku, jen při pokusu o odeslání notifikace (pokud by
 nějaká nová položka byla) vyhodí chybu — používá se to schválně jako
 "tichý baseline" postup při rozšiřování filtrů (viz bod 4 výše).
+
+**Pozor:** stejný postup u úředních desek tichý není — první běh desky
+pošle zajímavá, ještě vyvěšená oznámení (viz [Úřední desky
+obcí](#úřední-desky-obcí)). Bez Telegram proměnných odeslání selže a
+oznámení zůstane nezapamatované (zkusí se znovu), takže nic neztratíš. Co by
+se nahlásilo, ukáže `node scripts/check-boards.js`.
 
 ## Upozornění při výpadku
 
@@ -264,6 +339,12 @@ jsou uložené jako GitHub Secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
   vždy vede na reálný inzerát, kde je to vidět přesně.
 - Bezrealitky nerozlišuje podtyp pozemku (viz tabulka výše) — u pozemkového
   sledování tak může přijít i nabídka pole/lesa, ne jen bydlení/zahrady.
+- Úřední desky: filtr čte jen **název, popisek a kategorii** oznámení, ne
+  obsah přiložených PDF. Záměr prodeje s neurčitým názvem ("Záměr prodeje
+  nemovitých věcí") se zachytí jako 🏢, ale co konkrétně se prodává (byt, nebo
+  jen pozemek), se dozvíš až v oznámení. Desky se čtou z HTML, takže při
+  předělání webu obce je potřeba upravit parser v `sources/uredni-desky.js`
+  (ohlásí to alert o nula nalezených oznámeních).
 - Portály mění strukturu stránek bez upozornění — pokud se scraper
   najednou "utne" (chyba v logu Action, Telegram alert), je potřeba znovu
   prověřit strukturu dané stránky a upravit příslušný soubor v `sources/`.
