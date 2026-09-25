@@ -101,3 +101,24 @@ export const watches = [
 // proti neomezenému růstu data/seen.json). Staré položky beztak vypadnou
 // z "nejnovější" stránky výsledků dřív, než by na tenhle limit došlo.
 export const maxSeenPerSource = 500;
+
+// Úřední desky obcí — hledá se v nich záměr prodeje bytu, dražba apod. (viz
+// sources/uredni-desky.js a lib/notice-filter.js). Nezávislé na `watches`
+// výše: deska nemá cenu ani lokalitu, jen seznam oznámení, takže se
+// nefiltruje podle cen/okruhu, ale podle klíčových slov v textu oznámení.
+//  - `key`   — stabilní identifikátor (klíč ve stavovém souboru, neměnit)
+//  - `type`  — parser desky: "vismo" | "joomla" | "ginis"
+//  - `url`   — vismo: kořen webu obce; joomla: adresa desky; ginis: adresa desky
+export const noticeBoards = [
+  { key: "usti-nad-orlici", label: "Ústí nad Orlicí", type: "joomla", url: "https://www.ustinadorlici.cz/cs/urad/uredni-deska" },
+  { key: "letohrad", label: "Letohrad", type: "vismo", url: "https://www.letohrad.eu" },
+  { key: "zamberk", label: "Žamberk", type: "vismo", url: "https://www.zamberk.cz" },
+  { key: "ceska-trebova", label: "Česká Třebová", type: "vismo", url: "https://www.ceska-trebova.cz" },
+  { key: "lanskroun", label: "Lanškroun", type: "ginis", url: "https://ude.ginis.cloud/mesto-lanskroun/" },
+];
+
+// Úřední deska drží oznámení, dokud nevyprší lhůta vyvěšení; celý seznam
+// najednou vidíme jen u GINIS (Lanškroun, stovky záznamů), ostatní desky
+// se čtou po posledních ~100. Vyšší strop než `maxSeenPerSource`, ať se
+// oznámení z velké desky neztratí ze stavu a nenahlásí se podruhé.
+export const maxSeenPerBoard = 1500;
