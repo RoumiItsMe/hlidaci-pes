@@ -10,6 +10,7 @@ import { openDb, DATA_DIR } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
+import { reservationNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { watches } from "../config.js";
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
@@ -133,6 +134,9 @@ function rowActionButtons(id, starred, hidden) {
 }
 
 function layout(title, body) {
+  // Zvoneček: počet nepřečtených upozornění na rezervace (viz notifications.js).
+  const unread = countUnread(reservationNotifications(db), getNotificationsSeenAt(db));
+  const bell = `<a href="/upozorneni" class="bell" title="${unread ? `Nepřečtená upozornění na rezervace: ${unread}` : "Upozornění na rezervace"}">🔔${unread ? `<span class="bell-badge">${unread}</span>` : ""}</a>`;
   return `<!doctype html>
 <html lang="cs">
 <head>
@@ -142,7 +146,7 @@ function layout(title, body) {
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/stats">Statistiky</a></header>
+<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/stats">Statistiky</a>${bell}</header>
 <main>${body}</main>
 </body>
 </html>`;
@@ -529,6 +533,41 @@ function renderDetail(db, id) {
     </form>`;
 }
 
+// Stránka zvonečku: všechna upozornění na rezervace, nepřečtená zvýrazněná.
+// Zobrazení stránky je NEoznačí jako přečtená — to dělá až tlačítko, ať
+// upozornění nezmizí jen proto, že se stránka omylem otevřela.
+function renderNotifications(db) {
+  const notifications = reservationNotifications(db);
+  const seenAt = getNotificationsSeenAt(db);
+  const unread = countUnread(notifications, seenAt);
+
+  const items = notifications
+    .map((n) => {
+      const members = n.group.members;
+      const rep = primaryListing(members);
+      const title = cardTitle(rep, bestAddress(members), priceLabel(members));
+      const status = mergedStatus(members);
+      const sources = [...n.sources].map((s) => SOURCE_LABELS[s] || s).join(" + ");
+      // Rezervace mohla mezitím skončit (zrušená, byt prodán/stažen) — ať to
+      // upozornění neklame.
+      const now = status === "reserved" ? "" : ` · <em>nyní: ${esc((STATUS_LABELS[status] || { text: status }).text)}</em>`;
+      return `<a class="notif${n.occurredAt > seenAt ? " notif--new" : ""}" href="/byt/${encodeURIComponent(rep.id)}">
+        <span class="notif-title">🔔 ${esc(title)}</span>
+        <span class="notif-meta">Rezervováno · ${esc(formatDate(n.occurredAt))} · ${esc(sources)}${now}</span>
+      </a>`;
+    })
+    .join("");
+
+  return `
+    <h1>Upozornění na rezervace</h1>
+    ${
+      unread
+        ? `<form method="post" action="/upozorneni/precteno" class="mark-read-form"><button type="submit">Označit vše jako přečtené (${unread})</button></form>`
+        : ""
+    }
+    <div class="notifs">${items || `<p class="empty">Zatím žádná rezervace nebyla zaznamenána.</p>`}</div>`;
+}
+
 function renderStats(db) {
   const allListings = db.prepare("SELECT * FROM listings").all();
   // Skryté (křížkem vyřazené) položky se do statistik nepočítají — hidden
@@ -625,6 +664,17 @@ const server = createServer(async (req, res) => {
     };
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(layout("Trh bytů", renderTable(db, filters)));
+  }
+
+  if (url.pathname === "/upozorneni" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    return res.end(layout("Upozornění — Trh bytů", renderNotifications(db)));
+  }
+
+  if (url.pathname === "/upozorneni/precteno" && req.method === "POST") {
+    markNotificationsSeen(db);
+    res.writeHead(302, { Location: "/upozorneni" });
+    return res.end();
   }
 
   if (url.pathname === "/stats" && req.method === "GET") {

@@ -57,6 +57,12 @@ CREATE TABLE IF NOT EXISTS photos (
   downloaded_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_photos_listing ON photos(listing_id);
+
+-- Drobný stav appky (zatím: kdy uživatel naposledy přečetl upozornění)
+CREATE TABLE IF NOT EXISTS app_state (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 `;
 
 let db;

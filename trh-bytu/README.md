@@ -338,6 +338,25 @@ detailu Sreality), stav se nemění — chybějící informace rezervaci ani
 nevytvoří, ani nezruší. Datum události je okamžik, kdy ji appka poprvé
 uviděla (ne kdy ji zadala RK).
 
+## Zvoneček (upozornění na rezervace)
+
+V hlavičce appky je **🔔** — červené číslo u něj říká, kolik bytů bylo
+rezervováno od doby, kdy jsi upozornění naposledy přečetl. Klik otevře
+stránku **Upozornění na rezervace** (`/upozorneni`): všechny zaznamenané
+rezervace od nejnovější, nepřečtené zvýrazněné, u každé byt (s cenou / poslední
+známou cenou), kdy a na kterém portálu se rezervace objevila; klik vede na
+detail bytu. Tlačítko **"Označit vše jako přečtené"** zvoneček vynuluje —
+samotné otevření stránky upozornění nepřečte, ať žádné nezmizí omylem.
+
+- **Jeden byt = jedno upozornění**, i když je rezervovaný na třech portálech
+  (události z jednoho sběrného běhu se slučují).
+- Upozornění se objeví po **dalším sběrném běhu**, který rezervaci uvidí
+  (denně, případně po probuzení PC) — appka portály nesleduje průběžně.
+- Když rezervace mezitím skončila, upozornění to říká (*"nyní: V nabídce"*).
+- Zvoneček hlásí i **nově nalezený byt, který už je rezervovaný**.
+- Přečteno/nepřečteno je jediný údaj navíc, co se ukládá (tabulka `app_state`);
+  samotná upozornění se počítají z historie událostí bytů.
+
 ## Vědomá omezení (v1)
 
 - **Rezervaci u Bazoše appka nepozná** — Bazoš ji nemá. U bytu, který je jen

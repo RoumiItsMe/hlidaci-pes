@@ -224,3 +224,37 @@ form button { align-self: flex-start; padding: 0.5rem 1.2rem; background: var(--
 /* Skrytý, ale rezervovaný byt v pohledu "Rezervováno" — trochu utlumený */
 .row--hidden { opacity: 0.8; border-style: dashed; }
 .hidden-note { color: var(--muted); }
+
+/* Zvoneček v hlavičce + stránka upozornění */
+.bell { margin-left: auto; position: relative; font-size: 1.25rem; text-decoration: none; line-height: 1; }
+.bell-badge {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.65rem;
+  min-width: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+  text-align: center;
+}
+.mark-read-form { background: none; border: none; padding: 0; max-width: none; margin-bottom: 1rem; }
+.notifs { display: flex; flex-direction: column; gap: 0.5rem; }
+.notif {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+.notif:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); }
+.notif--new { border-color: #f59e0b; background: #fffbeb; }
+.notif-title { font-weight: 600; }
+.notif-meta { font-size: 0.82rem; color: var(--muted); }

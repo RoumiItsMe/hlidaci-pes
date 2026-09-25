@@ -128,11 +128,39 @@ function normalizedText(text) {
 export function sameAdByDescription(a, b) {
   if (a.disposition == null || a.disposition !== b.disposition) return false;
   if (a.area_m2 == null || b.area_m2 == null || Math.abs(a.area_m2 - b.area_m2) > AREA_TOLERANCE_M2) return false;
+  return descriptionsMatch(a, b);
+}
+
+// Jen text: true/false, nebo null, když se z popisů rozhodnout nedá.
+function descriptionsMatch(a, b) {
   const da = normalizedText(a.description);
   const db = normalizedText(b.description);
   if (da.length < MIN_DESCRIPTION_LEN || db.length < MIN_DESCRIPTION_LEN) return null;
   const [shorter, longer] = da.length <= db.length ? [da, db] : [db, da];
   return longer.includes(shorter.slice(DESCRIPTION_SNIPPET_START, DESCRIPTION_SNIPPET_START + DESCRIPTION_SNIPPET_LEN));
+}
+
+// Plochy (m²) zmíněné v popisu ("…nabízí pohodlných 75 m² podlahové
+// plochy…"). Portály uvádějí u téhož bytu různou plochu — podlahová ×
+// užitná × celková: pole inzerátu říká 68 m², jeho popis 75 m² a druhý
+// portál má 75 m². Rozumný rozsah odfiltruje drobnosti (balkon 5 m², sklep).
+const AREA_MENTION_RE = /(\d{2,3}(?:[,.]\d{1,2})?)\s?m[²2]/gi;
+function mentionedAreas(description) {
+  const areas = [];
+  for (const m of (description || "").matchAll(AREA_MENTION_RE)) {
+    const value = parseFloat(m[1].replace(",", "."));
+    if (value >= 15 && value <= 400) areas.push(value);
+  }
+  return areas;
+}
+
+// Plocha je "slučitelná", když se shoduje v toleranci, NEBO když ji uvádí
+// popis druhého inzerátu (viz mentionedAreas).
+function areasCompatible(a, b) {
+  if (a.area_m2 == null || b.area_m2 == null) return false;
+  if (Math.abs(a.area_m2 - b.area_m2) <= AREA_TOLERANCE_M2) return true;
+  const near = (areas, x) => areas.some((v) => Math.abs(v - x) <= AREA_TOLERANCE_M2);
+  return near(mentionedAreas(a.description), b.area_m2) || near(mentionedAreas(b.description), a.area_m2);
 }
 
 // Adresa rozložená na části bez okresního dovětku ("okr. Ústí nad Orlicí"
@@ -165,8 +193,8 @@ function sameStreetAddress(a, b) {
 function sameFlatAcrossPortals(a, b) {
   if (a.source === b.source) return false;
   if (a.disposition == null || a.disposition !== b.disposition) return false;
-  if (a.area_m2 == null || b.area_m2 == null || Math.abs(a.area_m2 - b.area_m2) > AREA_TOLERANCE_M2) return false;
-  const byDescription = sameAdByDescription(a, b);
+  if (!areasCompatible(a, b)) return false;
+  const byDescription = descriptionsMatch(a, b);
   if (byDescription !== null) return byDescription;
   return sameStreetAddress(a.address, b.address);
 }
