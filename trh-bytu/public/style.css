@@ -221,3 +221,6 @@ form button { align-self: flex-start; padding: 0.5rem 1.2rem; background: var(--
 /* "zmizelo: Bazoš.cz + RealityMIX.cz" v řádku bytu, který je jinde pořád v nabídce */
 .gone-note { color: #92400e; }
 .reserved-note { color: #b45309; font-weight: 600; }
+/* Skrytý, ale rezervovaný byt v pohledu "Rezervováno" — trochu utlumený */
+.row--hidden { opacity: 0.8; border-style: dashed; }
+.hidden-note { color: var(--muted); }

@@ -321,16 +321,18 @@ function renderTable(db, filters) {
   const ownershipOptions = [...new Set(entries.map((e) => e.params.ownership).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
   const hiddenCount = entries.filter((e) => e.hidden).length;
 
-  // Skryté (křížkem vyřazené) položky se z běžného přehledu vylučují VŽDY
-  // — dokud si je uživatel výslovně nevyžádá přes "Skryté" (?hidden=show).
+  // Skryté (křížkem vyřazené) položky se z běžného přehledu vylučují —
+  // dokud si je uživatel výslovně nevyžádá přes "Skryté" (?hidden=show).
   // V tom pohledu naopak ukazujeme JEN skryté (kvůli případnému obnovení)
-  // a stavový filtr se ignoruje — "V nabídce"/"Rezervováno"/... nedává u
-  // skrytých položek smysl kombinovat.
+  // a stavový filtr se ignoruje. JEDINÁ VÝJIMKA: rezervovaný byt se ukáže
+  // v pohledu "Rezervováno" i když je skrytý — rezervace je důležitá
+  // informace o trhu, kterou uživatel chce vidět bez ohledu na to, že byt
+  // dřív vyřadil (řádek je označený "skryto" a jde vrátit tlačítkem ↺).
   let filtered = entries;
   if (showHidden) {
     filtered = filtered.filter((e) => e.hidden);
   } else {
-    filtered = filtered.filter((e) => !e.hidden);
+    filtered = filtered.filter((e) => !e.hidden || (statusFilter === "reserved" && e.status === "reserved"));
     if (statusFilter) filtered = filtered.filter((e) => e.status === statusFilter);
   }
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
@@ -375,6 +377,9 @@ function renderTable(db, filters) {
       // Jen když rezervace není všude — jinak by to opakovalo odznak "Rezervováno".
       const reservedNote = reserved.length && reserved.length < live.length ? ` <span class="reserved-note">· rezervováno: ${esc(reserved.join(" + "))}</span>` : "";
       const goneNote = live.length && gone.length ? ` <span class="gone-note">· zmizelo: ${esc(gone.join(" + "))}</span>` : "";
+      // Skrytý byt se v přehledu objeví jen v pohledu "Rezervováno" (viz výš) —
+      // tam ať je jasné, proč tu je, i když ho uživatel dřív vyřadil.
+      const hiddenNote = hidden && !showHidden ? ` <span class="hidden-note">· skryto (↺ vrátí do přehledu)</span>` : "";
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
       const thumb = groupThumbnail(g.members);
       const photo = thumb
@@ -386,7 +391,7 @@ function renderTable(db, filters) {
       const snippet = descriptionSource ? truncate(descriptionSource.description, 220) : "";
       const updates = updatesChips(firstSeenAt, change, changeWhere);
 
-      return `<div class="row${starred ? " row--starred" : ""}">
+      return `<div class="row${starred ? " row--starred" : ""}${hidden && !showHidden ? " row--hidden" : ""}">
         <div class="row-actions">${rowActionButtons(rep.id, starred, hidden)}</div>
         <a class="row-link" href="/byt/${encodeURIComponent(rep.id)}">
           <div class="row-photo">${photo}</div>
@@ -397,7 +402,7 @@ function renderTable(db, filters) {
             <div class="row-updates">${updates}</div>
             <div class="row-meta">
               <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
-              <span class="muted">${esc(sourceLabel)}${linkBadge}${reservedNote}${goneNote}</span>
+              <span class="muted">${esc(sourceLabel)}${linkBadge}${reservedNote}${goneNote}${hiddenNote}</span>
             </div>
           </div>
         </a>

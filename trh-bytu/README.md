@@ -96,6 +96,10 @@ Každý řádek (i detail bytu) má dvě malá kolečka v pravém horním rohu:
   nemaže, jen ho přestane defaultně ukazovat, stejná filozofie jako u
   `status = removed`, viz níž). Skryté byty jdou zpátky najít přes pilulku
   **"🚫 Skryté (N)"** nad seznamem, kde má tlačítko místo ✕ **↺ Obnovit**.
+  **Jediná výjimka: rezervovaný byt** se ukáže v pohledu **"Rezervováno"**
+  i když je skrytý (rezervace je důležitá informace o trhu) — řádek je
+  označený *"skryto"* a jde vrátit tlačítkem ↺. V ostatních pohledech
+  (Vše, V nabídce, ...) zůstává skrytý.
 - **⭐/☆ Označit jako TOP** — byty, které uživatel sleduje nejvíc. Pilulka
   **"⭐ TOP"** nad seznamem je filtruje na jedno kliknutí; TOP byty navíc
   dostávají zlatý okraj řádku a hvězdičku před titulkem, ať jsou vidět i
