@@ -248,7 +248,26 @@ nestahuje.
 
 ## Sloučení stejné nemovitosti napříč portály
 
-Appka porovnává VŠECHNY inzeráty podle dispozice a ceny **přesně** — a
+**Inzeráty bez ceny** (RK ji nezveřejní — "Cena na vyžádání", "Dohodou";
+reálný případ: byt 3+1 na Křibu je na Sreality, iDNES, Bazoši i RealityMIX a
+u žádného ceny není) se neslučují podle ceny, ale **podle textu**: stejná
+dispozice, plocha (±1 m²) a shodný úsek popisu (porovnává se úsek z
+vnitřku popisu, protože iDNES předsazuje titulek). Portál bez popisu
+(RealityMIX) se spojí přes **přesnou shodu adresy včetně ulice** — jen město
+nestačí. Porovnávají se jen inzeráty z různých portálů a jen dvojice, kde
+aspoň jeden cenu nemá; dva inzeráty s různou cenou jsou vždy dva byty.
+
+V řádku se takový byt jmenuje **"… — cena na vyžádání"**; znamená to, že
+cena není na žádném z portálů zveřejněná (appka ji nemá odkud přečíst),
+ne že by se nevyčetla. Jakmile ji některý portál uvede, ukáže se (bere se
+z nejdůvěryhodnějšího portálu, který ji má). Skutečnou prodejní cenu si
+můžeš doplnit ručně v detailu bytu.
+
+U bytu na víc portálech říká odznak "Poslední změna", **u kterých portálů**
+se změna stala (např. "Zmizelo z nabídky (Bazoš.cz + RealityMIX.cz)") —
+zmizení ze dvou portálů ze čtyř není zmizení z trhu, byt je dál v nabídce.
+
+Ostatní inzeráty (s cenou): appka je porovnává podle dispozice a ceny **přesně** — a
 plochy **s tolerancí do 1 m²** (`AREA_TOLERANCE_M2` v `group.js`). Přesná
 shoda plochy nestačí, protože portály evidentně měří/zaokrouhlují jinak —
 reálný případ: tentýž byt na Dukelské v Ústí nad Orlicí má na Sreality

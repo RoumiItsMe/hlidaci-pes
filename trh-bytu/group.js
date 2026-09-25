@@ -92,28 +92,124 @@ export function groupListings(listings) {
     }
   }
 
-  return mergeRelistedGroups(groups, listings);
+  return mergeLinkedGroups(groups, listings);
 }
 
-// Znovu vložený inzeráty (viz relist.js: starý inzerát má `replaced_by`
-// ukazující na nový) patří k sobě, i když se ve výše spočítaném klíči
-// nepotkají — nový bývá bez ceny ("Dohodou"), takže by zůstal samostatným
-// řádkem vedle původního. Skupiny, které jsou takhle propojené, se spojí.
+// --- Shoda inzerátů podle textu (ne podle ceny) ---
+//
+// Cena je nejsilnější signál "tentýž byt", jenže RK ji u části bytů na
+// portálech vůbec neuvádějí ("Cena na vyžádání", "Dohodou") — reálný
+// případ: byt 3+1 na Křibu je na Sreality, iDNES, Bazoši i RealityMIX a u
+// žádného není cena, takže by se z něj bez jiné shody stalo 4 samostatné
+// řádky (a ty, co portál stáhl, by hlásily "zmizelo", i když byt na jiných
+// portálech pořád je).
+
+// Popisy se porovnávají úsekem z JEJICH VNITŘKU (od znaku 60, délka 100), ne
+// od začátku: iDNES popisu předsazuje titulek ("Prodej byt 3+1, 63m²,
+// Česká Třebová Velmi pěkný byt…"), ostatní portály začínají rovnou
+// textem, takže začátky se u téhož inzerátu neshodují. Kratší popis
+// ("Prodám byt") nic neodliší, proto se nerozhoduje z popisů pod 100 znaků.
+const MIN_DESCRIPTION_LEN = 100;
+const DESCRIPTION_SNIPPET_START = 60;
+const DESCRIPTION_SNIPPET_LEN = 100;
+
+function normalizedText(text) {
+  return (text || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Stejná dispozice, plocha v toleranci a shodný úvod popisu. Použité
+ * jak pro znovu vložený inzerát téhož portálu (relist.js), tak pro shodu
+ * napříč portály u inzerátů bez ceny. Popis se musí shodovat (ne jen
+ * dispozice+plocha), aby se nespojily dva různé byty téhož typu v jednom
+ * domě. Vrací `null`, když se to z popisů rozhodnout nedá (jeden nebo oba
+ * chybí/jsou příliš krátké), jinak true/false.
+ */
+export function sameAdByDescription(a, b) {
+  if (a.disposition == null || a.disposition !== b.disposition) return false;
+  if (a.area_m2 == null || b.area_m2 == null || Math.abs(a.area_m2 - b.area_m2) > AREA_TOLERANCE_M2) return false;
+  const da = normalizedText(a.description);
+  const db = normalizedText(b.description);
+  if (da.length < MIN_DESCRIPTION_LEN || db.length < MIN_DESCRIPTION_LEN) return null;
+  const [shorter, longer] = da.length <= db.length ? [da, db] : [db, da];
+  return longer.includes(shorter.slice(DESCRIPTION_SNIPPET_START, DESCRIPTION_SNIPPET_START + DESCRIPTION_SNIPPET_LEN));
+}
+
+// Adresa rozložená na části bez okresního dovětku ("okr. Ústí nad Orlicí"
+// je v adrese na všech regionálních inzerátech, nic nerozlišuje).
+function addressParts(address) {
+  if (!address) return null;
+  return address
+    .toLowerCase()
+    .replace(/,?\s*okr(?:es)?\.?\s+[^,]+/g, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// Přesná shoda adresy včetně ulice/části (aspoň 2 části, např. "Křib,
+// Česká Třebová") — jen město nestačí, to sdílí desítky bytů.
+function sameStreetAddress(a, b) {
+  const pa = addressParts(a);
+  const pb = addressParts(b);
+  if (!pa || !pb || pa.length < 2 || pb.length < 2) return false;
+  return pa.length === pb.length && pa.every((part, i) => part === pb[i]);
+}
+
+// Tentýž byt na DVOU RŮZNÝCH portálech, i bez shody v ceně. Popisy jsou
+// spolehlivější signál; adresa se použije jen tam, kde popis nejde
+// porovnat (RealityMIX ho appka nezískává, viz README) — a musí být přesná
+// včetně ulice, protože stejné byty v jednom panelovém domě jsou běžné.
+function sameFlatAcrossPortals(a, b) {
+  if (a.source === b.source) return false;
+  if (a.disposition == null || a.disposition !== b.disposition) return false;
+  if (a.area_m2 == null || b.area_m2 == null || Math.abs(a.area_m2 - b.area_m2) > AREA_TOLERANCE_M2) return false;
+  const byDescription = sameAdByDescription(a, b);
+  if (byDescription !== null) return byDescription;
+  return sameStreetAddress(a.address, b.address);
+}
+
+// Spojí skupiny, které patří k sobě, ale ve výše spočítaném klíči
+// (dispozice+cena+plocha) se nepotkaly:
+//  - znovu vložené inzeráty (viz relist.js: starý inzerát má `replaced_by`
+//    ukazující na nový) — nový bývá bez ceny ("Dohodou");
+//  - inzeráty bez ceny napříč portály (viz sameFlatAcrossPortals) — cenu
+//    neuvádí RK, ne appka, takže je nemá čím spojit jinak.
+// Porovnávají se jen dvojice, kde aspoň jeden inzerát cenu nemá — dva
+// inzeráty s cenou, které se v ceně neshodují, jsou vědomě dva byty.
 // `merged` (= nalezeno na víc PORTÁLECH) se přepočítá — dvě ID téhož portálu
 // ho nezapínají.
-function mergeRelistedGroups(groups, listings) {
+function mergeLinkedGroups(groups, listings) {
   const groupIndexById = new Map();
   groups.forEach((g, i) => g.members.forEach((m) => groupIndexById.set(m.id, i)));
 
   const { find, union } = unionFind(groups.length);
   let anyLink = false;
-  for (const l of listings) {
-    if (!l.replaced_by) continue;
-    const a = groupIndexById.get(l.id);
-    const b = groupIndexById.get(l.replaced_by);
-    if (a == null || b == null) continue;
+  const link = (idA, idB) => {
+    const a = groupIndexById.get(idA);
+    const b = groupIndexById.get(idB);
+    if (a == null || b == null) return;
     union(a, b);
     anyLink = true;
+  };
+
+  for (const l of listings) {
+    if (l.replaced_by) link(l.id, l.replaced_by);
+  }
+
+  const byDisposition = new Map();
+  for (const l of listings) {
+    if (l.disposition == null || l.area_m2 == null) continue;
+    if (!byDisposition.has(l.disposition)) byDisposition.set(l.disposition, []);
+    byDisposition.get(l.disposition).push(l);
+  }
+  for (const same of byDisposition.values()) {
+    for (let i = 0; i < same.length; i++) {
+      for (let j = i + 1; j < same.length; j++) {
+        if (same[i].price_czk != null && same[j].price_czk != null) continue;
+        if (sameFlatAcrossPortals(same[i], same[j])) link(same[i].id, same[j].id);
+      }
+    }
   }
   if (!anyLink) return groups;
 
@@ -128,7 +224,7 @@ function mergeRelistedGroups(groups, listings) {
     if (parts.length === 1) return parts[0];
     const members = parts.flatMap((g) => g.members);
     return {
-      key: `relist_${members.map((m) => m.id).sort().join(",")}`,
+      key: `linked_${members.map((m) => m.id).sort().join(",")}`,
       members,
       merged: new Set(members.map((m) => m.source)).size > 1,
     };
@@ -222,12 +318,34 @@ export function pickDescription(members) {
 }
 
 /**
- * Nejlepší dostupná adresa napříč členy skupiny — stejná úvaha jako u
- * popisu: bere se od nejdůvěryhodnějšího zdroje, co adresu vůbec má.
+ * Nejlepší dostupná adresa napříč členy skupiny — nejkonkrétnější (s
+ * ulicí), při shodě od nejdůvěryhodnějšího zdroje.
  */
 export function bestAddress(members) {
-  const withAddress = byPriority(members).find((m) => m.address);
-  return withAddress ? withAddress.address : null;
+  // Nejkonkrétnější adresa (nejvíc částí: ulice + město > jen město), při
+  // shodě rozhoduje důvěryhodnost zdroje — jinak by Sreality s adresou "jen
+  // město" přebilo iDNES s ulicí u téhož bytu.
+  let best = null;
+  let bestPartCount = 0;
+  for (const m of byPriority(members)) {
+    const partCount = addressParts(m.address)?.length ?? 0;
+    if (partCount > bestPartCount) {
+      best = m;
+      bestPartCount = partCount;
+    }
+  }
+  return best ? best.address : null;
+}
+
+/**
+ * Nejlepší známá cena skupiny — od nejdůvěryhodnějšího zdroje, který nějakou
+ * cenu má. Jeden portál může cenu neuvádět ("Dohodou"), zatímco jiný ano;
+ * primární (nejdůvěryhodnější) inzerát by pak ukázal "bez ceny", i když
+ * appka cenu zná. `null`, když ji nemá žádný člen skupiny.
+ */
+export function bestPrice(members) {
+  const withPrice = byPriority(members).find((m) => m.price_czk != null);
+  return withPrice ? withPrice.price_czk : null;
 }
 
 // Skrytí (křížek) a TOP (hvězdička) jsou uživatelovy vlastní příznaky, ne

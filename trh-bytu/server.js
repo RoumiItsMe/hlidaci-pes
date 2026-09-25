@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, latestChange, isStarred, isHidden } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, latestChange, isStarred, isHidden } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
 import { extractCity } from "./parse.js";
 import { watches } from "../config.js";
@@ -70,13 +70,35 @@ function formatDateOnly(iso) {
 // appky (viz group.js latestChange). Odznak beze změny je schválně
 // tlumený/šedý — barevně (žlutě) vystupuje jen odznak, kde SE něco
 // opravdu stalo, ať se dá v přehledu rychle zrakem najít, co je "živé".
-function updatesChips(firstSeenAt, change) {
+function updatesChips(firstSeenAt, change, sources) {
   const since = `<span class="update-chip update-chip--since">📅 V nabídce od ${esc(formatDateOnly(firstSeenAt))}</span>`;
   const detail = change ? eventDetail(change) : "";
+  // U bytu na víc portálech je důležité, KDE se změna stala — "zmizelo z
+  // nabídky" na dvou portálech ze čtyř není totéž co zmizení z trhu.
+  const where = sources ? ` (${esc(sources)})` : "";
   const changeChip = change
-    ? `<span class="update-chip update-chip--change">🔄 Poslední změna ${esc(formatDateOnly(change.occurred_at))} · ${esc(EVENT_LABELS[change.event_type] || change.event_type)}${detail ? ` · ${esc(detail)}` : ""}</span>`
+    ? `<span class="update-chip update-chip--change">🔄 Poslední změna ${esc(formatDateOnly(change.occurred_at))} · ${esc(EVENT_LABELS[change.event_type] || change.event_type)}${where}${detail ? ` · ${esc(detail)}` : ""}</span>`
     : `<span class="update-chip update-chip--none">Zatím beze změny</span>`;
   return `${since}${changeChip}`;
+}
+
+// Portály, u kterých proběhla poslední změna skupiny — jen když skupina
+// spojuje víc portálů (jinak by to byla zbytečná informace navíc). Bere
+// všechny události téhož typu z téhož sběrného běhu (do 10 minut od
+// poslední), protože jeden běh často zaznamená zmizení na víc portálech
+// naráz. `events` = události všech členů skupiny.
+function changeSources(members, events, change) {
+  if (!change || new Set(members.map((m) => m.source)).size < 2) return null;
+  const sourceById = new Map(members.map((m) => [m.id, m.source]));
+  const changeTime = new Date(change.occurred_at).getTime();
+  const sources = new Set();
+  for (const e of events) {
+    if (e.event_type !== change.event_type) continue;
+    if (Math.abs(new Date(e.occurred_at).getTime() - changeTime) > 10 * 60 * 1000) continue;
+    const source = sourceById.get(e.listing_id);
+    if (source) sources.add(SOURCE_LABELS[source] || source);
+  }
+  return sources.size ? [...sources].join(" + ") : null;
 }
 
 // "Cena na vyžádání" je u portálů cena bez čísla (Dohodou, V textu...) —
@@ -129,11 +151,13 @@ function layout(title, body) {
 // Adresa (viz group.js bestAddress) je u většiny portálů už "ulice, město"
 // (nebo jen "město", když ulici portál/appka nezná — fail-soft, žádná
 // nabídka kvůli chybějící adrese nezmizí, jen bude titulek o kousek kratší.
-function cardTitle(rep, address) {
+function cardTitle(rep, address, price) {
   const specs = [rep.disposition, rep.area_m2 ? `${rep.area_m2} m²` : null].filter(Boolean).join(", ");
   const head = specs ? `Byt ${specs}` : "Byt";
   const addressPart = address ? `, ${address}` : "";
-  return `${head}${addressPart} — ${formatCzk(rep.price_czk)}`;
+  // Cena bez čísla je věc portálů (RK ji neuvádí), ne chybějící údaj — proto
+  // se píše výslovně, ne jako pomlčka, která vypadá jako chyba appky.
+  return `${head}${addressPart} — ${price == null ? "cena na vyžádání" : formatCzk(price)}`;
 }
 
 // Kompaktní shrnutí parametrů pro řádek přehledu — plná tabulka se všemi
@@ -185,8 +209,8 @@ const SORTERS = {
     if (groupDiff !== 0) return groupDiff;
     return a.activityAt < b.activityAt ? 1 : a.activityAt > b.activityAt ? -1 : 0;
   },
-  price_asc: (a, b) => (a.rep.price_czk ?? Infinity) - (b.rep.price_czk ?? Infinity),
-  price_desc: (a, b) => (b.rep.price_czk ?? -Infinity) - (a.rep.price_czk ?? -Infinity),
+  price_asc: (a, b) => (a.price ?? Infinity) - (b.price ?? Infinity),
+  price_desc: (a, b) => (b.price ?? -Infinity) - (a.price ?? -Infinity),
 };
 const SORT_LABELS = [
   ["newest", "Nejnovější"],
@@ -235,15 +259,18 @@ function renderTable(db, filters) {
   // stejnou skupinou vícekrát.
   const entries = allGroups.map((g) => {
     const firstSeenAt = earliestFirstSeen(g.members);
-    const change = latestChange(groupEvents(g.members));
+    const events = groupEvents(g.members);
+    const change = latestChange(events);
     return {
       g,
       rep: primaryListing(g.members),
       params: mergeParams(g.members),
       address: bestAddress(g.members),
+      price: bestPrice(g.members),
       status: mergedStatus(g.members),
       firstSeenAt,
       change,
+      changeWhere: changeSources(g.members, events, change),
       // "Aktivita" pro výchozí řazení = novější z (zaevidováno, poslední
       // skutečná změna) — čerstvě přidaný byt i dávno zaevidovaný byt s
       // dnešní změnou ceny mají oba vyjít jako "nahoře".
@@ -306,7 +333,7 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, status, firstSeenAt, change, starred, hidden }) => {
+    .map(({ g, rep, params, address, price, status, firstSeenAt, change, changeWhere, starred, hidden }) => {
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
       const sourceLabel = [...new Set(g.members.map((m) => SOURCE_LABELS[m.source] || m.source))].join(" + ");
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
@@ -318,14 +345,14 @@ function renderTable(db, filters) {
       const paramsLine = paramsSummaryLine(params);
       const descriptionSource = pickDescription(g.members);
       const snippet = descriptionSource ? truncate(descriptionSource.description, 220) : "";
-      const updates = updatesChips(firstSeenAt, change);
+      const updates = updatesChips(firstSeenAt, change, changeWhere);
 
       return `<div class="row${starred ? " row--starred" : ""}">
         <div class="row-actions">${rowActionButtons(rep.id, starred, hidden)}</div>
         <a class="row-link" href="/byt/${encodeURIComponent(rep.id)}">
           <div class="row-photo">${photo}</div>
           <div class="row-body">
-            <div class="row-title">${starred ? "⭐ " : ""}${esc(cardTitle(rep, address))}</div>
+            <div class="row-title">${starred ? "⭐ " : ""}${esc(cardTitle(rep, address, price))}</div>
             ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
             ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
             <div class="row-updates">${updates}</div>
@@ -425,7 +452,8 @@ function renderDetail(db, id) {
     .join("");
 
   const address = bestAddress(members) || "";
-  const updates = updatesChips(earliestFirstSeen(members), latestChange(events));
+  const latest = latestChange(events);
+  const updates = updatesChips(earliestFirstSeen(members), latest, changeSources(members, events, latest));
 
   return `
     <p><a href="/">← Zpět na seznam</a></p>
@@ -438,7 +466,7 @@ function renderDetail(db, id) {
       ${group.merged ? `· nalezeno na ${new Set(members.map((m) => m.source)).size} portálech` : ""}
     </p>
     <ul class="source-links">${sourceLinks}</ul>
-    <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${formatCzk(rep.price_czk)}</p>
+    <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${priceText(bestPrice(members))}</p>
     <p>${esc(address)}</p>
     <div class="row-updates">${updates}</div>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
@@ -481,7 +509,7 @@ function renderStats(db) {
       const latest = g.members.reduce((max, m) => (m.removed_at && m.removed_at > max ? m.removed_at : max), "");
       return latest && new Date(latest).getTime() >= cutoff;
     })
-    .map((g) => primaryListing(g.members))
+    .map((g) => ({ price_czk: bestPrice(g.members), area_m2: primaryListing(g.members).area_m2 }))
     .filter((r) => r.price_czk != null && r.area_m2 != null);
 
   const avgPerM2 = removedRecentWithData.length

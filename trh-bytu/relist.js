@@ -17,39 +17,19 @@
 // (Nejčastější příčina falešného zmizení — Sreality, které se stahovalo jen
 // z 1. stránky výsledků — je opravená u zdroje, viz fetchSrealityAllPages.)
 
-import { AREA_TOLERANCE_M2 } from "./group.js";
+import { sameAdByDescription } from "./group.js";
 import { nowIso, getListing, updateListingFields, insertEvent, getActiveListingIdsForSource } from "./db.js";
-
-const MIN_DESCRIPTION_LEN = 40; // kratší popis ("Prodám byt") nic neodliší
-const DESCRIPTION_PREFIX_LEN = 120;
-
-function normalized(text) {
-  return (text || "").toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-// Stejná dispozice, plocha v toleranci a stejný začátek popisu — znovu
-// vložený inzerát bývá kopie původního, změní se typicky jen titulek nebo
-// cena. Popis se musí shodovat na začátku (ne jen dispozice+plocha), aby
-// se nespojily dva různé byty téhož typu v jednom domě.
-function looksLikeSameAd(gone, candidate) {
-  if (gone.disposition == null || gone.disposition !== candidate.disposition) return false;
-  if (gone.area_m2 == null || candidate.area_m2 == null) return false;
-  if (Math.abs(gone.area_m2 - candidate.area_m2) > AREA_TOLERANCE_M2) return false;
-  const a = normalized(gone.description);
-  const b = normalized(candidate.description);
-  if (a.length < MIN_DESCRIPTION_LEN || b.length < MIN_DESCRIPTION_LEN) return false;
-  const n = Math.min(a.length, b.length, DESCRIPTION_PREFIX_LEN);
-  return a.slice(0, n) === b.slice(0, n);
-}
 
 /**
  * Nástupce (znovu vložený inzerát) pro inzerát, který zmizel — z kandidátů,
- * tj. nových inzerátů TÉHOŽ zdroje z téhož běhu. Vrací ho jen při
- * jednoznačné shodě; při dvou a více shodách radši žádného (zůstane
- * obyčejné zmizení).
+ * tj. nových inzerátů TÉHOŽ zdroje z téhož běhu. Znovu vložený inzerát bývá
+ * kopie původního, změní se typicky jen titulek nebo cena, takže se shoduje
+ * dispozice, plocha a začátek popisu (viz sameAdByDescription). Vrací ho
+ * jen při jednoznačné shodě; při dvou a více shodách radši žádného
+ * (zůstane obyčejné zmizení).
  */
 export function findRelistSuccessor(gone, candidates) {
-  const matches = candidates.filter((c) => looksLikeSameAd(gone, c));
+  const matches = candidates.filter((c) => sameAdByDescription(gone, c) === true);
   return matches.length === 1 ? matches[0] : null;
 }
 
