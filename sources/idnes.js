@@ -40,8 +40,11 @@ function parseListing(el, $) {
   const title = $el.find(".c-products__title").first().text().replace(/\s+/g, " ").trim();
   const address = $el.find(".c-products__info").first().text().replace(/\s+/g, " ").trim();
   const price = $el.find(".c-products__price").first().text().replace(/\s+/g, " ").trim();
+  // Štítek "Rezervováno" na kartě (vedle "Nové"/"Zlevněno"). Hlídací pes ho
+  // nepoužívá — čte ho Trh bytů (../trh-bytu/), viz `reserved` níž.
+  const reserved = /rezerv/i.test($el.find(".badges__item, .labels__item").text());
 
-  return { id, title, address, price: price || "Cena na vyžádání", url: href };
+  return { id, title, address, price: price || "Cena na vyžádání", url: href, reserved };
 }
 
 async function fetchOneUrl(url, watch) {
@@ -64,6 +67,7 @@ async function fetchOneUrl(url, watch) {
       priceCzk,
       address: parsed.address,
       url: parsed.url,
+      reserved: parsed.reserved,
     });
   });
   return items;

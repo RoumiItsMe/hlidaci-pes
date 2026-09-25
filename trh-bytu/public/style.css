@@ -220,3 +220,4 @@ form button { align-self: flex-start; padding: 0.5rem 1.2rem; background: var(--
 
 /* "zmizelo: Bazoš.cz + RealityMIX.cz" v řádku bytu, který je jinde pořád v nabídce */
 .gone-note { color: #92400e; }
+.reserved-note { color: #b45309; font-weight: 600; }

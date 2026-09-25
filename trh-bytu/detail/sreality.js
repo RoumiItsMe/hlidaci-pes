@@ -6,9 +6,10 @@
 // objektů s protokol-relativní `url`, "//..." → potřeba doplnit "https:"),
 // `categorySubCb.name` (dispozice, např. "2+1") a `params.usableArea` (m²
 // jako číslo) — obojí se ale u nás bere z titulku (viz parse.js), tohle
-// slouží jen na description/fotky. Žádný "rezervováno" příznak se v datech
-// nenašel (grep na "rezerv" nic nenašel) — reserved-detekce pro Sreality
-// tedy není k dispozici, spoléhá se jen na zmizení z výpisu (removed).
+// slouží jen na description/fotky. Rezervace je v `params.stateCb` (viz
+// isReserved níž) — dřív se hledala grepem "rezerv" na inzerátech, které
+// rezervované nebyly, a tak se mylně došlo k závěru, že tenhle příznak
+// neexistuje.
 //
 // Fotky z tohohle detailu appka VRÁTÍ (URL v `images`), ale STAŽENÍ vždy
 // selže — Sreality CDN (d18-a.sdn.cz) vrací 401 na každý request bez
@@ -71,6 +72,15 @@ function extractParams(est) {
   };
 }
 
+// Stav inzerátu (`params.stateCb`): 0 = "- vyber stav" (výchozí, tedy běžná
+// nabídka), 1 = "Rezervováno" — ověřeno naostro na 43 inzerátech (41× 0,
+// 2× 1). Ve výpisu (search) tenhle příznak NENÍ (filtr "Bez rezervovaných
+// nabídek" je u Sreality prémiový), takže jde zjistit jen z detailu.
+function isReserved(est) {
+  const state = est.params?.stateCb;
+  return state?.value === 1 || /rezerv/i.test(state?.name || "");
+}
+
 export async function fetchSrealityDetail(url) {
   try {
     // skipAcceptHeader: Sreality detail stránky občas na "Accept"
@@ -81,15 +91,17 @@ export async function fetchSrealityDetail(url) {
     const dh = data?.props?.pageProps?.dehydratedState;
     const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
     const est = q?.state?.data;
-    if (!est) return { description: null, photoUrls: [], reserved: false, params: {} };
+    if (!est) return { description: null, photoUrls: [], reserved: null, params: {} };
 
     const photoUrls = (est.images || [])
       .map((img) => (img.url?.startsWith("//") ? `https:${img.url}` : img.url))
       .filter(Boolean);
 
-    return { description: est.description || null, photoUrls, reserved: false, params: extractParams(est) };
+    return { description: est.description || null, photoUrls, reserved: isReserved(est), params: extractParams(est) };
   } catch (err) {
     console.warn(`[detail/sreality] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false, params: {} };
+    // `reserved: null` = "nevíme" (ne "není rezervováno") — chyba stažení
+    // nesmí rezervaci u známého inzerátu zrušit, viz track.js.
+    return { description: null, photoUrls: [], reserved: null, params: {} };
   }
 }

@@ -23,6 +23,7 @@ import { fetchRealitymix } from "../sources/realitymix.js";
 import { fetchBazos } from "../sources/bazos.js";
 import { openDb, nowIso, getListing, insertListing, updateListingFields, insertEvent, insertPhoto, DATA_DIR } from "./db.js";
 import { handleDisappeared } from "./relist.js";
+import { reservationChange } from "./reservation.js";
 import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace } from "./parse.js";
 import { downloadPhotos } from "./photos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
@@ -36,7 +37,10 @@ const LOG_PATH = path.join(DATA_DIR, "track.log");
 const SOURCES = [
   // Sreality stahujeme přes VŠECHNY stránky výpisu — jen z 1. stránky by
   // starší inzeráty vytlačené novějšími vypadaly jako zmizelé.
-  { name: "sreality", fetchList: fetchSrealityAllPages, fetchDetail: fetchSrealityDetail },
+  // Sreality nemá příznak rezervace ve výpisu, jen na detailu — proto se u
+  // něj detail čte i u známých inzerátů (`reservationFromDetail`); ostatní
+  // portály (iDNES, RealityMIX, Bezrealitky) ho mají už ve výpisu.
+  { name: "sreality", fetchList: fetchSrealityAllPages, fetchDetail: fetchSrealityDetail, reservationFromDetail: true },
   { name: "bezrealitky", fetchList: fetchBezrealitky, fetchDetail: fetchBezrealitkyDetail },
   { name: "idnes", fetchList: fetchIdnes, fetchDetail: fetchIdnesDetail },
   { name: "realitymix", fetchList: fetchRealitymix, fetchDetail: fetchRealitymixDetail },
@@ -63,11 +67,12 @@ async function processSource(db, source, watch) {
     items = await source.fetchList(watch);
   } catch (err) {
     log(`[${source.name}] CHYBA při stahování seznamu: ${err.message}`);
-    return { newCount: 0, priceChangeCount: 0, removedCount: 0, relistedCount: 0, error: true };
+    return { newCount: 0, priceChangeCount: 0, removedCount: 0, relistedCount: 0, reservationCount: 0, error: true };
   }
 
   let newCount = 0;
   let priceChangeCount = 0;
+  let reservationCount = 0;
   const currentIds = new Set();
   const createdThisRun = []; // kandidáti na "znovu vložený inzerát", viz relist.js
 
@@ -80,7 +85,9 @@ async function processSource(db, source, watch) {
     if (!existing) {
       // Nový inzerát — dotáhnout detail (popis, fotky, případně reserved).
       const detail = await source.fetchDetail(item.url);
-      const status = detail.reserved ? "reserved" : "active";
+      // Rezervace z výpisu (iDNES, RealityMIX, Bezrealitky) nebo z detailu
+      // (Sreality, Bezrealitky).
+      const status = item.reserved === true || detail.reserved === true ? "reserved" : "active";
 
       // Titulek bývá stručný a někdy dispozici/plochu vůbec nemá (hlavně
       // Bazoš/RealityMIX) — v tom případě appka zkusí totéž vytáhnout z
@@ -156,6 +163,21 @@ async function processSource(db, source, watch) {
       fields.removed_at = null;
       insertEvent(db, { listing_id: listingId, event_type: "reactivated", occurred_at: now });
     }
+
+    // Rezervace: z výpisu, nebo (Sreality) z detailu. `null`/`undefined` =
+    // portál to v tomhle běhu nesdělil → stav se nemění (viz reservation.js).
+    let observedReserved = item.reserved;
+    if (source.reservationFromDetail) {
+      observedReserved = (await source.fetchDetail(item.url)).reserved;
+      await sleep(250); // zdvořilost vůči portálu
+    }
+    const reservation = reservationChange(fields.status ?? existing.status, observedReserved);
+    if (reservation) {
+      fields.status = reservation.status;
+      insertEvent(db, { listing_id: listingId, event_type: reservation.eventType, occurred_at: now });
+      reservationCount++;
+      log(`[${source.name}] ${reservation.eventType === "reserved" ? "rezervováno" : "rezervace zrušena"}: ${listingId}`);
+    }
     updateListingFields(db, listingId, fields);
   }
 
@@ -165,7 +187,7 @@ async function processSource(db, source, watch) {
   // jiného důvodu — appka to netvrdí jistě, viz README). Rozlišení viz relist.js.
   const { removedCount, relistedCount } = handleDisappeared(db, source.name, currentIds, createdThisRun, log);
 
-  return { newCount, priceChangeCount, removedCount, relistedCount, error: false };
+  return { newCount, priceChangeCount, removedCount, relistedCount, reservationCount, error: false };
 }
 
 async function run() {
@@ -178,6 +200,7 @@ async function run() {
   let totalPriceChanges = 0;
   let totalRemoved = 0;
   let totalRelisted = 0;
+  let totalReservations = 0;
   let hadError = false;
 
   for (const source of SOURCES) {
@@ -186,11 +209,12 @@ async function run() {
     totalPriceChanges += result.priceChangeCount;
     totalRemoved += result.removedCount;
     totalRelisted += result.relistedCount;
+    totalReservations += result.reservationCount;
     if (result.error) hadError = true;
   }
 
   log(
-    `Hotovo. ${totalNew} nových bytů zaevidováno, ${totalPriceChanges} změn ceny, ${totalRemoved} zmizelo z nabídky, ${totalRelisted} znovu vloženo.` +
+    `Hotovo. ${totalNew} nových bytů zaevidováno, ${totalPriceChanges} změn ceny, ${totalRemoved} zmizelo z nabídky, ${totalRelisted} znovu vloženo, ${totalReservations} změn rezervace.` +
       (hadError ? " (u některého zdroje selhalo stahování — zkontroluj log výše.)" : "")
   );
   db.close();

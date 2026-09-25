@@ -80,6 +80,9 @@ async function fetchForUrl(url, watch) {
       priceCzk,
       address,
       url: href,
+      // Štítek "Rezervováno" na kartě — hlídací pes ho nepoužívá, čte ho
+      // Trh bytů (../trh-bytu/).
+      reserved: /Rezervováno/.test(text),
     });
   });
   return items;

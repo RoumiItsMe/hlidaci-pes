@@ -48,7 +48,8 @@ detailu.
 `first_seen_at` napříč sloučenými zdroji). "Poslední změna" je datum
 poslední **skutečné** události, co appka SAMA zaznamenala do vlastní
 historie (`events`, viz `db.js`) — změna ceny, zmizení z nabídky, návrat
-do nabídky, nebo (jen u Bezrealitky) označení jako rezervováno. Nikdy ne
+do nabídky, znovu vložení inzerátu, rezervace (i její zrušení, viz
+"Rezervace" níž). Nikdy ne
 "naposledy upraveno" od portálu (Sreality `params.edited` apod.) — to si
 realitky bumpují i bez reálné změny nabídky, přesně ten samý problém,
 kvůli kterému hlídací pes dřív hlásil roky staré inzeráty jako "nové" (viz
@@ -253,7 +254,7 @@ reálný případ: byt 3+1 na Křibu je na Sreality, iDNES, Bazoši i RealityMIX
 u žádného ceny není) se neslučují podle ceny, ale **podle textu**: stejná
 dispozice, plocha (±1 m²) a shodný úsek popisu (porovnává se úsek z
 vnitřku popisu, protože iDNES předsazuje titulek). Portál bez popisu
-(RealityMIX) se spojí přes **přesnou shodu adresy včetně ulice** — jen město
+(RealityMIX) se spojí přes **přesnou shodu adresy včetně ulice** (na pořadí částí nezáleží) — jen město
 nestačí. Porovnávají se jen inzeráty z různých portálů a jen dvojice, kde
 aspoň jeden cenu nemá; dva inzeráty s různou cenou jsou vždy dva byty.
 
@@ -305,18 +306,40 @@ Počítá se vždy čerstvě při zobrazení (appka si nikde neukládá "tohle p
 k tamtomu") — funguje okamžitě i na starších datech a nemůže se rozejít
 se skutečností.
 
-Důsledek pro stav: pokud je nemovitost aktivní byť jen na JEDNOM portálu,
-appka ji ukáže jako "V nabídce" (dá se pořád reálně sehnat), i kdyby na
-jiném portálu mezitím zmizela nebo byla označená jako rezervovaná —
-detail bytu ale ukazuje stav KAŽDÉHO portálu zvlášť, takže nic nezůstává
-skryté.
+Důsledek pro stav: **rezervace na kterémkoli portálu = byt je rezervovaný**
+("Rezervováno"), i kdyby ho jiný portál pořád nabízel jako volný — rezervace
+je fakt o bytu, ne o portálu, a většina portálů ji vůbec neukazuje. Jinak
+platí: pokud je nemovitost aktivní byť jen na JEDNOM portálu, appka ji
+ukáže jako "V nabídce" (dá se pořád reálně sehnat), i kdyby na jiném
+portálu mezitím zmizela. Řádek říká, kde je byt rezervovaný a kde zmizel
+("· rezervováno: Reality.iDNES.cz", "· zmizelo: Bazoš.cz"), detail bytu
+ukazuje stav KAŽDÉHO portálu zvlášť.
+
+## Rezervace
+
+Appka zaznamenává rezervaci při **každém** běhu a ze všech portálů, které ji
+ukazují, do časové osy i odznaku "Poslední změna" ("Označeno jako
+rezervováno (Reality.iDNES.cz)", a když se zruší, "Rezervace zrušena"):
+
+| Portál | Kde je rezervace vidět |
+|---|---|
+| iDNES | štítek "Rezervováno" na kartě ve výpisu |
+| RealityMIX | text "Rezervováno" na kartě ve výpisu |
+| Bezrealitky | příznak `reserved` ve výpisu |
+| Sreality | jen na detailu inzerátu (`stateCb` = Rezervováno); ve výpisu ne, filtr "Bez rezervovaných nabídek" je u nich prémiový — proto appka u Sreality čte detail všech sledovaných inzerátů |
+| Bazoš | rezervaci vůbec nemá |
+
+Když portál rezervaci v daném běhu nesdělil (Bazoš, nebo selhalo stažení
+detailu Sreality), stav se nemění — chybějící informace rezervaci ani
+nevytvoří, ani nezruší. Datum události je okamžik, kdy ji appka poprvé
+uviděla (ne kdy ji zadala RK).
 
 ## Vědomá omezení (v1)
 
-- **"Rezervováno" appka pozná spolehlivě jen u Bezrealitky** (má to přímo v
-  datech). U ostatních portálů se stav pozná až zmizením z nabídky
-  (`removed`) — bez rozlišení, jestli šlo o rezervaci, prodej, nebo že
-  majitel/RK inzerát prostě stáhl z jiného důvodu.
+- **Rezervaci u Bazoše appka nepozná** — Bazoš ji nemá. U bytu, který je jen
+  na Bazoši, se stav pozná až zmizením z nabídky (`removed`) — bez
+  rozlišení, jestli šlo o rezervaci, prodej, nebo že majitel inzerát prostě
+  stáhl z jiného důvodu.
 - **Popis u RealityMIX appka nezíská** — na jejich detailu se dotahuje až
   přes JavaScript na klientovi, v syrovém HTML není. Fotky a základní údaje
   (dispozice, m², cena) u RealityMIX fungují normálně.

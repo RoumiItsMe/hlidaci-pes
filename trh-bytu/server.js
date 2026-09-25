@@ -31,6 +31,7 @@ const EVENT_LABELS = {
   created: "Zaevidováno",
   price_change: "Změna ceny",
   reserved: "Označeno jako rezervováno",
+  unreserved: "Rezervace zrušena",
   removed: "Zmizelo z nabídky",
   reactivated: "Znovu v nabídce",
   relisted: "Inzerát znovu vložen pod novým ID",
@@ -177,13 +178,16 @@ function priceLabel(members) {
 // vložený inzerát má staré ID zmizelé a nové aktivní).
 function sourcesByAvailability(members) {
   const active = new Map();
+  const reservedSources = new Set();
   for (const m of byPriority(members)) {
     active.set(m.source, (active.get(m.source) || false) || m.status !== "removed");
+    if (m.status === "reserved") reservedSources.add(m.source);
   }
   const label = (source) => SOURCE_LABELS[source] || source;
   return {
     live: [...active].filter(([, isActive]) => isActive).map(([source]) => label(source)),
     gone: [...active].filter(([, isActive]) => !isActive).map(([source]) => label(source)),
+    reserved: [...reservedSources].map(label),
   };
 }
 
@@ -363,10 +367,13 @@ function renderTable(db, filters) {
   const rows = filtered
     .map(({ g, rep, params, address, priceLabel: priceText_, status, firstSeenAt, change, changeWhere, starred, hidden }) => {
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
-      const { live, gone } = sourcesByAvailability(g.members);
+      const { live, gone, reserved } = sourcesByAvailability(g.members);
       // Když byt někde zmizel a jinde je, ukáže se to hned v řádku — "zmizelo
-      // z nabídky" na jednom portálu není zmizení z trhu.
+      // z nabídky" na jednom portálu není zmizení z trhu. Stejně tak kde je
+      // rezervovaný (jiný portál ho může dál nabízet jako volný).
       const sourceLabel = live.length ? live.join(" + ") : gone.join(" + ");
+      // Jen když rezervace není všude — jinak by to opakovalo odznak "Rezervováno".
+      const reservedNote = reserved.length && reserved.length < live.length ? ` <span class="reserved-note">· rezervováno: ${esc(reserved.join(" + "))}</span>` : "";
       const goneNote = live.length && gone.length ? ` <span class="gone-note">· zmizelo: ${esc(gone.join(" + "))}</span>` : "";
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
       const thumb = groupThumbnail(g.members);
@@ -390,7 +397,7 @@ function renderTable(db, filters) {
             <div class="row-updates">${updates}</div>
             <div class="row-meta">
               <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
-              <span class="muted">${esc(sourceLabel)}${linkBadge}${goneNote}</span>
+              <span class="muted">${esc(sourceLabel)}${linkBadge}${reservedNote}${goneNote}</span>
             </div>
           </div>
         </a>

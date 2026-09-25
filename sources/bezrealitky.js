@@ -104,6 +104,9 @@ async function fetchForLocation(loc, watch) {
       priceCzk: advert.price || null,
       address: advert['address({"locale":"CS"})'] || "",
       url: `https://www.bezrealitky.cz/nemovitosti-byty-domy/${advert.uri}`,
+      // Příznak rezervace z výpisu — hlídací pes ho nepoužívá, čte ho Trh
+      // bytů (../trh-bytu/).
+      reserved: advert.reserved === true,
     });
   }
   return items;

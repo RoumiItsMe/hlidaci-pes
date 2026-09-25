@@ -142,18 +142,20 @@ function addressParts(address) {
   return address
     .toLowerCase()
     .replace(/,?\s*okr(?:es)?\.?\s+[^,]+/g, "")
-    .split(",")
+    .split(/,| - /) // "Česká Třebová - Parník" je totéž co "Parník, Česká Třebová"
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
 // Přesná shoda adresy včetně ulice/části (aspoň 2 části, např. "Křib,
-// Česká Třebová") — jen město nestačí, to sdílí desítky bytů.
+// Česká Třebová") — jen město nestačí, to sdílí desítky bytů. Na pořadí
+// částí nezáleží: portály je řadí různě ("U Stadionu, Parník, Česká
+// Třebová" × "U Stadionu, Česká Třebová - Parník").
 function sameStreetAddress(a, b) {
   const pa = addressParts(a);
   const pb = addressParts(b);
   if (!pa || !pb || pa.length < 2 || pb.length < 2) return false;
-  return pa.length === pb.length && pa.every((part, i) => part === pb[i]);
+  return pa.length === pb.length && [...pa].sort().join("|") === [...pb].sort().join("|");
 }
 
 // Tentýž byt na DVOU RŮZNÝCH portálech, i bez shody v ceně. Popisy jsou
@@ -259,10 +261,16 @@ export function primaryListing(members) {
   return byPriority(members)[0];
 }
 
-/** V nabídce, pokud je aktivní ALESPOŇ na jednom portálu; jinak rezervováno; jinak zmizelo všude. */
+/**
+ * Rezervováno, pokud je rezervovaný ALESPOŇ na jednom portálu; jinak v
+ * nabídce, pokud je aktivní aspoň na jednom; jinak zmizelo všude.
+ * Rezervace má přednost před "aktivní", protože je to fakt o bytu, ne o
+ * portálu: jiný portál ho může dál nabízet jako volný (Sreality a Bazoš
+ * rezervaci ve výpisu neukazují, iDNES ano) a byt to nedělá volným.
+ */
 export function mergedStatus(members) {
-  if (members.some((m) => m.status === "active")) return "active";
   if (members.some((m) => m.status === "reserved")) return "reserved";
+  if (members.some((m) => m.status === "active")) return "active";
   return "removed";
 }
 
@@ -283,7 +291,7 @@ export function earliestFirstSeen(members) {
 // (přesně důvod, proč to hlídací pes taky nikdy nebral jako signál "nová
 // nabídka", viz sources/sreality.js). Appka věří jen tomu, co sama
 // zaznamenala.
-const CHANGE_EVENT_TYPES = new Set(["price_change", "removed", "reactivated", "reserved", "relisted"]);
+const CHANGE_EVENT_TYPES = new Set(["price_change", "removed", "reactivated", "reserved", "unreserved", "relisted"]);
 
 /**
  * Poslední skutečná změna napříč danými událostmi (viz CHANGE_EVENT_TYPES
