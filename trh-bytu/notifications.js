@@ -20,7 +20,9 @@
 //  - nová nabídka: byt, který appka dřív neznala (nejstarší inzerát skupiny
 //    je zaevidovaný po zapnutí této funkce — jinak by 100 bytů z prvního
 //    sběru bylo "nových").
-// Skryté byty nehlásí změny cen ani nové nabídky (uživatel je vyřadil).
+// Skryté byty (uživatel je vyřadil) hlásí rezervace a pohyb ceny — to jsou
+// informace o trhu, které chce vidět i u vyřazeného bytu — ale ne nové
+// nabídky (skrýt jde jen byt, který už uživatel viděl).
 
 import { groupListings, isHidden } from "./group.js";
 import { nowIso } from "./db.js";
@@ -125,8 +127,8 @@ export function buildNotifications(groups, events, { newSince }) {
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 
     notifications.push(...reservedNotifications(group, groupEvents));
-    if (isHidden(group.members)) continue;
     notifications.push(...priceNotifications(group, groupEvents));
+    if (isHidden(group.members)) continue;
     const newOffer = newOfferNotification(group, groupEvents, newSince);
     if (newOffer) notifications.push(newOffer);
   }

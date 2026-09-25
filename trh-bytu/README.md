@@ -367,8 +367,9 @@ Pravidla, ať zvoneček nezahltí šumem:
   z prvního sběru bylo "nových". Nová nabídka je jen byt, jehož NEJSTARŠÍ
   inzerát (napříč portály) appka zaevidovala až po tom; byt, který jiný portál
   znal dřív, novou nabídkou není.
-- **Skryté byty (✕)** změny cen ani nové nabídky nehlásí — uživatel je vyřadil.
-  **Rezervace hlásí i skryté** (viz "Vyřadit"), rezervace je vždy důležitá.
+- **Skryté byty (✕)** hlásí **rezervace i pohyb ceny** (viz "Vyřadit") — to
+  jsou informace o trhu, které chceš vidět i u vyřazeného bytu. Nehlásí jen
+  nové nabídky (skrýt jde jen byt, který jsi už viděl).
 - Upozornění se objeví po **dalším sběrném běhu**, který změnu uvidí (denně,
   případně po probuzení PC) — appka portály nesleduje průběžně.
 - Když rezervace mezitím skončila, upozornění to říká (*"nyní: V nabídce"*).
