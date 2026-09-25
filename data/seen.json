@@ -11,9 +11,9 @@
       "consecutiveFailures": 0
     },
     "byty:idnes": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "byty:realitymix": {
       "failing": false,
@@ -314,6 +314,10 @@
     },
     {
       "id": "6aad3c775a00e1ff90035f34",
+      "price": 2650000
+    },
+    {
+      "id": "6ab6147d6bf52a39a600ec90",
       "price": 2650000
     }
   ],
