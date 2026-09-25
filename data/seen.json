@@ -643,6 +643,10 @@
     {
       "id": "224196310",
       "price": null
+    },
+    {
+      "id": "224264446",
+      "price": 2650000
     }
   ],
   "pozemky-glamping:sreality": [
@@ -827,6 +831,10 @@
     {
       "id": "1068479",
       "price": 164800
+    },
+    {
+      "id": "1070995",
+      "price": 59000
     }
   ],
   "pozemky-glamping:idnes": [
@@ -1361,6 +1369,10 @@
     {
       "fingerprint": "39322_144",
       "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "59000_1809",
+      "source": "Bezrealitky.cz"
     }
   ]
 }
