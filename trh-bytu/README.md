@@ -259,9 +259,26 @@ aspoň jeden cenu nemá; dva inzeráty s různou cenou jsou vždy dva byty.
 
 V řádku se takový byt jmenuje **"… — cena na vyžádání"**; znamená to, že
 cena není na žádném z portálů zveřejněná (appka ji nemá odkud přečíst),
-ne že by se nevyčetla. Jakmile ji některý portál uvede, ukáže se (bere se
-z nejdůvěryhodnějšího portálu, který ji má). Skutečnou prodejní cenu si
+ne že by se nevyčetla. U Bazoše, který k takové ceně připisuje vlastní
+slovo, se ukáže i to: *"cena na vyžádání (Dohodou)"*, *(Nabídněte)*,
+*(V textu)*. Jakmile ji některý portál uvede, ukáže se cena (bere se z
+nejdůvěryhodnějšího portálu, který ji má). Skutečnou prodejní cenu si
 můžeš doplnit ručně v detailu bytu.
+
+**Cena z textu inzerátu.** Když portál cenu neuvádí, appka ji zkusí vyčíst
+z popisu (tvary jako "Cena: 3.950.000 Kč", "za cenu 2 990 000 kč",
+"cena 4 200 000,-", "cena 3,5 mil. Kč"; částka bez slova "cena" před
+sebou se nebere, stejně jako částky pod 300 000 Kč). Taková cena se
+v přehledu značí **"(z textu inzerátu)"**, protože text bývá zastaralý —
+reálný příklad: v popisu stojí 3 950 000 Kč, na portálech už je 3 750 000
+Kč (RK cenu snížila a text nechala). Bez zmínky ceny v textu (např. Bazoš
+"V textu" jen píše, že je inzerent ochotný se o ceně dohodnout) se nic
+nevymýšlí.
+
+**Byt na víc portálech se ukáže jednou** — data (adresa, popis, parametry)
+z nejdůvěryhodnějšího portálu, který je má, a fotky z kteréhokoli, který je
+má (Sreality fotky nedává, viz níž). V řádku je vidět, kde byt ještě je a kde
+už ne: *"Sreality.cz + Reality.iDNES.cz · zmizelo: RealityMIX.cz + Bazoš.cz"*.
 
 U bytu na víc portálech říká odznak "Poslední změna", **u kterých portálů**
 se změna stala (např. "Zmizelo z nabídky (Bazoš.cz + RealityMIX.cz)") —

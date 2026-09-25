@@ -91,7 +91,11 @@ async function processSource(db, source, watch) {
       // města zmíněný v popisu (viz parse.js).
       const disposition = parseDisposition(item.title) ?? parseDisposition(detail.description);
       const areaM2 = parseAreaM2(item.title) ?? parseAreaM2(detail.description);
-      const priceCzk = item.priceCzk ?? parsePriceFromDescription(detail.description);
+      // Cena z popisu jen tam, kde ji portál vůbec neuvedl — a značí se
+      // (price_from_text), protože text bývá zastaralý (RK sníží cenu u
+      // inzerátu a v textu nechá původní; viz README).
+      const textPrice = item.priceCzk == null ? parsePriceFromDescription(detail.description) : null;
+      const priceCzk = item.priceCzk ?? textPrice;
       const address = item.address || parseAddressFromTitle(item.title) || findKnownPlace(detail.description, watch) || null;
 
       insertListing(db, {
@@ -109,6 +113,7 @@ async function processSource(db, source, watch) {
         first_seen_at: now,
         last_seen_at: now,
         params_json: JSON.stringify(detail.params || {}),
+        price_from_text: textPrice != null,
       });
       insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: priceCzk, occurred_at: now });
       createdThisRun.push({ id: listingId, disposition, area_m2: areaM2, description: detail.description, price_czk: priceCzk });

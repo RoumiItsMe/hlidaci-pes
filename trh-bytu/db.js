@@ -71,6 +71,7 @@ const COLUMN_MIGRATIONS = [
   { table: "listings", column: "starred", ddl: "INTEGER NOT NULL DEFAULT 0" },
   { table: "listings", column: "replaced_by", ddl: "TEXT" }, // ID inzerátu, který tenhle nahradil při opětovném vložení na portálu, viz relist.js
   { table: "listings", column: "missed_since", ddl: "TEXT" }, // kdy se inzerát poprvé nenašel ve výpisu; "zmizel" se potvrdí až dalším během, viz relist.js
+  { table: "listings", column: "price_from_text", ddl: "INTEGER NOT NULL DEFAULT 0" }, // 1 = cenu portál neuvedl, appka ji vyčetla z popisu (může být zastaralá)
 ];
 
 function runMigrations(db) {
@@ -106,8 +107,8 @@ export function insertListing(db, listing) {
   db.prepare(
     `INSERT INTO listings
       (id, source, source_id, url, title, disposition, area_m2, address, description,
-       price_czk, status, first_seen_at, last_seen_at, removed_at, params_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       price_czk, status, first_seen_at, last_seen_at, removed_at, params_json, price_from_text)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     listing.id,
     listing.source,
@@ -123,7 +124,8 @@ export function insertListing(db, listing) {
     listing.first_seen_at,
     listing.last_seen_at,
     listing.removed_at ?? null,
-    listing.params_json ?? null
+    listing.params_json ?? null,
+    listing.price_from_text ? 1 : 0
   );
 }
 

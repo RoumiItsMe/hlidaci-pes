@@ -247,7 +247,7 @@ function sourceRank(source) {
 }
 
 /** Členové skupiny seřazení podle důvěryhodnosti zdroje (viz SOURCE_PRIORITY), s deterministickým rozstřelem podle ID. */
-function byPriority(members) {
+export function byPriority(members) {
   return [...members].sort((a, b) => sourceRank(a.source) - sourceRank(b.source) || a.id.localeCompare(b.id));
 }
 
@@ -344,8 +344,12 @@ export function bestAddress(members) {
  * appka cenu zná. `null`, když ji nemá žádný člen skupiny.
  */
 export function bestPrice(members) {
-  const withPrice = byPriority(members).find((m) => m.price_czk != null);
-  return withPrice ? withPrice.price_czk : null;
+  return bestPriceListing(members)?.price_czk ?? null;
+}
+
+/** Inzerát, ze kterého `bestPrice` bere cenu (kvůli příznaku "cena z textu"), nebo null. */
+export function bestPriceListing(members) {
+  return byPriority(members).find((m) => m.price_czk != null) || null;
 }
 
 // Skrytí (křížek) a TOP (hvězdička) jsou uživatelovy vlastní příznaky, ne

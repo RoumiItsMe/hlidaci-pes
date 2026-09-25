@@ -7,9 +7,9 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, latestChange, isStarred, isHidden } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
-import { extractCity } from "./parse.js";
+import { extractCity, parsePriceNote } from "./parse.js";
 import { watches } from "../config.js";
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
@@ -151,13 +151,40 @@ function layout(title, body) {
 // Adresa (viz group.js bestAddress) je u většiny portálů už "ulice, město"
 // (nebo jen "město", když ulici portál/appka nezná — fail-soft, žádná
 // nabídka kvůli chybějící adrese nezmizí, jen bude titulek o kousek kratší.
-function cardTitle(rep, address, price) {
+function cardTitle(rep, address, priceLabelText) {
   const specs = [rep.disposition, rep.area_m2 ? `${rep.area_m2} m²` : null].filter(Boolean).join(", ");
   const head = specs ? `Byt ${specs}` : "Byt";
   const addressPart = address ? `, ${address}` : "";
-  // Cena bez čísla je věc portálů (RK ji neuvádí), ne chybějící údaj — proto
-  // se píše výslovně, ne jako pomlčka, která vypadá jako chyba appky.
-  return `${head}${addressPart} — ${price == null ? "cena na vyžádání" : formatCzk(price)}`;
+  return `${head}${addressPart} — ${priceLabelText}`;
+}
+
+// Cena skupiny slovy pro titulek a detail. Cena bez čísla je věc portálů
+// (RK ji neuvádí), ne chybějící údaj — proto se píše výslovně ("cena na
+// vyžádání", u Bazoše i jeho vlastními slovy: Dohodou / Nabídněte / V
+// textu), ne jako pomlčka, která vypadá jako chyba appky. Cena vyčtená z
+// popisu se značí, protože text bývá zastaralý (RK cenu u inzerátu sníží a
+// v textu nechá původní).
+function priceLabel(members) {
+  const listing = bestPriceListing(members);
+  if (listing) return formatCzk(listing.price_czk) + (listing.price_from_text ? " (z textu inzerátu)" : "");
+  const notes = [...new Set(members.map((m) => parsePriceNote(m.title)).filter(Boolean))];
+  return `cena na vyžádání${notes.length ? ` (${notes.join(", ")})` : ""}`;
+}
+
+// Portály seskupené podle toho, jestli tam byt ještě je: "Sreality.cz +
+// Reality.iDNES.cz" a zvlášť "zmizelo: Bazoš.cz + RealityMIX.cz". Portál
+// se počítá jako aktivní, když je aktivní aspoň jeden jeho inzerát (znovu
+// vložený inzerát má staré ID zmizelé a nové aktivní).
+function sourcesByAvailability(members) {
+  const active = new Map();
+  for (const m of byPriority(members)) {
+    active.set(m.source, (active.get(m.source) || false) || m.status !== "removed");
+  }
+  const label = (source) => SOURCE_LABELS[source] || source;
+  return {
+    live: [...active].filter(([, isActive]) => isActive).map(([source]) => label(source)),
+    gone: [...active].filter(([, isActive]) => !isActive).map(([source]) => label(source)),
+  };
 }
 
 // Kompaktní shrnutí parametrů pro řádek přehledu — plná tabulka se všemi
@@ -267,6 +294,7 @@ function renderTable(db, filters) {
       params: mergeParams(g.members),
       address: bestAddress(g.members),
       price: bestPrice(g.members),
+      priceLabel: priceLabel(g.members),
       status: mergedStatus(g.members),
       firstSeenAt,
       change,
@@ -333,9 +361,13 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, price, status, firstSeenAt, change, changeWhere, starred, hidden }) => {
+    .map(({ g, rep, params, address, priceLabel: priceText_, status, firstSeenAt, change, changeWhere, starred, hidden }) => {
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
-      const sourceLabel = [...new Set(g.members.map((m) => SOURCE_LABELS[m.source] || m.source))].join(" + ");
+      const { live, gone } = sourcesByAvailability(g.members);
+      // Když byt někde zmizel a jinde je, ukáže se to hned v řádku — "zmizelo
+      // z nabídky" na jednom portálu není zmizení z trhu.
+      const sourceLabel = live.length ? live.join(" + ") : gone.join(" + ");
+      const goneNote = live.length && gone.length ? ` <span class="gone-note">· zmizelo: ${esc(gone.join(" + "))}</span>` : "";
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
       const thumb = groupThumbnail(g.members);
       const photo = thumb
@@ -352,13 +384,13 @@ function renderTable(db, filters) {
         <a class="row-link" href="/byt/${encodeURIComponent(rep.id)}">
           <div class="row-photo">${photo}</div>
           <div class="row-body">
-            <div class="row-title">${starred ? "⭐ " : ""}${esc(cardTitle(rep, address, price))}</div>
+            <div class="row-title">${starred ? "⭐ " : ""}${esc(cardTitle(rep, address, priceText_))}</div>
             ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
             ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
             <div class="row-updates">${updates}</div>
             <div class="row-meta">
               <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
-              <span class="muted">${esc(sourceLabel)}${linkBadge}</span>
+              <span class="muted">${esc(sourceLabel)}${linkBadge}${goneNote}</span>
             </div>
           </div>
         </a>
@@ -422,7 +454,7 @@ function renderDetail(db, id) {
     })
     .join("");
 
-  const sourceLinks = members
+  const sourceLinks = byPriority(members)
     .map((m) => {
       const mst = STATUS_LABELS[m.status] || { text: m.status, color: "#000" };
       return `<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(SOURCE_LABELS[m.source] || m.source)} ↗</a> <span class="badge small" style="background:${mst.color}">${esc(mst.text)}</span></li>`;
@@ -466,7 +498,7 @@ function renderDetail(db, id) {
       ${group.merged ? `· nalezeno na ${new Set(members.map((m) => m.source)).size} portálech` : ""}
     </p>
     <ul class="source-links">${sourceLinks}</ul>
-    <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${priceText(bestPrice(members))}</p>
+    <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${esc(priceLabel(members))}</p>
     <p>${esc(address)}</p>
     <div class="row-updates">${updates}</div>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}

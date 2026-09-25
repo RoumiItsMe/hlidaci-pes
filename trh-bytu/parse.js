@@ -37,16 +37,47 @@ export function parseAreaM2(text) {
 // proti omylem chycené ceně "za m²" (desítky tisíc) místo celkové ceny
 // bytu (statisíce/miliony) — byt levnější než 300 tis. Kč se v regionu
 // nevyskytuje.
-const PRICE_IN_TEXT_RE = /cena\s*:?\s*([\d][\d.,\s]{3,}\d)\s*k[čc]/i;
+//
+// Rozpoznávané tvary: "Cena: 3.950.000 Kč", "za cenu 2 990 000kč",
+// "prodejní cena 4 200 000,- Kč", "cena k jednání 3 400 000 Kč", "cena
+// 3500000 Kč" a "cena 3,5 mil. Kč" — vždy slovo "cena" (v libovolném
+// pádu) a do 25 znaků za ním částka s Kč / ,- / CZK / mil. Částka bez
+// "cena" před sebou (kauce, poplatky, splátky) se záměrně neberou.
+const PRICE_IN_TEXT_RE = /cen(?:a|u|ě|y|ou)[^\d\n]{0,25}?(\d{1,3}(?:[ . ]\d{3}){1,2}|\d{6,8})\s*(?:,-|kč|kc|czk)/gi;
+const PRICE_MILLIONS_RE = /cen(?:a|u|ě|y|ou)[^\d\n]{0,25}?(\d{1,2}(?:[,.]\d{1,2})?)\s*mil/gi;
+const MIN_PLAUSIBLE_PRICE_CZK = 300_000;
 
 /** Vytáhne zmínku ceny z volného textu (viz komentář výš), nebo null. */
 export function parsePriceFromDescription(text) {
-  const m = text?.match(PRICE_IN_TEXT_RE);
-  if (!m) return null;
-  const digits = m[1].replace(/[^\d]/g, "");
-  if (!digits) return null;
-  const val = parseInt(digits, 10);
-  return Number.isFinite(val) && val >= 300_000 ? val : null;
+  if (!text) return null;
+  for (const m of text.matchAll(PRICE_IN_TEXT_RE)) {
+    const val = parseInt(m[1].replace(/[^\d]/g, ""), 10);
+    if (Number.isFinite(val) && val >= MIN_PLAUSIBLE_PRICE_CZK) return val;
+  }
+  for (const m of text.matchAll(PRICE_MILLIONS_RE)) {
+    const val = Math.round(parseFloat(m[1].replace(",", ".")) * 1_000_000);
+    if (Number.isFinite(val) && val >= MIN_PLAUSIBLE_PRICE_CZK) return val;
+  }
+  return null;
+}
+
+// Bazoš připisuje k titulku inzerátu bez číselné ceny její slovní podobu:
+// "Prodej bytu 3+1, Letohrad: Dohodou", "...: Nabídněte", "...: V textu",
+// "...: Zdarma". Je to jediný portál, který u ceny bez čísla řekne víc než
+// "na vyžádání" — appka to ukazuje v přehledu, ať je jasné, že cenu
+// portál neuvádí (a jak ji inzerent popisuje), a z adresy se to odstraňuje
+// (dovětek by jinak skončil v "adrese").
+const PRICE_NOTE_RE = /:\s*(Dohodou|V textu|Nabídněte|Zdarma|Na vyžádání|Info v RK)\s*$/i;
+
+/** Slovní podoba ceny z titulku (Bazoš), např. "Dohodou", nebo null. */
+export function parsePriceNote(title) {
+  const m = title?.match(PRICE_NOTE_RE);
+  return m ? m[1] : null;
+}
+
+/** Text bez slovního dovětku o ceně (viz parsePriceNote). */
+export function stripPriceNote(text) {
+  return text ? text.replace(PRICE_NOTE_RE, "").trim() : text;
 }
 
 /**
@@ -75,7 +106,7 @@ const ADDRESS_AFTER_AREA_RE = /m[²2]\s*,\s*(.+)$/i;
 /** Vytáhne lokalitu/adresu z konce titulku (viz komentář výš), nebo null. */
 export function parseAddressFromTitle(title) {
   const m = title?.match(ADDRESS_AFTER_AREA_RE);
-  return m ? m[1].trim() : null;
+  return m ? stripPriceNote(m[1].trim()) : null;
 }
 
 // Kraj/okres v adrese je pro filtr "město" šum, ne hodnota ("Pardubický
