@@ -10,7 +10,7 @@ import { openDb, DATA_DIR } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden } from "./group.js";
 import { PARAM_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
-import { reservationNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
+import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { watches } from "../config.js";
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
@@ -134,9 +134,10 @@ function rowActionButtons(id, starred, hidden) {
 }
 
 function layout(title, body) {
-  // Zvoneček: počet nepřečtených upozornění na rezervace (viz notifications.js).
-  const unread = countUnread(reservationNotifications(db), getNotificationsSeenAt(db));
-  const bell = `<a href="/upozorneni" class="bell" title="${unread ? `Nepřečtená upozornění na rezervace: ${unread}` : "Upozornění na rezervace"}">🔔${unread ? `<span class="bell-badge">${unread}</span>` : ""}</a>`;
+  // Zvoneček: počet nepřečtených upozornění — rezervace, změny cen, nové
+  // nabídky (viz notifications.js).
+  const unread = countUnread(getNotifications(db), getNotificationsSeenAt(db));
+  const bell = `<a href="/upozorneni" class="bell" title="${unread ? `Nepřečtená upozornění: ${unread}` : "Upozornění (rezervace, změny cen, nové nabídky)"}">🔔${unread ? `<span class="bell-badge">${unread}</span>` : ""}</a>`;
   return `<!doctype html>
 <html lang="cs">
 <head>
@@ -533,13 +534,33 @@ function renderDetail(db, id) {
     </form>`;
 }
 
-// Stránka zvonečku: všechna upozornění na rezervace, nepřečtená zvýrazněná.
-// Zobrazení stránky je NEoznačí jako přečtená — to dělá až tlačítko, ať
-// upozornění nezmizí jen proto, že se stránka omylem otevřela.
-function renderNotifications(db) {
-  const notifications = reservationNotifications(db);
+const NOTIFICATION_TYPES = {
+  reserved: { icon: "🔒", label: "Rezervace", empty: "Zatím žádná rezervace nebyla zaznamenána." },
+  price: { icon: "💰", label: "Změny cen", empty: "Zatím žádná změna ceny nebyla zaznamenána." },
+  new: { icon: "🆕", label: "Nové nabídky", empty: "Zatím žádná nová nabídka (sledují se od zapnutí upozornění)." },
+};
+
+// Věta o tom, co se stalo (druhá řádka upozornění).
+function notificationHeadline(n) {
+  if (n.type === "price") {
+    const { oldPrice, newPrice } = n.detail;
+    const diff =
+      oldPrice != null && newPrice != null
+        ? ` (${newPrice < oldPrice ? "−" : "+"}${formatCzk(Math.abs(newPrice - oldPrice))})`
+        : "";
+    return `Změna ceny: ${priceText(oldPrice)} → ${priceText(newPrice)}${diff}`;
+  }
+  return n.type === "reserved" ? "Rezervováno" : "Nová nabídka";
+}
+
+// Stránka zvonečku: rezervace, změny cen a nové nabídky, nepřečtená
+// zvýrazněná. Zobrazení stránky je NEoznačí jako přečtená — to dělá až
+// tlačítko, ať upozornění nezmizí jen proto, že se stránka omylem otevřela.
+function renderNotifications(db, typeFilter) {
+  const all = getNotifications(db);
   const seenAt = getNotificationsSeenAt(db);
-  const unread = countUnread(notifications, seenAt);
+  const unread = countUnread(all, seenAt);
+  const notifications = typeFilter && NOTIFICATION_TYPES[typeFilter] ? all.filter((n) => n.type === typeFilter) : all;
 
   const items = notifications
     .map((n) => {
@@ -550,22 +571,31 @@ function renderNotifications(db) {
       const sources = [...n.sources].map((s) => SOURCE_LABELS[s] || s).join(" + ");
       // Rezervace mohla mezitím skončit (zrušená, byt prodán/stažen) — ať to
       // upozornění neklame.
-      const now = status === "reserved" ? "" : ` · <em>nyní: ${esc((STATUS_LABELS[status] || { text: status }).text)}</em>`;
+      const now = n.type === "reserved" && status !== "reserved" ? ` · <em>nyní: ${esc((STATUS_LABELS[status] || { text: status }).text)}</em>` : "";
       return `<a class="notif${n.occurredAt > seenAt ? " notif--new" : ""}" href="/byt/${encodeURIComponent(rep.id)}">
-        <span class="notif-title">🔔 ${esc(title)}</span>
-        <span class="notif-meta">Rezervováno · ${esc(formatDate(n.occurredAt))} · ${esc(sources)}${now}</span>
+        <span class="notif-title">${NOTIFICATION_TYPES[n.type].icon} ${esc(title)}</span>
+        <span class="notif-meta">${esc(notificationHeadline(n))} · ${esc(formatDate(n.occurredAt))} · ${esc(sources)}${now}</span>
       </a>`;
     })
     .join("");
 
+  const pills = [["", "Vše"], ...Object.entries(NOTIFICATION_TYPES).map(([key, t]) => [key, t.label])]
+    .map(([key, label]) => {
+      const count = key ? all.filter((n) => n.type === key).length : all.length;
+      return `<a class="filter ${(typeFilter || "") === key ? "active" : ""}" href="/upozorneni${key ? `?typ=${key}` : ""}">${esc(label)} (${count})</a>`;
+    })
+    .join("");
+
+  const empty = typeFilter && NOTIFICATION_TYPES[typeFilter] ? NOTIFICATION_TYPES[typeFilter].empty : "Zatím žádná upozornění.";
   return `
-    <h1>Upozornění na rezervace</h1>
+    <h1>Upozornění</h1>
+    <div class="filters">${pills}</div>
     ${
       unread
         ? `<form method="post" action="/upozorneni/precteno" class="mark-read-form"><button type="submit">Označit vše jako přečtené (${unread})</button></form>`
         : ""
     }
-    <div class="notifs">${items || `<p class="empty">Zatím žádná rezervace nebyla zaznamenána.</p>`}</div>`;
+    <div class="notifs">${items || `<p class="empty">${esc(empty)}</p>`}</div>`;
 }
 
 function renderStats(db) {
@@ -668,7 +698,7 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/upozorneni" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Upozornění — Trh bytů", renderNotifications(db)));
+    return res.end(layout("Upozornění — Trh bytů", renderNotifications(db, url.searchParams.get("typ"))));
   }
 
   if (url.pathname === "/upozorneni/precteno" && req.method === "POST") {

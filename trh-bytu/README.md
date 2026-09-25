@@ -338,24 +338,43 @@ detailu Sreality), stav se nemění — chybějící informace rezervaci ani
 nevytvoří, ani nezruší. Datum události je okamžik, kdy ji appka poprvé
 uviděla (ne kdy ji zadala RK).
 
-## Zvoneček (upozornění na rezervace)
+## Zvoneček (upozornění)
 
-V hlavičce appky je **🔔** — červené číslo u něj říká, kolik bytů bylo
-rezervováno od doby, kdy jsi upozornění naposledy přečetl. Klik otevře
-stránku **Upozornění na rezervace** (`/upozorneni`): všechny zaznamenané
-rezervace od nejnovější, nepřečtené zvýrazněné, u každé byt (s cenou / poslední
-známou cenou), kdy a na kterém portálu se rezervace objevila; klik vede na
-detail bytu. Tlačítko **"Označit vše jako přečtené"** zvoneček vynuluje —
-samotné otevření stránky upozornění nepřečte, ať žádné nezmizí omylem.
+V hlavičce appky je **🔔** — červené číslo u něj říká, kolik upozornění
+přibylo od doby, kdy jsi je naposledy přečetl. Klik otevře stránku
+**Upozornění** (`/upozorneni`): všechna upozornění od nejnovějšího,
+nepřečtená zvýrazněná, u každého byt (s cenou / poslední známou cenou), co se
+stalo, kdy a na kterém portálu; klik vede na detail bytu. Pilulky nahoře
+filtrují podle druhu. Tlačítko **"Označit vše jako přečtené"** zvoneček
+vynuluje — samotné otevření stránky upozornění nepřečte, ať žádné nezmizí
+omylem.
 
-- **Jeden byt = jedno upozornění**, i když je rezervovaný na třech portálech
-  (události z jednoho sběrného běhu se slučují).
-- Upozornění se objeví po **dalším sběrném běhu**, který rezervaci uvidí
-  (denně, případně po probuzení PC) — appka portály nesleduje průběžně.
+Tři druhy upozornění:
+
+| | Kdy vznikne |
+|---|---|
+| 🔒 **Rezervace** | byt přešel z "nerezervovaný" na "rezervovaný" (na kterémkoli portálu) |
+| 💰 **Změna ceny** | byt má novou cenu — "3 900 000 Kč → 3 800 000 Kč (−100 000 Kč)"; i "cena → na vyžádání" u znovu vloženého inzerátu |
+| 🆕 **Nová nabídka** | byt, který appka dřív neznala |
+
+Pravidla, ať zvoneček nezahltí šumem:
+
+- **Jeden byt = jedno upozornění**, i když se změna projeví na třech
+  portálech (události z jednoho sběrného běhu se slučují). A vždy jen **nová
+  informace**: když další portál později "dožene" rezervaci nebo cenu, kterou
+  appka už hlásila, nové upozornění nevzniká.
+- **Nové nabídky se sledují od zapnutí upozornění** — jinak by zhruba 100 bytů
+  z prvního sběru bylo "nových". Nová nabídka je jen byt, jehož NEJSTARŠÍ
+  inzerát (napříč portály) appka zaevidovala až po tom; byt, který jiný portál
+  znal dřív, novou nabídkou není.
+- **Skryté byty (✕)** změny cen ani nové nabídky nehlásí — uživatel je vyřadil.
+  **Rezervace hlásí i skryté** (viz "Vyřadit"), rezervace je vždy důležitá.
+- Upozornění se objeví po **dalším sběrném běhu**, který změnu uvidí (denně,
+  případně po probuzení PC) — appka portály nesleduje průběžně.
 - Když rezervace mezitím skončila, upozornění to říká (*"nyní: V nabídce"*).
 - Zvoneček hlásí i **nově nalezený byt, který už je rezervovaný**.
-- Přečteno/nepřečteno je jediný údaj navíc, co se ukládá (tabulka `app_state`);
-  samotná upozornění se počítají z historie událostí bytů.
+- Přečteno/nepřečteno a "nové od" jsou jediné údaje navíc, co se ukládají
+  (tabulka `app_state`); samotná upozornění se počítají z historie událostí.
 
 ## Vědomá omezení (v1)
 
