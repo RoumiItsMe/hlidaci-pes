@@ -1137,7 +1137,7 @@
     },
     {
       "id": "223563299",
-      "price": 275496
+      "price": 247947
     },
     {
       "id": "223567892",
@@ -1402,6 +1402,10 @@
     {
       "fingerprint": "59000_1809",
       "source": "Bezrealitky.cz"
+    },
+    {
+      "fingerprint": "247947_494",
+      "source": "Bazoš.cz"
     }
   ],
   "board:usti-nad-orlici": [
