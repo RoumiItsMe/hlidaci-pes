@@ -71,9 +71,9 @@
       "consecutiveFailures": 0
     },
     "board:lanskroun": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     }
   },
   "byty:sreality": [
