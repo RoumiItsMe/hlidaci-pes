@@ -11,11 +11,22 @@
 //               stránku, jde zvednout přes `?limit=`.
 //  - "ginis"  — GINIS Úřední deska (Lanškroun, ude.ginis.cloud): celý seznam
 //               vyvěšených dokumentů na jediné stránce, bez stránkování.
+//  - "edesky" — agregátor edesky.cz: jedním dotazem dokumenty ze VŠECH desek
+//               okresu (obce jsou jeho podřízené desky). Slouží pro drobné
+//               obce, jejichž vlastní weby by bylo nutné číst jeden po druhém.
 //
 // Všechny parsery vrací totéž: `{ id, title, description, category, url,
-// postedFrom, postedTo }`. `id` je stabilní v rámci desky (slouží k dedup),
-// data jsou ISO `YYYY-MM-DD` (nebo null). Parsery jsou čisté funkce nad HTML
-// (bez sítě), ať jdou testovat nad uloženými stránkami.
+// postedFrom, postedTo }` (+ volitelně `attachmentUrl`; u edesky navíc
+// `viaEdesky`, `sourceLabel`, `sourceBoardId`, `tags`). `id` je stabilní v
+// rámci desky (slouží k dedup), data jsou ISO `YYYY-MM-DD` (nebo null).
+// Parsery jsou čisté funkce nad HTML (bez sítě), ať jdou testovat nad
+// uloženými stránkami.
+//
+// edesky.cz: datum u dokumentu je "Načteno" (kdy ho agregátor stáhl), ne kdy
+// ho obec vyvěsila — nový dokument tedy může být ve skutečnosti starý (hlavně
+// když agregátor začne číst novou desku a načte celou historii, viz pojistka
+// proti hromadnému načtení v lib/boards-runner.js). Datum vyvěšení "do" se
+// nezjistí vůbec a přílohy jsou pro roboty zakázané (robots.txt).
 //
 // Portály se občas předělají — když parser najde nula oznámení, `fetchBoardNotices`
 // to hlásí jako chybu (viz níže) místo aby "žádné nové oznámení" tiše
@@ -121,6 +132,8 @@ export function parseJoomla(html, baseUrl) {
       description: "",
       category: clean($tr.find("td.list-category").text()),
       url: absoluteUrl(href, baseUrl),
+      // Sloupec "Dokument" ("zde") vede na PDF s vlastním textem oznámení.
+      attachmentUrl: absoluteUrl($tr.find('td a[target="_blank"]').first().attr("href") ?? "", baseUrl) ?? undefined,
       postedFrom: dates[0] ?? null,
       postedTo: dates[1] ?? null,
     });
@@ -162,6 +175,79 @@ export function parseGinis(html, baseUrl) {
   return notices;
 }
 
+// --------------------------------------------------------------- edesky ---
+
+/**
+ * edesky.cz: řádek výpisu `/dokumenty` = jeden dokument. Odkaz na zdroj
+ * (`itemprop=affiliation`) nese název a ID desky obce, odkaz na dokument
+ * (`itemprop=url`) jeho číselné ID.
+ */
+export function parseEdesky(html) {
+  const $ = cheerio.load(html);
+  const notices = [];
+  $("tr").each((_, tr) => {
+    const $tr = $(tr);
+    const $doc = $tr.find("a[itemprop=url]").first();
+    const $source = $tr.find("a[itemprop=affiliation]").first();
+    const docId = $doc.attr("href")?.match(/\/dokument\/(\d+)/)?.[1];
+    const title = clean($doc.text());
+    if (!docId || !title) return;
+    notices.push({
+      id: `e${docId}`,
+      title,
+      description: "",
+      category: "",
+      url: `https://edesky.cz/d/${docId}`,
+      postedFrom: $tr.find("time").attr("datetime") ?? null, // "Načteno", ne datum vyvěšení
+      postedTo: null,
+      viaEdesky: true,
+      sourceLabel: clean($source.text()) || null,
+      sourceBoardId: Number($source.attr("href")?.match(/\/desky\/(\d+)-/)?.[1]) || null,
+    });
+  });
+  return notices;
+}
+
+const EDESKY_PAGE_DELAY_MS = 300;
+// První běh čte hlouběji (cca 2–3 týdny dokumentů ~ 30 denně), ať se hned
+// nahlásí i oznámení vyvěšená před zapnutím sledování. Běžný běh stačí jedna
+// stránka (25 dokumentů ≈ den provozu okresu).
+const EDESKY_DEEP_PAGES = 16;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchEdesky(board, { deep }) {
+  const base = `https://edesky.cz/dokumenty?zdroj=${board.edeskyId}`;
+  const byId = new Map();
+
+  const pages = deep ? EDESKY_DEEP_PAGES : 1;
+  for (let page = 1; page <= pages; page++) {
+    const rows = parseEdesky(await fetchText(`${base}&page=${page}`, { timeoutMs: 30_000 }));
+    if (rows.length === 0) {
+      if (page === 1) throw new Error(`Na edesky.cz nebyl nalezen žádný dokument (změnila se struktura stránky?): ${base}`);
+      break; // hlubší stránky došly
+    }
+    for (const notice of rows) byId.set(notice.id, notice);
+    if (page < pages) await sleep(EDESKY_PAGE_DELAY_MS);
+  }
+
+  // Agregátor dokumenty třídí podle obsahu příloh — tag "Dražby" zachytí i
+  // dražbu s nic neříkajícím názvem, kterou by filtr z názvu minul.
+  await sleep(EDESKY_PAGE_DELAY_MS);
+  const drazby = parseEdesky(await fetchText(`${base}&tag=${encodeURIComponent("Dražby")}&page=1`, { timeoutMs: 30_000 }));
+  for (const notice of drazby) {
+    const existing = byId.get(notice.id) ?? notice;
+    existing.tags = [...new Set([...(existing.tags ?? []), "Dražby"])];
+    byId.set(existing.id, existing);
+  }
+
+  // Města, která se čtou přímo z jejich vlastní desky, tu nejsou podruhé.
+  const skip = new Set(board.skipBoardIds ?? []);
+  return [...byId.values()].filter((notice) => !skip.has(notice.sourceBoardId));
+}
+
 // ---------------------------------------------------------------- fetch ---
 
 function listUrl(board) {
@@ -182,9 +268,11 @@ const PARSERS = { vismo: parseVismo, joomla: parseJoomla, ginis: parseGinis };
 /**
  * Stáhne poslední oznámení z desky obce. Nula oznámení = chyba (deska obce
  * není nikdy skutečně prázdná, takže je to skoro jistě změna struktury
- * stránky, ne "nic nového").
+ * stránky, ne "nic nového"). `deep` (první běh desky) čte hlouběji do
+ * historie — týká se jen edesky, ostatní desky vrací vždy celé okno.
  */
-export async function fetchBoardNotices(board) {
+export async function fetchBoardNotices(board, { deep = false } = {}) {
+  if (board.type === "edesky") return fetchEdesky(board, { deep });
   const url = listUrl(board);
   const html = await fetchText(url, { timeoutMs: 30_000 });
   const notices = PARSERS[board.type](html, url);

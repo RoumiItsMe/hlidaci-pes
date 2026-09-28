@@ -5,7 +5,7 @@
 // (data/seen.json), a pošle notifikaci na Telegram o:
 //  (a) nových inzerátech,
 //  (b) změně ceny u inzerátů, které už dřív sledoval.
-// Nakonec projde i úřední desky okolních měst (záměr prodeje bytu, dražby…) —
+// Nakonec projde i úřední desky obcí okresu Ústí nad Orlicí (záměr prodeje bytu, dražby…) —
 // to je samostatná věc s vlastním stavem a filtrem, viz lib/boards-runner.js.
 //
 // Při úplně prvním běhu pro danou dvojici (sledování, zdroj) — žádný

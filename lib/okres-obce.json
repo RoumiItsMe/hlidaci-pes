@@ -1,0 +1,462 @@
+{
+ "100": {
+  "name": "Město Ústí nad Orlicí",
+  "web": "http://ustinadorlici.cz"
+ },
+ "126": {
+  "name": "Obec Čenkovice",
+  "web": "http://alis.cz"
+ },
+ "131": {
+  "name": "Město Česká Třebová",
+  "web": "http://ceska-trebova.cz"
+ },
+ "215": {
+  "name": "Město Vysoké Mýto",
+  "web": "http://vysoke-myto.cz"
+ },
+ "229": {
+  "name": "Město Lanškroun",
+  "web": "http://ude.ginis.cloud"
+ },
+ "238": {
+  "name": "Město Choceň",
+  "web": "http://chocen-mesto.cz"
+ },
+ "299": {
+  "name": "Město Letohrad",
+  "web": "http://letohrad.eu"
+ },
+ "381": {
+  "name": "Město Králíky",
+  "web": "http://kraliky.eu"
+ },
+ "442": {
+  "name": "Město Jablonné nad Orlicí",
+  "web": "http://imunis.cz"
+ },
+ "612": {
+  "name": "Město Brandýs nad Orlicí",
+  "web": "http://mesto-brandys.cz"
+ },
+ "698": {
+  "name": "Městys Dolní Čermná",
+  "web": "http://dolni-cermna.cz"
+ },
+ "734": {
+  "name": "Městys Kunvald",
+  "web": "http://kunvald.info"
+ },
+ "1080": {
+  "name": "Obec Červená Voda",
+  "web": "http://cervenavoda.cz"
+ },
+ "1110": {
+  "name": "Obec Dolní Dobrouč",
+  "web": "http://dolnidobrouc.cz"
+ },
+ "1196": {
+  "name": "Město Žamberk",
+  "web": "http://zamberk.cz"
+ },
+ "1325": {
+  "name": "Obec Rudoltice",
+  "web": "http://rudoltice.cz"
+ },
+ "1422": {
+  "name": "Obec Libchavy",
+  "web": "http://libchavy.cz"
+ },
+ "1620": {
+  "name": "Obec Dlouhá Třebová",
+  "web": "http://dlouhatrebova.cz"
+ },
+ "1732": {
+  "name": "Obec Bystřec",
+  "web": "http://bystrec.cz"
+ },
+ "1736": {
+  "name": "Obec Lukavice",
+  "web": "http://obeclukavice.cz"
+ },
+ "1888": {
+  "name": "Obec Horní Čermná",
+  "web": "http://alis.cz"
+ },
+ "1896": {
+  "name": "Obec Žichlínek",
+  "web": "http://www.zichlinek.eu"
+ },
+ "1972": {
+  "name": "Obec Hnátnice",
+  "web": "http://hnatnice.cz"
+ },
+ "1984": {
+  "name": "Obec Výprachtice",
+  "web": "http://obec-vyprachtice.cz"
+ },
+ "2012": {
+  "name": "Obec Nekoř",
+  "web": "http://nekor.cz"
+ },
+ "2062": {
+  "name": "Obec Sopotnice",
+  "web": "http://obecsopotnice.cz"
+ },
+ "2082": {
+  "name": "Obec Klášterec nad Orlicí",
+  "web": "http://klasterecnadorlici.cz"
+ },
+ "2088": {
+  "name": "Obec Tatenice",
+  "web": "https://www.tatenice.cz/"
+ },
+ "2107": {
+  "name": "Obec Rybník",
+  "web": "http://rybnik.cz"
+ },
+ "2113": {
+  "name": "Obec Dlouhoňovice",
+  "web": "http://www.dlouhonovice.cz/"
+ },
+ "2224": {
+  "name": "Obec Vraclav",
+  "web": "http://obecvraclav.cz"
+ },
+ "2243": {
+  "name": "Obec Záchlumí",
+  "web": "http://obeczachlumi.cz"
+ },
+ "2252": {
+  "name": "Obec Luková",
+  "web": "https://www.lukova.cz/"
+ },
+ "2272": {
+  "name": "Obec Damníkov",
+  "web": "http://www.damnikov.cz"
+ },
+ "2273": {
+  "name": "Obec Jamné nad Orlicí",
+  "web": "http://jamne.cz"
+ },
+ "2284": {
+  "name": "Obec Řetová",
+  "web": "http://www.retova.cz/"
+ },
+ "2307": {
+  "name": "Obec Orlické Podhůří",
+  "web": "http://orlickepodhuri.cz"
+ },
+ "2367": {
+  "name": "Obec Semanín",
+  "web": "http://obecsemanin.cz"
+ },
+ "2434": {
+  "name": "Obec Sázava",
+  "web": "http://obec-sazava.cz"
+ },
+ "2472": {
+  "name": "Obec Třebovice",
+  "web": "http://trebovice.cz"
+ },
+ "2603": {
+  "name": "Obec Líšnice (Ústí nad Orlicí)",
+  "web": "http://obeclisnice.cz"
+ },
+ "2613": {
+  "name": "Obec Zámrsk",
+  "web": "http://alis.cz"
+ },
+ "2712": {
+  "name": "Obec Těchonín",
+  "web": "http://techonin.cz"
+ },
+ "2744": {
+  "name": "Obec Ostrov",
+  "web": "http://obecostrov.cz"
+ },
+ "2762": {
+  "name": "Obec Verměřovice",
+  "web": "http://vermerovice.cz"
+ },
+ "2803": {
+  "name": "Obec Horní Třešňovec",
+  "web": "http://www.hornitresnovec.cz"
+ },
+ "2851": {
+  "name": "Obec České Libchavy",
+  "web": "http://ceskelibchavy.cz"
+ },
+ "2892": {
+  "name": "Obec Sruby",
+  "web": "http://obecsruby.cz"
+ },
+ "2894": {
+  "name": "Obec Mistrovice",
+  "web": "http://mistrovice.cz"
+ },
+ "2923": {
+  "name": "Obec Tisová",
+  "web": "http://www.tisova.cz/"
+ },
+ "3007": {
+  "name": "Obec České Heřmanice",
+  "web": "http://ceskehermanice.cz"
+ },
+ "3022": {
+  "name": "Obec Lichkov",
+  "web": "http://lichkov.cz"
+ },
+ "3045": {
+  "name": "Obec Mladkov",
+  "web": "http://mladkov.cz"
+ },
+ "3109": {
+  "name": "Obec Písečná (Ústí nad Orlicí)",
+  "web": "http://pisecnauzamberka.cz"
+ },
+ "3147": {
+  "name": "Obec Dobříkov",
+  "web": "http://dobrikov.cz"
+ },
+ "3152": {
+  "name": "Obec Horní Heřmanice",
+  "web": "http://hornihermanice.cz"
+ },
+ "3250": {
+  "name": "Obec Helvíkovice",
+  "web": "http://helvikovice.cz"
+ },
+ "3281": {
+  "name": "Obec Albrechtice (Ústí nad Orlicí)",
+  "web": "https://www.ou-albrechtice.cz"
+ },
+ "3374": {
+  "name": "Obec Běstovice",
+  "web": "http://bestovice.cz"
+ },
+ "3515": {
+  "name": "Obec Cotkytle",
+  "web": "http://cotkytle.cz"
+ },
+ "3567": {
+  "name": "Obec Slatina (Ústí nad Orlicí)",
+  "web": "http://ou-slatina.cz"
+ },
+ "3598": {
+  "name": "Obec Skořenice",
+  "web": "http://skorenice.cz"
+ },
+ "3645": {
+  "name": "Obec Česká Rybná",
+  "web": "http://ceska-rybna.cz"
+ },
+ "3768": {
+  "name": "Obec Řepníky",
+  "web": "http://obecrepniky.cz"
+ },
+ "3876": {
+  "name": "Obec Pastviny",
+  "web": "http://obecpastviny.cz"
+ },
+ "3878": {
+  "name": "Obec Džbánov",
+  "web": "http://www.dzbanov.cz"
+ },
+ "3884": {
+  "name": "Obec Koldín",
+  "web": "http://koldin.cz"
+ },
+ "3902": {
+  "name": "Obec Přívrat",
+  "web": "http://privrat.cz"
+ },
+ "3944": {
+  "name": "Obec Lubník",
+  "web": "http://lubnik.cz"
+ },
+ "3981": {
+  "name": "Obec Hrušová",
+  "web": "http://hrusova.cz"
+ },
+ "4000": {
+  "name": "Obec Voděrady (Ústí nad Orlicí)",
+  "web": "http://www.voderady.eu/"
+ },
+ "4014": {
+  "name": "Obec Újezd u Chocně",
+  "web": "http://ujezd-u-chocne.cz"
+ },
+ "4085": {
+  "name": "Obec Krasíkov",
+  "web": "http://obec-krasikov.cz"
+ },
+ "4109": {
+  "name": "Obec Jehnědí",
+  "web": "http://jehnedi.cz"
+ },
+ "4121": {
+  "name": "Obec Svatý Jiří",
+  "web": "http://svaty-jiri.cz"
+ },
+ "4242": {
+  "name": "Obec Dolní Morava",
+  "web": "http://obecdolnimorava.cz"
+ },
+ "4243": {
+  "name": "Obec Orličky",
+  "web": "http://obecorlicky.cz"
+ },
+ "4260": {
+  "name": "Obec Kameničná",
+  "web": "http://www.kamenicna.cz"
+ },
+ "4264": {
+  "name": "Obec Nové Hrady",
+  "web": "http://obecnovehrady.cz"
+ },
+ "4307": {
+  "name": "Obec Leština (Ústí nad Orlicí)",
+  "web": "http://obeclestina.cz"
+ },
+ "4327": {
+  "name": "Obec Řetůvka",
+  "web": "http://obecretuvka.cz"
+ },
+ "4392": {
+  "name": "Obec Velká Skrovnice",
+  "web": "http://velkaskrovnice.cz"
+ },
+ "4398": {
+  "name": "Obec Žampach",
+  "web": "http://www.obeczampach.cz/"
+ },
+ "4404": {
+  "name": "Obec Podlesí (Ústí nad Orlicí)",
+  "web": "http://podlesi.cz"
+ },
+ "4556": {
+  "name": "Obec Javorník (Ústí nad Orlicí)",
+  "web": "http://obecjavornik.eu"
+ },
+ "4638": {
+  "name": "Obec Sobkovice",
+  "web": "http://sobkovice.info"
+ },
+ "4706": {
+  "name": "Obec Bučina",
+  "web": "http://obecbucina.cz"
+ },
+ "4716": {
+  "name": "Obec Petrovice (Ústí nad Orlicí)",
+  "web": "http://ou-petrovice.cz"
+ },
+ "4746": {
+  "name": "Obec Mostek (Ústí nad Orlicí)",
+  "web": "http://mostek-uo.cz/"
+ },
+ "4867": {
+  "name": "Obec Zálší (Ústí nad Orlicí)",
+  "web": "http://alis.cz"
+ },
+ "4915": {
+  "name": "Obec Stradouň",
+  "web": "https://www.stradoun.cz/"
+ },
+ "4925": {
+  "name": "Obec Oucmanice",
+  "web": "http://oucmanice.cz"
+ },
+ "5050": {
+  "name": "Obec Hejnice",
+  "web": "http://obechejnice.cz"
+ },
+ "5061": {
+  "name": "Obec Šedivec",
+  "web": "http://obecsedivec.cz"
+ },
+ "5211": {
+  "name": "Obec Anenská Studánka",
+  "web": "http://www.anenskastudanka.cz/"
+ },
+ "5229": {
+  "name": "Obec Zářecká Lhota",
+  "web": "http://zareckalhota.cz"
+ },
+ "5263": {
+  "name": "Obec Sudslava",
+  "web": "http://sudslava.cz"
+ },
+ "5297": {
+  "name": "Obec Vračovice-Orlov",
+  "web": "http://vracovice-orlov.cz"
+ },
+ "5337": {
+  "name": "Obec Libecina",
+  "web": "http://libecina.cz"
+ },
+ "5392": {
+  "name": "Obec Radhošť",
+  "web": "http://obec-radhost.cz"
+ },
+ "5401": {
+  "name": "Obec Studené",
+  "web": "http://studene.cz"
+ },
+ "5432": {
+  "name": "Obec Týnišťko",
+  "web": "http://tynistko.cz"
+ },
+ "5514": {
+  "name": "Obec Seč (Ústí nad Orlicí)",
+  "web": "http://obecsec.cz"
+ },
+ "5544": {
+  "name": "Obec České Petrovice",
+  "web": "http://obecceskepetrovice.cz"
+ },
+ "5594": {
+  "name": "Obec Kosořín",
+  "web": "http://kosorin.cz"
+ },
+ "5775": {
+  "name": "Obec Sudislav nad Orlicí",
+  "web": "http://sudislav.cz"
+ },
+ "5806": {
+  "name": "Obec Nasavrky",
+  "web": "http://nasavrkyuo.cz"
+ },
+ "5856": {
+  "name": "Obec Vinary (Ústí nad Orlicí)",
+  "web": "http://obecvinary.cz"
+ },
+ "6020": {
+  "name": "Obec Strážná",
+  "web": "http://strazna.cz"
+ },
+ "6058": {
+  "name": "Obec Hrádek (Ústí nad Orlicí)",
+  "web": "http://hradek-uo.cz"
+ },
+ "6165": {
+  "name": "Obec Bošín",
+  "web": "http://bosin.cz"
+ },
+ "6210": {
+  "name": "Obec Zádolí",
+  "web": "http://zadoli-strihanov.cz"
+ },
+ "6274": {
+  "name": "Obec Trpík",
+  "web": "http://www.trpik.cz"
+ },
+ "6305": {
+  "name": "Obec Plchovice",
+  "web": "http://plchovice.cz"
+ },
+ "6402": {
+  "name": "Obec Pustina",
+  "web": "http://pustina.info"
+ }
+}

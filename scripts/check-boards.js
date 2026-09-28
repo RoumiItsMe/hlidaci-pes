@@ -7,29 +7,51 @@
 //  - k ověření, že deska je dostupná i z GitHub Actions.
 //
 // Použití:
-//   node scripts/check-boards.js          # jen shody
-//   node scripts/check-boards.js --all    # všechna oznámení včetně nezajímavých
+//   node scripts/check-boards.js                 # jen shody
+//   node scripts/check-boards.js --all           # všechna oznámení včetně nezajímavých
+//   node scripts/check-boards.js --enrich        # u dražeb přečte přílohu (výměra pozemku)
+//   node scripts/check-boards.js --deep          # edesky.cz hlouběji do historie (jako první běh)
+//   node scripts/check-boards.js okres           # jen desky, jejichž klíč obsahuje "okres"
 //
 // Exit kód 1, když se některou desku nepodařilo stáhnout / přečíst.
 
 import { noticeBoards } from "../config.js";
 import { fetchBoardNotices } from "../sources/uredni-desky.js";
 import { classifyNotice } from "../lib/notice-filter.js";
+import { refineCandidate } from "../lib/notice-enrich.js";
+import { formatAreaM2 } from "../lib/notice-area.js";
 
-const showAll = process.argv.includes("--all");
+const args = process.argv.slice(2);
+const showAll = args.includes("--all");
+const enrich = args.includes("--enrich");
+const deep = args.includes("--deep");
+const only = args.find((a) => !a.startsWith("--"));
 let failed = 0;
 
-for (const board of noticeBoards) {
+for (const board of noticeBoards.filter((b) => !only || b.key.includes(only))) {
   try {
     const started = Date.now();
-    const notices = await fetchBoardNotices(board);
+    const notices = await fetchBoardNotices(board, { deep });
     const ms = Date.now() - started;
     const hits = notices.map((notice) => ({ notice, classification: classifyNotice(notice) }));
     const matched = hits.filter((h) => h.classification);
     console.log(`\n✔ ${board.label} (${board.type}): ${notices.length} oznámení za ${ms} ms, ${matched.length} zajímavých`);
-    for (const { notice, classification } of showAll ? hits : matched) {
+    for (const hit of showAll ? hits : matched) {
+      const { notice } = hit;
+      let { classification } = hit;
+      let note = "";
+      if (enrich && classification?.kind === "auction") {
+        const refined = await refineCandidate(notice, classification);
+        classification = refined.classification;
+        note = refined.skip
+          ? `  ← VYŘAZENO (${refined.reason})`
+          : classification.areaM2 != null
+            ? `  ← výměra ${formatAreaM2(classification.areaM2)} m²${classification.mentionsFlat ? ", zmiňuje byt" : ""}`
+            : "  ← výměra neznámá";
+      }
       const tag = classification ? `[${classification.kind}${classification.mentionsFlat ? "+byt" : ""}]` : "[ ]";
-      console.log(`  ${tag} ${notice.postedFrom ?? "?"} (${notice.category || "bez kategorie"}) ${notice.title}`);
+      const where = notice.sourceLabel ? `${notice.sourceLabel}: ` : "";
+      console.log(`  ${tag} ${notice.postedFrom ?? "?"} (${notice.category || "bez kategorie"}) ${where}${notice.title}${note}`);
       if (classification) console.log(`        ${notice.url}`);
     }
   } catch (err) {
@@ -39,6 +61,6 @@ for (const board of noticeBoards) {
 }
 
 if (failed > 0) {
-  console.log(`\n${failed} z ${noticeBoards.length} desek selhalo.`);
+  console.log(`\n${failed} desek selhalo.`);
   process.exitCode = 1;
 }

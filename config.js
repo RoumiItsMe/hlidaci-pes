@@ -115,6 +115,25 @@ export const noticeBoards = [
   { key: "zamberk", label: "Žamberk", type: "vismo", url: "https://www.zamberk.cz" },
   { key: "ceska-trebova", label: "Česká Třebová", type: "vismo", url: "https://www.ceska-trebova.cz" },
   { key: "lanskroun", label: "Lanškroun", type: "ginis", url: "https://ude.ginis.cloud/mesto-lanskroun/" },
+
+  // Ostatní obce okresu Ústí nad Orlicí (115) přes agregátor edesky.cz — jeho
+  // deska okresu (id 1033) má obce jako podřízené desky, takže jeden dotaz
+  // vrátí dokumenty z nich všech. Obce jinak čteme každou zvlášť z jejich
+  // webu, což u sta desek v desítkách různých systémů nejde udržet.
+  //  - `skipBoardIds` — města výše, která se čtou přímo z vlastní desky
+  //    (spolehlivější a s přílohami); jejich id na edesky.cz.
+  //  - Pokrytí: edesky.cz nesbírá 18 z 115 desek (mj. Choceň, Brandýs nad
+  //    Orlicí, Dolní Čermná; dalších ~15 drobných obcí) — z těch se nic
+  //    nehlásí. Seznam obcí s adresami webů: lib/okres-obce.json (generuje
+  //    ho scripts/generate-okres-obce.js).
+  {
+    key: "okres-usti-nad-orlici",
+    label: "Okres Ústí nad Orlicí",
+    type: "edesky",
+    edeskyId: 1033,
+    url: "https://edesky.cz/dokumenty?zdroj=1033",
+    skipBoardIds: [100, 131, 229, 299, 1196], // Ústí n. O., Č. Třebová, Lanškroun, Letohrad, Žamberk
+  },
 ];
 
 // Úřední deska drží oznámení, dokud nevyprší lhůta vyvěšení; celý seznam
