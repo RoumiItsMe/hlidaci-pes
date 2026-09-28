@@ -56,19 +56,19 @@
       "consecutiveFailures": 0
     },
     "board:letohrad": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "board:zamberk": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "board:ceska-trebova": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "board:lanskroun": {
       "failing": false,
@@ -81,9 +81,9 @@
       "consecutiveFailures": 0
     },
     "board:kraliky": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "board:vysoke-myto": {
       "failing": false,
@@ -2522,16 +2522,16 @@
     "OBAS0B00WGMO-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-09-28T17:46:22.041Z",
-    "board:letohrad": "2026-09-28T17:31:07.789Z",
-    "board:zamberk": "2026-09-28T17:31:07.789Z",
-    "board:ceska-trebova": "2026-09-28T17:31:07.789Z",
-    "board:lanskroun": "2026-09-28T17:46:22.041Z",
-    "board:kraliky": "2026-09-28T17:31:07.789Z",
-    "board:vysoke-myto": "2026-09-28T17:46:22.041Z",
-    "board:lukova": "2026-09-28T17:46:22.041Z",
-    "board:tatenice": "2026-09-28T17:46:22.041Z",
-    "board:anenska-studanka": "2026-09-28T17:46:22.041Z",
+    "board:usti-nad-orlici": "2026-09-28T18:03:20.411Z",
+    "board:letohrad": "2026-09-28T18:03:20.411Z",
+    "board:zamberk": "2026-09-28T18:03:20.411Z",
+    "board:ceska-trebova": "2026-09-28T18:03:20.411Z",
+    "board:lanskroun": "2026-09-28T18:03:20.411Z",
+    "board:kraliky": "2026-09-28T18:03:20.411Z",
+    "board:vysoke-myto": "2026-09-28T18:03:20.411Z",
+    "board:lukova": "2026-09-28T18:03:20.411Z",
+    "board:tatenice": "2026-09-28T18:03:20.411Z",
+    "board:anenska-studanka": "2026-09-28T18:03:20.411Z",
     "board:okres-usti-nad-orlici": "2026-09-28T17:46:22.041Z"
   },
   "board:okres-usti-nad-orlici": [
