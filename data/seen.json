@@ -76,9 +76,9 @@
       "consecutiveFailures": 0
     },
     "board:okres-usti-nad-orlici": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "board:kraliky": {
       "failing": false,
@@ -2520,5 +2520,28 @@
     "OBAS0B00WUQE-1",
     "OBAS0B00WUS4-0",
     "OBAS0B00WGMO-0"
+  ],
+  "__boardChecks": {
+    "board:usti-nad-orlici": "2026-09-28T09:12:21.499Z",
+    "board:letohrad": "2026-09-28T09:12:21.499Z",
+    "board:zamberk": "2026-09-28T09:12:21.499Z",
+    "board:ceska-trebova": "2026-09-28T09:12:21.499Z",
+    "board:lanskroun": "2026-09-28T09:12:21.499Z",
+    "board:kraliky": "2026-09-28T09:12:21.499Z",
+    "board:vysoke-myto": "2026-09-28T09:12:21.499Z",
+    "board:lukova": "2026-09-28T09:12:21.499Z",
+    "board:tatenice": "2026-09-28T09:12:21.499Z",
+    "board:anenska-studanka": "2026-09-28T09:12:21.499Z",
+    "board:okres-usti-nad-orlici": "2026-09-28T09:12:21.499Z"
+  },
+  "board:okres-usti-nad-orlici": [
+    "e33239062",
+    "e34872981",
+    "e34272489",
+    "e33643149",
+    "e34709510",
+    "e34344421",
+    "e34182451",
+    "e34978148"
   ]
 }
