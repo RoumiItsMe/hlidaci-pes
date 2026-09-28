@@ -129,19 +129,34 @@ export const noticeBoards = [
   { key: "tatenice", label: "Tatenice", type: "ginis", url: "https://ude.ginis.cloud/tatenice/" },
   { key: "anenska-studanka", label: "Anenská Studánka", type: "ginis", url: "https://ude.ginis.cloud/anenska-studanka/" },
 
-  // VYPNUTO — ostatní obce okresu Ústí nad Orlicí (115) přes agregátor
-  // edesky.cz: jeho deska okresu (id 1033) má obce jako podřízené desky, takže
-  // jeden dotaz vrací dokumenty z nich všech. Lokálně (domácí IP) to funguje,
-  // ale z GitHub Actions edesky.cz posílá ochranu proti robotům ("Ujišťujeme se,
-  // že nejste robot!", Anubis) a parser tak nenajde nic — zjištěno naostro
-  // 2026-09-28. Zapnout jde jen legitimní cestou (oficiální API edesky.cz s
-  // klíčem), ne obcházením ochrany. Parser a čtečka jsou hotové v
-  // sources/uredni-desky.js (typ "edesky"), takže po vyřešení přístupu stačí
-  // tenhle záznam vrátit:
-  //   { key: "okres-usti-nad-orlici", label: "Okres Ústí nad Orlicí", type: "edesky",
-  //     edeskyId: 1033, url: "https://edesky.cz/dokumenty?zdroj=1033",
-  //     skipBoardIds: [100, 131, 229, 299, 1196] },  // města čtená přímo (ids na edesky.cz)
-  // Pokrytí edesky.cz bylo 97 ze 115 obcí; seznam obcí s weby: lib/okres-obce.json.
+  // Ostatní obce okresu Ústí nad Orlicí (115) přes OFICIÁLNÍ API agregátoru
+  // edesky.cz. Jeho deska okresu (id 1033) má obce jako podřízené desky, takže
+  // jeden dotaz vrací dokumenty z nich všech (agregátor sbírá 97 ze 115 obcí;
+  // seznam obcí s weby: lib/okres-obce.json). Webové stránky edesky.cz se z
+  // GitHub Actions číst nedají (robot-check, zjištěno 2026-09-28) — API ano, ale
+  // potřebuje osobní klíč: GitHub Secret `EDESKY_API_KEY` (viz README).
+  //  - `queries` — API hledá podle PŘESNÝCH tvarů slov (bez skloňování), proto
+  //    hvězdička a `OR`. `texts: true` přibalí rozpoznaný text příloh (z něj se
+  //    pozná předmět a výměra dražby, aniž by se stahovala PDF).
+  //  - `minIntervalMinutes` — oznámení o prodeji a dražbě visí týdny, a jde o
+  //    cizí bezplatnou službu v testovacím provozu; stačí se ptát jednou za hodinu.
+  //  - `skipBoardIds` — obce, které se čtou přímo z vlastní desky výše (ids na
+  //    edesky.cz = klíče v lib/okres-obce.json), tu nejsou podruhé.
+  {
+    key: "okres-usti-nad-orlici",
+    label: "Okres Ústí nad Orlicí",
+    type: "edesky-api",
+    edeskyId: 1033,
+    url: "https://edesky.cz/desky/1033",
+    minIntervalMinutes: 60,
+    queries: [
+      { keywords: "draž* OR aukc* OR aukč*", texts: true },
+      { keywords: "byt OR bytu OR bytů OR bytové OR bytová OR bytový OR bytovou OR bytovém" },
+      { keywords: "prodej* OR prodat OR zcizen* OR odprodej*" },
+    ],
+    // Ústí n. O., Č. Třebová, Lanškroun, Letohrad, Žamberk, Králíky, Vysoké Mýto, Luková, Tatenice, Anenská Studánka
+    skipBoardIds: [100, 131, 229, 299, 1196, 381, 215, 2252, 2088, 5211],
+  },
 ];
 
 // Úřední deska drží oznámení, dokud nevyprší lhůta vyvěšení; celý seznam

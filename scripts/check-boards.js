@@ -10,7 +10,11 @@
 //   node scripts/check-boards.js                 # jen shody
 //   node scripts/check-boards.js --all           # všechna oznámení včetně nezajímavých
 //   node scripts/check-boards.js --enrich        # u dražeb přečte přílohu (výměra pozemku)
-//   node scripts/check-boards.js --deep          # edesky.cz hlouběji do historie (jako první běh)
+//   node scripts/check-boards.js --deep          # edesky.cz hlouběji do historie (jako první běh, 30 dní)
+//
+// Deska okresu (edesky.cz) potřebuje klíč k API v proměnné EDESKY_API_KEY, ať
+// ji nastavíš v shellu (např. `EDESKY_API_KEY=… node scripts/check-boards.js okres`);
+// bez klíče se ta jedna deska ohlásí jako selhání a ostatní se přečtou normálně.
 //   node scripts/check-boards.js okres           # jen desky, jejichž klíč obsahuje "okres"
 //
 // Exit kód 1, když se některou desku nepodařilo stáhnout / přečíst.

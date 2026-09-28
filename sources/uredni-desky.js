@@ -15,23 +15,25 @@
 //               každé obce, která je publikuje — zákonná povinnost mají obce s
 //               rozšířenou působností (Králíky, Vysoké Mýto…); adresy feedů
 //               jsou v Národním katalogu otevřených dat (data.gov.cz).
-//  - "edesky" — (NEPOUŽÍVÁ SE, z GitHub Actions blokuje robot-check) agregátor
-//               edesky.cz: jedním dotazem dokumenty ze VŠECH desek
-//               okresu (obce jsou jeho podřízené desky). Slouží pro drobné
-//               obce, jejichž vlastní weby by bylo nutné číst jeden po druhém.
+//  - "edesky-api" — oficiální API agregátoru edesky.cz (potřebuje osobní klíč
+//               v env EDESKY_API_KEY): jedním dotazem dokumenty ze VŠECH desek
+//               okresu (obce jsou jeho podřízené desky), s rozpoznaným textem
+//               příloh. Slouží pro drobné obce, jejichž vlastní weby by bylo
+//               nutné číst jeden po druhém. Webové stránky edesky.cz se z
+//               GitHub Actions číst nedají (robot-check), API ano.
 //
 // Všechny parsery vrací totéž: `{ id, title, description, category, url,
-// postedFrom, postedTo }` (+ volitelně `attachmentUrl`; u edesky navíc
-// `viaEdesky`, `sourceLabel`, `sourceBoardId`, `tags`). `id` je stabilní v
-// rámci desky (slouží k dedup), data jsou ISO `YYYY-MM-DD` (nebo null).
-// Parsery jsou čisté funkce nad HTML (bez sítě), ať jdou testovat nad
-// uloženými stránkami.
+// postedFrom, postedTo }` (+ volitelně `attachmentUrl`; u edesky-api navíc
+// `viaEdesky`, `sourceLabel`, `sourceBoardId`, `attachmentText`). `id` je
+// stabilní v rámci desky (slouží k dedup), data jsou ISO `YYYY-MM-DD` (nebo
+// null). Parsery jsou čisté funkce nad textem odpovědi (bez sítě), ať jdou
+// testovat nad uloženými daty.
 //
-// edesky.cz: datum u dokumentu je "Načteno" (kdy ho agregátor stáhl), ne kdy
+// edesky.cz: datum u dokumentu je "načteno" (kdy ho agregátor stáhl), ne kdy
 // ho obec vyvěsila — nový dokument tedy může být ve skutečnosti starý (hlavně
 // když agregátor začne číst novou desku a načte celou historii, viz pojistka
 // proti hromadnému načtení v lib/boards-runner.js). Datum vyvěšení "do" se
-// nezjistí vůbec a přílohy jsou pro roboty zakázané (robots.txt).
+// nezjistí vůbec.
 //
 // Portály se občas předělají — když parser najde nula oznámení, `fetchBoardNotices`
 // to hlásí jako chybu (viz níže) místo aby "žádné nové oznámení" tiše
@@ -223,75 +225,148 @@ export function parseOfn(text) {
   return notices;
 }
 
-// --------------------------------------------------------------- edesky ---
+// ----------------------------------------------------------- edesky API ---
 
-/**
- * edesky.cz: řádek výpisu `/dokumenty` = jeden dokument. Odkaz na zdroj
- * (`itemprop=affiliation`) nese název a ID desky obce, odkaz na dokument
- * (`itemprop=url`) jeho číselné ID.
- */
-export function parseEdesky(html) {
-  const $ = cheerio.load(html);
-  const notices = [];
-  $("tr").each((_, tr) => {
-    const $tr = $(tr);
-    const $doc = $tr.find("a[itemprop=url]").first();
-    const $source = $tr.find("a[itemprop=affiliation]").first();
-    const docId = $doc.attr("href")?.match(/\/dokument\/(\d+)/)?.[1];
-    const title = clean($doc.text());
-    if (!docId || !title) return;
-    notices.push({
-      id: `e${docId}`,
-      title,
-      description: "",
-      category: "",
-      url: `https://edesky.cz/d/${docId}`,
-      postedFrom: $tr.find("time").attr("datetime") ?? null, // "Načteno", ne datum vyvěšení
-      postedTo: null,
-      viaEdesky: true,
-      sourceLabel: clean($source.text()) || null,
-      sourceBoardId: Number($source.attr("href")?.match(/\/desky\/(\d+)-/)?.[1]) || null,
-    });
-  });
-  return notices;
-}
-
-const EDESKY_PAGE_DELAY_MS = 300;
-// První běh čte hlouběji (cca 2–3 týdny dokumentů ~ 30 denně), ať se hned
-// nahlásí i oznámení vyvěšená před zapnutím sledování. Běžný běh stačí jedna
-// stránka (25 dokumentů ≈ den provozu okresu).
-const EDESKY_DEEP_PAGES = 16;
+const EDESKY_API_URL = "https://edesky.cz/api/v1/documents";
+const EDESKY_QUERY_DELAY_MS = 500;
+// Nejstarší dokument, který se ještě bere (podle data NAČTENÍ na edesky.cz).
+// První běh sahá hlouběji, ať se hned nahlásí i oznámení vyvěšená před
+// zapnutím sledování; běžný běh má rezervu pro výpadek běhů.
+const EDESKY_DEEP_DAYS = 30;
+const EDESKY_REGULAR_DAYS = 7;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchEdesky(board, { deep }) {
-  const base = `https://edesky.cz/dokumenty?zdroj=${board.edeskyId}`;
-  const byId = new Map();
+function isoDaysAgo(days) {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+}
 
-  const pages = deep ? EDESKY_DEEP_PAGES : 1;
-  for (let page = 1; page <= pages; page++) {
-    const rows = parseEdesky(await fetchText(`${base}&page=${page}`, { timeoutMs: 30_000 }));
-    if (rows.length === 0) {
-      if (page === 1) throw new Error(`Na edesky.cz nebyl nalezen žádný dokument (změnila se struktura stránky?): ${base}`);
-      break; // hlubší stránky došly
+/**
+ * Text přílohy z API je URL-kódovaný ("%C4%8D…") s prokládanými mezerami;
+ * dekóduje se, a když to nejde (není kódovaný, nebo je poškozený), vrátí se tak,
+ * jak je.
+ */
+export function decodeAttachmentText(raw) {
+  const compact = (raw ?? "").replace(/\s+/g, "");
+  if (!compact) return "";
+  try {
+    return decodeURIComponent(compact);
+  } catch {
+    return (raw ?? "").trim();
+  }
+}
+
+/**
+ * Odpověď API edesky.cz (`/api/v1/documents`, XML) → oznámení. Jeden
+ * `<document>` nese název (`name`), desku obce (`dashboard_id`, `dashboard_name`),
+ * datum načtení (`created_at`) a přílohy s rozpoznaným textem (jen s
+ * `show_texts=1`; pozor, dokumentovaný `include_texts` nic nedělá).
+ *
+ * `orig_url` bývá jen zástupný text ("#_pokud-potrebujete-…"), proto se za odkaz
+ * bere jen když je to opravdová adresa, jinak stránka dokumentu na edesky.cz.
+ */
+export function parseEdeskyApi(xml) {
+  const $ = cheerio.load(xml, { xmlMode: true });
+  if ($("edesky_search_api").length === 0) {
+    throw new Error("API edesky.cz nevrátilo očekávanou odpověď (jiný formát, nebo vypršel klíč?)");
+  }
+  const notices = [];
+  $("document").each((_, el) => {
+    const $d = $(el);
+    const edeskyUrl = $d.attr("edesky_url") ?? "";
+    const docId = $d.attr("edesky_id") ?? edeskyUrl.match(/\/dokument\/(\d+)/)?.[1];
+    const $attachments = $d.find("attachment");
+    const title = clean($d.attr("name")) || clean($attachments.first().attr("name"));
+    if (!docId || !title) return;
+
+    // První příloha s rozpoznaným textem.
+    let attachmentText = "";
+    $attachments.each((__, a) => {
+      if (attachmentText) return;
+      attachmentText = decodeAttachmentText($(a).text());
+    });
+
+    const origUrl = $d.attr("orig_url") ?? "";
+    notices.push({
+      id: `e${docId}`,
+      title,
+      description: "",
+      category: "",
+      url: /^https?:\/\//i.test(origUrl) ? origUrl : edeskyUrl || `https://edesky.cz/dokument/${docId}`,
+      postedFrom: ($d.attr("created_at") ?? "").slice(0, 10) || null, // "načteno", ne datum vyvěšení
+      postedTo: null,
+      viaEdesky: true,
+      sourceLabel: clean($d.attr("dashboard_name") ?? "") || null,
+      sourceBoardId: Number($d.attr("dashboard_id")) || null,
+      attachmentText: attachmentText || undefined,
+    });
+  });
+  return notices;
+}
+
+/**
+ * Jeden dotaz na API. Chybové hlášky záměrně NEobsahují adresu — je v ní klíč
+ * (`api_key`) a hlášky končí v logu i v Telegram alertu. 5xx a síťové chyby se
+ * zkusí znovu (jako v lib/http.js), 4xx (špatný/vypršelý klíč) ne.
+ */
+async function edeskyApiQuery(params, apiKey) {
+  const url = `${EDESKY_API_URL}?${new URLSearchParams({ ...params, api_key: apiKey })}`;
+  let lastError;
+  for (const backoff of [0, 1000, 2500]) {
+    if (backoff) await sleep(backoff);
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; hlidaci-pes)", "Accept-Language": "cs-CZ,cs;q=0.9" },
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) {
+        const err = new Error(`API edesky.cz vrátilo HTTP ${res.status}${res.status === 401 || res.status === 403 ? " (zkontroluj klíč EDESKY_API_KEY)" : ""}`);
+        err.status = res.status;
+        throw err;
+      }
+      return await res.text();
+    } catch (err) {
+      lastError = err.status ? err : new Error(`API edesky.cz nedostupné (${err.cause?.code ?? err.name})`);
+      if (lastError.status && lastError.status < 500) break;
     }
-    for (const notice of rows) byId.set(notice.id, notice);
-    if (page < pages) await sleep(EDESKY_PAGE_DELAY_MS);
+  }
+  throw lastError;
+}
+
+/**
+ * Oznámení z desky okresu na edesky.cz přes jeho oficiální API. Hledání je
+ * podle přesných tvarů slov (bez skloňování), proto dotazy s hvězdičkou a
+ * `OR` (viz `queries` v config.js). Klíč je v env `EDESKY_API_KEY`.
+ */
+async function fetchEdeskyApi(board, { deep }) {
+  const apiKey = process.env.EDESKY_API_KEY;
+  if (!apiKey) throw new Error("Chybí EDESKY_API_KEY (klíč k API edesky.cz, viz README)");
+
+  const createdFrom = isoDaysAgo(deep ? EDESKY_DEEP_DAYS : EDESKY_REGULAR_DAYS);
+  const byId = new Map();
+  for (const [index, query] of board.queries.entries()) {
+    if (index > 0) await sleep(EDESKY_QUERY_DELAY_MS);
+    const xml = await edeskyApiQuery(
+      {
+        keywords: query.keywords,
+        search_with: "es", // fulltext všeho vč. příloh
+        dashboard_id: String(board.edeskyId),
+        order: "date",
+        created_from: createdFrom,
+        ...(query.texts ? { show_texts: "1" } : {}),
+      },
+      apiKey
+    );
+    for (const notice of parseEdeskyApi(xml)) {
+      const existing = byId.get(notice.id);
+      // Stejný dokument z víc dotazů — zachovat variantu s textem přílohy.
+      if (!existing || (!existing.attachmentText && notice.attachmentText)) byId.set(notice.id, notice);
+    }
   }
 
-  // Agregátor dokumenty třídí podle obsahu příloh — tag "Dražby" zachytí i
-  // dražbu s nic neříkajícím názvem, kterou by filtr z názvu minul.
-  await sleep(EDESKY_PAGE_DELAY_MS);
-  const drazby = parseEdesky(await fetchText(`${base}&tag=${encodeURIComponent("Dražby")}&page=1`, { timeoutMs: 30_000 }));
-  for (const notice of drazby) {
-    const existing = byId.get(notice.id) ?? notice;
-    existing.tags = [...new Set([...(existing.tags ?? []), "Dražby"])];
-    byId.set(existing.id, existing);
-  }
-
-  // Města, která se čtou přímo z jejich vlastní desky, tu nejsou podruhé.
+  // Obce, které se čtou přímo z vlastní desky, tu nejsou podruhé.
   const skip = new Set(board.skipBoardIds ?? []);
   return [...byId.values()].filter((notice) => !skip.has(notice.sourceBoardId));
 }
@@ -318,10 +393,10 @@ const PARSERS = { vismo: parseVismo, joomla: parseJoomla, ginis: parseGinis, ofn
  * Stáhne poslední oznámení z desky obce. Nula oznámení = chyba (deska obce
  * není nikdy skutečně prázdná, takže je to skoro jistě změna struktury
  * stránky, ne "nic nového"). `deep` (první běh desky) čte hlouběji do
- * historie — týká se jen edesky, ostatní desky vrací vždy celé okno.
+ * historie — týká se jen edesky-api, ostatní desky vrací vždy celé okno.
  */
 export async function fetchBoardNotices(board, { deep = false } = {}) {
-  if (board.type === "edesky") return fetchEdesky(board, { deep });
+  if (board.type === "edesky-api") return fetchEdeskyApi(board, { deep });
   const url = listUrl(board);
   const html = await fetchText(url, { timeoutMs: 30_000 });
   const notices = PARSERS[board.type](html, url);
