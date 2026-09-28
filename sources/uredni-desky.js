@@ -1,6 +1,6 @@
 // Úřední desky obcí — stahování seznamu vyvěšených oznámení.
 //
-// Každá obec má desku jinde a v jiném redakčním systému, proto tři parsery
+// Každá obec má desku jinde a v jiném redakčním systému, proto víc parserů
 // (typ desky se volí v config.js → `noticeBoards[].type`):
 //  - "vismo"  — CMS Vismo (Letohrad, Žamberk, Česká Třebová). Chronologický
 //               výpis všech dokumentů je na /vismo/zobraz_dok.asp?ud=1 a jde
@@ -11,7 +11,12 @@
 //               stránku, jde zvednout přes `?limit=`.
 //  - "ginis"  — GINIS Úřední deska (Lanškroun, ude.ginis.cloud): celý seznam
 //               vyvěšených dokumentů na jediné stránce, bez stránkování.
-//  - "edesky" — agregátor edesky.cz: jedním dotazem dokumenty ze VŠECH desek
+//  - "ofn"    — otevřená data úřední desky (JSON-LD podle OFN MVČR), stejná u
+//               každé obce, která je publikuje — zákonná povinnost mají obce s
+//               rozšířenou působností (Králíky, Vysoké Mýto…); adresy feedů
+//               jsou v Národním katalogu otevřených dat (data.gov.cz).
+//  - "edesky" — (NEPOUŽÍVÁ SE, z GitHub Actions blokuje robot-check) agregátor
+//               edesky.cz: jedním dotazem dokumenty ze VŠECH desek
 //               okresu (obce jsou jeho podřízené desky). Slouží pro drobné
 //               obce, jejichž vlastní weby by bylo nutné číst jeden po druhém.
 //
@@ -175,6 +180,49 @@ export function parseGinis(html, baseUrl) {
   return notices;
 }
 
+// ------------------------------------------------------------------ OFN ---
+
+/** OFN `{ datum: "2026-03-24" }` (nebo `datum_a_čas`) → "2026-03-24"; jinak null. */
+function ofnDate(moment) {
+  const raw = moment?.datum ?? moment?.["datum_a_čas"];
+  return typeof raw === "string" && /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null;
+}
+
+/**
+ * Otevřená data úřední desky (Otevřená formální norma MVČR, JSON-LD):
+ * `{ typ: "Úřední deska", informace: [ { iri, url, název: { cs }, vyvěšení,
+ * relevantní_do, dokument: [ { název, url } ] } ] }`. Obce s rozšířenou
+ * působností ho mají od února 2022 ze zákona povinně (adresy feedů jsou v
+ * Národním katalogu otevřených dat, data.gov.cz). Je to jediný typ desky,
+ * který je stejný u všech obcí — jeden parser pro každou z nich.
+ */
+export function parseOfn(text) {
+  const data = JSON.parse(text);
+  const items = Array.isArray(data?.informace) ? data.informace : [];
+  const notices = [];
+  for (const item of items) {
+    const name = item["název"];
+    const title = clean(typeof name === "string" ? name : name?.cs);
+    const id = item.iri ?? item.url;
+    if (!id || !title) continue;
+
+    const documents = Array.isArray(item.dokument) ? item.dokument : item.dokument ? [item.dokument] : [];
+    const pdf = documents.find((d) => /\.pdf(?:$|\?)/i.test(`${d?.["název"]?.cs ?? ""} ${d?.url ?? ""}`)) ?? documents[0];
+
+    notices.push({
+      id,
+      title,
+      description: "",
+      category: "",
+      url: item.url ?? item.iri,
+      attachmentUrl: pdf?.url ?? undefined,
+      postedFrom: ofnDate(item["vyvěšení"]),
+      postedTo: ofnDate(item["relevantní_do"]),
+    });
+  }
+  return notices;
+}
+
 // --------------------------------------------------------------- edesky ---
 
 /**
@@ -257,13 +305,14 @@ function listUrl(board) {
     case "joomla":
       return `${board.url}?limit=${NOTICES_PER_BOARD}`;
     case "ginis":
+    case "ofn":
       return board.url;
     default:
       throw new Error(`Neznámý typ úřední desky: ${board.type}`);
   }
 }
 
-const PARSERS = { vismo: parseVismo, joomla: parseJoomla, ginis: parseGinis };
+const PARSERS = { vismo: parseVismo, joomla: parseJoomla, ginis: parseGinis, ofn: parseOfn };
 
 /**
  * Stáhne poslední oznámení z desky obce. Nula oznámení = chyba (deska obce

@@ -43,11 +43,12 @@ for (const board of noticeBoards.filter((b) => !only || b.key.includes(only))) {
       if (enrich && classification?.kind === "auction") {
         const refined = await refineCandidate(notice, classification);
         classification = refined.classification;
-        note = refined.skip
-          ? `  ← VYŘAZENO (${refined.reason})`
-          : classification.areaM2 != null
-            ? `  ← výměra ${formatAreaM2(classification.areaM2)} m²${classification.mentionsFlat ? ", zmiňuje byt" : ""}`
-            : "  ← výměra neznámá";
+        const found = [
+          classification.areaM2 != null && `výměra ${formatAreaM2(classification.areaM2)} m²`,
+          classification.mentionsFlat && "zmiňuje byt",
+          classification.mentionsHouse && "zmiňuje dům/budovu",
+        ].filter(Boolean);
+        note = refined.skip ? `  ← VYŘAZENO (${refined.reason})` : `  ← ${found.join(", ") || "z přílohy nic dalšího nezjištěno"}`;
       }
       const tag = classification ? `[${classification.kind}${classification.mentionsFlat ? "+byt" : ""}]` : "[ ]";
       const where = notice.sourceLabel ? `${notice.sourceLabel}: ` : "";

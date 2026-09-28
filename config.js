@@ -116,6 +116,19 @@ export const noticeBoards = [
   { key: "ceska-trebova", label: "Česká Třebová", type: "vismo", url: "https://www.ceska-trebova.cz" },
   { key: "lanskroun", label: "Lanškroun", type: "ginis", url: "https://ude.ginis.cloud/mesto-lanskroun/" },
 
+  // Další města okresu přes otevřená data úřední desky (OFN, JSON-LD) —
+  // adresy feedů z Národního katalogu otevřených dat (data.gov.cz).
+  { key: "kraliky", label: "Králíky", type: "ofn", url: "https://www.kraliky.eu/opendata-uredni-deska" },
+  { key: "vysoke-myto", label: "Vysoké Mýto", type: "ofn", url: "https://www.vysoke-myto.cz/opendata-board.php" },
+
+  // Obce na centrálně hostovaném GINIS (stejný systém jako Lanškroun). Adresa
+  // `ude.ginis.cloud/<obec>/` se dá uhodnout, ale NESMÍ se brát naslepo:
+  // "mesto-albrechtice" je Albrechtice u Karviné, ne naše. Tyhle tři jsou
+  // ověřené (odkaz z webu obce, resp. shoda obsahu s tím, co o obci víme).
+  { key: "lukova", label: "Luková", type: "ginis", url: "https://ude.ginis.cloud/lukova/" },
+  { key: "tatenice", label: "Tatenice", type: "ginis", url: "https://ude.ginis.cloud/tatenice/" },
+  { key: "anenska-studanka", label: "Anenská Studánka", type: "ginis", url: "https://ude.ginis.cloud/anenska-studanka/" },
+
   // VYPNUTO — ostatní obce okresu Ústí nad Orlicí (115) přes agregátor
   // edesky.cz: jeho deska okresu (id 1033) má obce jako podřízené desky, takže
   // jeden dotaz vrací dokumenty z nich všech. Lokálně (domácí IP) to funguje,
