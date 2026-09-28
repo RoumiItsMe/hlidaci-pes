@@ -74,6 +74,11 @@
       "failing": false,
       "lastAlertAt": null,
       "consecutiveFailures": 0
+    },
+    "board:okres-usti-nad-orlici": {
+      "failing": true,
+      "lastAlertAt": null,
+      "consecutiveFailures": 1
     }
   },
   "byty:sreality": [
