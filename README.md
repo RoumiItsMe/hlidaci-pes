@@ -3,7 +3,7 @@
 Automatický hlídač nových nabídek nemovitostí. Každých ~15 minut projde
 nastavené realitní portály a pošle notifikaci na Telegram o (a) nových
 inzerátech odpovídajících filtru a (b) **změně ceny** u inzerátů, které už
-dřív sledoval. Navíc hlídá **úřední desky** všech obcí okresu Ústí nad Orlicí, jestli se tam
+dřív sledoval. Navíc hlídá **úřední desky** měst okresu Ústí nad Orlicí, jestli se tam
 neobjevil záměr prodeje bytu nebo dražba (viz [Úřední desky
 obcí](#úřední-desky-obcí)).
 
@@ -72,35 +72,45 @@ zdrojů, které umí filtrovat cenu přímo v URL (Bazoš) — jako pojistka.
 
 Města někdy vyvěšují záměr prodeje obecního bytu a na úředních deskách visí
 také dražební a aukční vyhlášky (exekutoři, Úřad pro zastupování státu ve
-věcech majetkových…). Hlídací pes čte při každém běhu úřední desky **všech
-obcí okresu Ústí nad Orlicí** a pošle Telegram, když se objeví zajímavé
+věcech majetkových…). Hlídací pes čte při každém běhu úřední desky vybraných
+obcí okresu Ústí nad Orlicí a pošle Telegram, když se objeví zajímavé
 oznámení.
 
 **Sledované desky** (pole **`noticeBoards`** v [`config.js`](config.js)):
 
-| Kde | Systém desky | Jak se čte |
+| Obec | Systém desky | Jak se čte |
 |---|---|---|
 | Ústí nad Orlicí | Joomla | tabulka, posledních 100 oznámení (`?limit=100`) |
-| Letohrad | Vismo | chronologický výpis `/vismo/zobraz_dok.asp`, posledních 100 |
-| Žamberk | Vismo | totéž |
-| Česká Třebová | Vismo | totéž |
-| Lanškroun | GINIS (`ude.ginis.cloud`) | celý seznam vyvěšených dokumentů na jedné stránce |
-| **Ostatní obce okresu** (Vysoké Mýto, Králíky, Jablonné n. O., Kunvald, Žichlínek… — 115 obcí celkem) | agregátor [edesky.cz](https://edesky.cz) | dotaz na desku okresu (`zdroj=1033`) vrací dokumenty ze všech podřízených desek obcí; jedna stránka (25 dokumentů ≈ den provozu) na běh + stránka tagu „Dražby" |
+| Letohrad, Žamberk, Česká Třebová | Vismo | chronologický výpis `/vismo/zobraz_dok.asp`, posledních 100 |
+| Lanškroun, Luková, Tatenice, Anenská Studánka | GINIS (`ude.ginis.cloud/<obec>/`) | celý seznam vyvěšených dokumentů na jedné stránce |
+| Králíky, Vysoké Mýto | otevřená data (OFN, JSON-LD) | feed úřední desky z Národního katalogu otevřených dat |
 
-Pět měst se čte přímo z jejich vlastní desky (spolehlivější a s přístupem k
-přílohám), z edesky.cz se vylučují (`skipBoardIds`). Parsery jsou v
-[`sources/uredni-desky.js`](sources/uredni-desky.js). Nová obec se stejným
-systémem = jeden záznam v `noticeBoards` (`key` je klíč ve stavovém souboru,
-po nasazení ho neměnit).
+Parsery jsou v [`sources/uredni-desky.js`](sources/uredni-desky.js). Nová obec
+se stejným systémem = jeden záznam v `noticeBoards` (`key` je klíč ve stavovém
+souboru, po nasazení ho neměnit).
 
-**Pokrytí okresu: 97 ze 115 obcí.** edesky.cz nesbírá 18 desek (mj. Choceň,
-Brandýs nad Orlicí, Dolní Čermná a asi 15 drobných obcí) — z nich se nic
-nehlásí. Choceň navíc vrací robotům 403. Dá se doplnit přímým parserem té
-konkrétní obce. Seznam obcí s adresami jejich webů (z registru MVČR) je v
-[`lib/okres-obce.json`](lib/okres-obce.json), generuje ho
-`node scripts/generate-okres-obce.js`; zprávy z edesky.cz z něj ukazují „Web
-obce", protože edesky.cz neregistrovaným uživatelům obsah dokumentů
-nezobrazuje.
+**Pokrytí okresu: 10 ze 115 obcí, ale 7 z 10 měst — zhruba polovina
+obyvatel okresu.** Nesledují se Choceň (deska je moderní JavaScriptová
+aplikace bez čitelných dat), Jablonné nad Orlicí, Brandýs nad Orlicí a zbylých
+asi 100 menších obcí. Proč jich není víc:
+- **Neexistuje společný zdroj.** Obce mají desku na desítkách různých
+  systémů (71 ze 115 webů jede na vlastním řešení) a psát a udržovat parser
+  pro každý nejde. Zákonnou povinnost publikovat desku jako otevřená data
+  mají jen obce s rozšířenou působností (od února 2022) — proto Králíky a
+  Vysoké Mýto přes **OFN**; drobné obce ji nemají. Seznam obcí s weby
+  (registr MVČR) je v [`lib/okres-obce.json`](lib/okres-obce.json) a generuje
+  ho `node scripts/generate-okres-obce.js`.
+- **Agregátor [edesky.cz](https://edesky.cz) by pokryl skoro celý okres**
+  (jeho deska okresu vrací dokumenty ze 97 ze 115 obcí jedním dotazem), ale
+  **z GitHub Actions ho nejde číst**: robotům z datacenter posílá ochranu
+  „Ujišťujeme se, že nejste robot" (zjištěno 2026-09-28; z domácí IP běží).
+  Obcházet ji se nemá. Legitimní cesta je jeho oficiální API s osobním klíčem
+  (registrace na edesky.cz, klíč jako GitHub Secret). Parser a čtečka typu
+  `edesky` jsou v kódu hotové a otestované (včetně hlídání hromadného načtení
+  historie a hlubšího prvního běhu), záznam v `config.js` je zakomentovaný.
+- Adresy GINIS se dají uhodnout, ale **nesmí se brát naslepo**:
+  `ude.ginis.cloud/mesto-albrechtice/` je Albrechtice u Karviné, ne obec u nás.
+  Každá přidaná obec se ověřuje (odkaz z jejího webu, shoda obsahu).
 
 **Co se hlásí** ([`lib/notice-filter.js`](lib/notice-filter.js)) — filtruje se
 podle textu oznámení (název, popisek, kategorie), bez ohledu na diakritiku a
@@ -109,21 +119,19 @@ skloňování:
 | Zpráva | Kdy |
 |---|---|
 | 🏠 **Prodej bytu** | prodejní slovo je u bytu / bytové jednotky / bytového domu ("záměr prodeje bytu", "byt k prodeji") |
-| 🔨 **Dražba / aukce** | dražba, dražební nebo aukční vyhláška, nebo dokument s tagem „Dražby" na edesky.cz (ten třídí podle obsahu příloh, takže zachytí i dražbu s názvem „16E8-26 PDF"). Kromě dražby movitých věcí. Z titulku se často nepozná, jestli je v dražbě byt, proto se hlásí všechny; u pozemků platí limit na výměru (níž) |
+| 🔨 **Dražba / aukce** | dražba, dražební nebo aukční vyhláška. Kromě dražby movitých věcí. Z titulku se často nepozná, co se dražší, proto se hlásí všechny; u pozemků platí limit na výměru (níž) |
 | 🏢 **Prodej domu / nemovitosti** | prodejní slovo je u domu, budovy, objektu, areálu (obecná "nemovitost" jen když se v textu nemluví o pozemku) |
 | ❓ **Možný prodej majetku** | krátký nic neříkající název ("Vyhláška č. 190") v kategorii věnované prodejům/aukcím — z titulku nepoznáme, čeho se týká, kategorie napovídá |
 
 **Dražba pozemku se hlásí jen nad 100 m²** (`MIN_LAND_AREA_M2` v
 [`lib/notice-enrich.js`](lib/notice-enrich.js)). Výměra se hledá v názvu a
 jinak v **textu PDF přílohy** oznámení ([`unpdf`](https://github.com/unjs/unpdf)
-— jediná závislost navíc). Příloha se čte jen u oznámení, která už prošla
-filtrem (typicky pár za den), a jen u desek, ze kterých se dá stáhnout (pět
-měst přímo; přílohy z edesky.cz jsou pro roboty zakázané). Příloha zároveň
-prozradí, **co se dražší**: dražba movité věci (hrob, auto…) se vyřadí, zmínka
-o bytu se přidá do zprávy. Když výměru zjistit nejde (nedostupná příloha,
-sken, tabulka, kterou z PDF nejde vyčíst — typicky exekutorské vyhlášky),
-oznámení se **hlásí i tak** a zpráva to říká: radši zpráva navíc než
-promeškaná dražba.
+— jediná závislost navíc). Příloha se čte jen u dražeb, které už prošly
+filtrem (typicky pár za den). Zároveň prozradí, **co se dražší**: dražba
+movité věci (hrob, auto…) se vyřadí, zmínka o bytu nebo domě se přidá do
+zprávy. Když výměru zjistit nejde (příloha chybí, je to sken nebo tabulka,
+kterou z PDF nejde vyčíst — typicky exekutorské vyhlášky), oznámení se **hlásí
+i tak** a zpráva to říká: radši zpráva navíc než promeškaná dražba.
 
 **Záměrně se NEhlásí:** pronájmy a výpůjčky (i "Vyhlášení bytu k pronájmu" —
 nájem obecního bytu není prodej), směny a **prodej samotných pozemků bez
@@ -135,9 +143,7 @@ do filtru přidat úpravou `lib/notice-filter.js`.
   týdny a uživatel o nich chce vědět i tehdy, když byla vyvěšená těsně před
   zapnutím sledování. Při prvním běhu se proto pošlou zajímavá oznámení, která
   jsou ještě vyvěšená (s poznámkou "Už vyvěšené v okamžiku zapnutí
-  sledování"); skončená se jen zapamatují. U edesky.cz se při prvním běhu čte
-  16 stránek do historie (~2–3 týdny) a bere se to, co bylo načteno za
-  posledních 30 dní.
+  sledování"); skončená se jen zapamatují.
 - Do stavu (`data/seen.json`, klíč `board:<key>`) se ukládají ID všech
   oznámení, ale zajímavé oznámení se do stavu zapíše **až po úspěšném
   odeslání** — když Telegram zrovna nejde, zpráva se neztratí a zkusí se
@@ -145,31 +151,25 @@ do filtru přidat úpravou `lib/notice-filter.js`.
 - "Nové" oznámení s datem vyvěšení starším než 30 dní se nehlásí: u desek se
   čtou jen poslední oznámení a když některá vyprší, vyjede do okna nějaké
   staré trvalé (smlouva o dotaci z roku 2021) a vypadalo by to jako nové.
-- **Hromadné načtení z edesky.cz:** agregátor umí najednou načíst celou
-  historii nově přidané desky (viděno: městys Mladkov — přes sto zápisů z let
-  2015–2025 s jedním datem „načteno"). Víc než 15 dokumentů od jedné obce se
-  stejným datem se bere jako hromadné načtení a nic z něj se nehlásí.
 - Nejvýš 10 zpráv na desku a běh, zbytek se shrne do jedné (pojistka proti
   záplavě, kdyby se změnil formát ID); nejvýš 8 dražeb na desku a běh se
   dovyhodnocuje čtením přílohy.
 - Selhání desky (změna webu, výpadek, nula nalezených oznámení) jde přes
   stejné upozornění jako u portálů, viz [Upozornění při
-  výpadku](#upozornění-při-výpadku) — s popiskem "Úřední deska • <město>".
+  výpadku](#upozornění-při-výpadku) — s popiskem "Úřední deska • <obec>".
 
 **Ruční kontrola** — co by se teď nahlásilo, bez odesílání a bez zápisu stavu:
 
 ```bash
 node scripts/check-boards.js                # jen zajímavá oznámení
 node scripts/check-boards.js --all          # všechna oznámení i s vyhodnocením
-node scripts/check-boards.js --enrich       # u dražeb přečte přílohu (výměra pozemku)
-node scripts/check-boards.js --deep okres   # edesky.cz hlouběji do historie (jako první běh)
+node scripts/check-boards.js --enrich       # u dražeb přečte přílohu (výměra, byt/dům)
+node scripts/check-boards.js kraliky        # jen desky, jejichž klíč obsahuje "kraliky"
 ```
 
 Hodí se po úpravě filtru nebo při podezření, že některá obec předělala web.
-Dostupnost desek z GitHub Actions byla ověřena (září 2026) — žádná z nich
-zahraniční IP neblokuje. edesky.cz je služba třetí strany: čte se jen veřejná
-část stránek (robots.txt to dovoluje) a zátěž je pár požadavků za 15 minut;
-kdyby zmizela, ohlásí to alert o desce a pět měst se čte dál nezávisle.
+Dostupnost všech sledovaných desek i čtení PDF z GitHub Actions bylo ověřeno
+(září 2026).
 
 ## Jak to funguje
 
@@ -376,15 +376,13 @@ jsou uložené jako GitHub Secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 - Bezrealitky nerozlišuje podtyp pozemku (viz tabulka výše) — u pozemkového
   sledování tak může přijít i nabídka pole/lesa, ne jen bydlení/zahrady.
 - Úřední desky: filtr čte **název, popisek a kategorii** oznámení; obsah
-  přiložených PDF se čte jen u dražeb z pěti přímo sledovaných měst (výměra
-  pozemku, movitá věc, byt). Záměr prodeje s neurčitým názvem ("Záměr prodeje
-  nemovitých věcí") se zachytí jako 🏢, ale co konkrétně se prodává (byt, nebo
-  jen pozemek), se dozvíš až v oznámení. Obce přes edesky.cz mají jen název
-  dokumentu, takže dražba tam nejde zúžit podle výměry. Desky se čtou z HTML,
-  takže při předělání webu obce je potřeba upravit parser v
-  `sources/uredni-desky.js` (ohlásí to alert o nula nalezených oznámeních).
-  Nesbírané desky (18 z 115 obcí okresu) viz [Úřední desky
-  obcí](#úřední-desky-obcí).
+  přiložených PDF se čte jen u dražeb (výměra pozemku, movitá věc, byt/dům).
+  Záměr prodeje s neurčitým názvem ("Záměr prodeje nemovitých věcí") se
+  zachytí jako 🏢, ale co konkrétně se prodává (byt, nebo jen pozemek), se
+  dozvíš až v oznámení. Desky se čtou z HTML, takže při předělání webu obce je
+  potřeba upravit parser v `sources/uredni-desky.js` (ohlásí to alert o nula
+  nalezených oznámeních). Pokrytí okresu je zhruba poloviční, viz [Úřední
+  desky obcí](#úřední-desky-obcí).
 - Portály mění strukturu stránek bez upozornění — pokud se scraper
   najednou "utne" (chyba v logu Action, Telegram alert), je potřeba znovu
   prověřit strukturu dané stránky a upravit příslušný soubor v `sources/`.
