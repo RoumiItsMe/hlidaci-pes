@@ -184,6 +184,59 @@ Hodí se po úpravě filtru nebo při podezření, že některá obec předělal
 Dostupnost všech sledovaných desek i čtení PDF z GitHub Actions bylo ověřeno
 (září 2026).
 
+### Domácí záloha pro blokované desky
+
+**Zjištěno naostro 2026-09-29:** čtyři desky na CMS Vismo (Letohrad, Žamberk,
+Česká Třebová, Králíky) přestaly být z GitHub Actions dostupné — vyzkoušeny tři
+nezávislé cesty (přímý web, edesky.cz, oficiální open-data feed téže obce) a
+všechny tři selhávají síťově (`fetch failed` / `ETIMEDOUT`). Ze soukromého
+připojení fungují normálně, takže jde o blokaci datacenter IP rozsahů na
+straně jejich hostingu, ne o chybu v kódu. Obcházet takovou blokaci (falešná
+identita, apod.) se nemá — [`scripts/watch-blocked-boards.js`](scripts/watch-blocked-boards.js)
+místo toho nabízí **druhou šanci ze soukromého připojení**, ne trik.
+
+**Jak to funguje:** skript spustí PŘESNĚ stejnou detekci jako GitHub Actions
+(`lib/boards-runner.js`), ale jen pro desky, které mají v posledním
+committnutém stavu `health.failing === true` — tedy ty, kde poslední pokus z
+GitHubu selhal. Spouští se ručně, nebo naplánovaně z domácího PC (typicky
+jednou denně — desky se mění nejvýš pár za týden, není třeba 15minutová
+frekvence). Dedup je sdílený s GitHub Actions přes stejný `board:<key>` klíč
+v `data/seen.json` (obě strany commitují do téhož souboru, stejný
+retry-on-push-conflict vzorec jako u `watch.yml`) — nic se nenahlásí dvakrát
+jen proto, že to jednou zkontroloval GitHub a jednou domácí PC. Když
+momentálně nic neselhává, skript nic nedělá, nic nezapisuje a tiše skončí.
+
+**Nastavení (jednorázově):**
+1. Vytvoř `.env.local` v kořeni repa (git-ignored) s:
+   ```
+   TELEGRAM_BOT_TOKEN=...
+   TELEGRAM_CHAT_ID=...
+   ```
+   Token bota jde znovu zobrazit v Telegramu u [@BotFather](https://t.me/BotFather)
+   příkazem `/mytoken` (nebo `/token`) — nemusíš zakládat nového bota. Chat ID
+   je stejné, co používá GitHub Secret `TELEGRAM_CHAT_ID` (pokud ho nemáš po
+   ruce, dá se zjistit přes Telegram Bot API `getUpdates` po poslání zprávy
+   botovi).
+2. `EDESKY_API_KEY` se pro tyhle 4 desky nepoužije (jsou to Vismo/OFN typy,
+   ne `edesky-api`) — netřeba ho do `.env.local` dávat, pokud ho nechceš
+   používat i lokálně pro `scripts/check-boards.js`.
+3. Naplánovat spuštění (Windows Task Scheduler, denně):
+   ```powershell
+   $action = New-ScheduledTaskAction -Execute "node.exe" -Argument "scripts\watch-blocked-boards.js" -WorkingDirectory "C:\Users\roman\Documents\Hlídací pes"
+   $trigger = New-ScheduledTaskTrigger -Daily -At 8:00am
+   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+   Register-ScheduledTask -TaskName "Hlidaci pes - domaci zaloha blokovanych desek" -Action $action -Trigger $trigger -Settings $settings
+   ```
+   `StartWhenAvailable` dožene spuštění, když je v plánovaný čas PC vypnutý.
+
+**Ruční spuštění / test:** `node scripts/watch-blocked-boards.js` — vypíše, co
+by (ne)dělal, a loguje i do `data/watch-blocked-boards.log` (git-ignored,
+`*.log`).
+
+**Vědomý kompromis:** pokud i domácí připojení na danou desku přestane
+stačit, skript to jen zaloguje jako běžné selhání (stejný alert-debounce z
+`lib/health.js` platí i tady) — jde o druhou šanci, ne o zázračné řešení.
+
 ## Jak to funguje
 
 1. `.github/workflows/watch.yml` spouští `node index.js` cca každých 15
