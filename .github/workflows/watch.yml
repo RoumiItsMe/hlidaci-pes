@@ -63,8 +63,21 @@ jobs:
           git config user.name "hlidaci-pes-bot"
           git config user.email "actions@users.noreply.github.com"
           for i in 1 2 3; do
-            node index.js
-            SCRIPT_EXIT=$?
+            # `node index.js` NESMÍ stát na vlastním řádku — shell běží s `set -e`
+            # (GitHub Actions default), a ten u prostého příkazu uvnitř cyklu
+            # ukončí celý skript OKAMŽITĚ při nenulovém exit kódu, ještě PŘED
+            # `SCRIPT_EXIT=$?` na dalším řádku (klasická past `set -e` v cyklu).
+            # Prakticky to znamenalo, že se commit+push (a tím i zápis
+            # aktualizovaného data/seen.json — nové inzeráty, health/alert
+            # počítadla) nikdy nespustil přesně tehdy, kdy šlo o vážnou chybu —
+            # tedy jediný případ, kdy na tom retry logika níž záleží. Zjištěno
+            # naostro 2026-09-29: běh s "vážnou chybou" (4 desky spadly na
+            # síťový výpadek runneru, čímž se přehouply přes práh 2 selhání a
+            # poslaly se Telegram alerty) skončil bez jediného git příkazu —
+            # aktualizovaný stav (vč. „už jsem alertoval") se ztratil s
+            # ephemeral runnerem, takže případná zpráva o zotavení příště
+            # nepřijde. `&&`/`||` řetězec drží `node index.js` mimo dosah `-e`.
+            node index.js && SCRIPT_EXIT=0 || SCRIPT_EXIT=$?
             if ! git diff --quiet -- data/seen.json; then
               git add data/seen.json
               git commit -m "chore: aktualizace stavu hlídacího psa [skip ci]"
