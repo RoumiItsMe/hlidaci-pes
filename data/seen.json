@@ -2152,7 +2152,8 @@
     "MULA0B0OLBVL-0",
     "MULA0B0J845M-0",
     "MULA1003HUPF-0",
-    "MULA1003HUQA-0"
+    "MULA1003HUQA-0",
+    "MULA1003MCI3-0"
   ],
   "board:kraliky": [
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=318505",
@@ -2526,16 +2527,16 @@
     "OBAS0B00WGMO-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-09-29T07:01:21.799Z",
-    "board:letohrad": "2026-09-29T07:01:21.799Z",
-    "board:zamberk": "2026-09-29T07:01:21.799Z",
-    "board:ceska-trebova": "2026-09-29T07:01:21.799Z",
-    "board:lanskroun": "2026-09-29T07:01:21.799Z",
-    "board:kraliky": "2026-09-29T07:01:21.799Z",
-    "board:vysoke-myto": "2026-09-29T07:01:21.799Z",
-    "board:lukova": "2026-09-29T07:01:21.799Z",
-    "board:tatenice": "2026-09-29T07:01:21.799Z",
-    "board:anenska-studanka": "2026-09-29T07:01:21.799Z",
+    "board:usti-nad-orlici": "2026-09-29T07:15:56.594Z",
+    "board:letohrad": "2026-09-29T07:15:56.594Z",
+    "board:zamberk": "2026-09-29T07:15:56.594Z",
+    "board:ceska-trebova": "2026-09-29T07:15:56.594Z",
+    "board:lanskroun": "2026-09-29T07:15:56.594Z",
+    "board:kraliky": "2026-09-29T07:15:56.594Z",
+    "board:vysoke-myto": "2026-09-29T07:15:56.594Z",
+    "board:lukova": "2026-09-29T07:15:56.594Z",
+    "board:tatenice": "2026-09-29T07:15:56.594Z",
+    "board:anenska-studanka": "2026-09-29T07:15:56.594Z",
     "board:okres-usti-nad-orlici": "2026-09-29T06:17:38.410Z"
   },
   "board:okres-usti-nad-orlici": [
