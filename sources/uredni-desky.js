@@ -41,6 +41,7 @@
 
 import * as cheerio from "cheerio";
 import { fetchText } from "../lib/http.js";
+import { EDESKY_QUERIES } from "../config.js";
 
 // Kolik posledních oznámení se z desky bere. Hlídá se každých ~15 minut,
 // takže i u velké desky stačí zlomek — ale s rezervou pro výpadek běhů
@@ -336,11 +337,12 @@ async function edeskyApiQuery(params, apiKey) {
 }
 
 /**
- * Oznámení z desky okresu na edesky.cz přes jeho oficiální API. Hledání je
- * podle přesných tvarů slov (bez skloňování), proto dotazy s hvězdičkou a
- * `OR` (viz `queries` v config.js). Klíč je v env `EDESKY_API_KEY`.
+ * Oznámení jedné desky (okres, nebo — jako záložní zdroj, viz `fetchBoardNotices`
+ * níž — jednotlivá obec) přes oficiální API edesky.cz. Hledání je podle
+ * přesných tvarů slov (bez skloňování), proto dotazy s hvězdičkou a `OR`
+ * (viz `EDESKY_QUERIES` v config.js). Klíč je v env `EDESKY_API_KEY`.
  */
-async function fetchEdeskyApi(board, { deep }) {
+export async function fetchEdeskyApi(board, { deep }) {
   const apiKey = process.env.EDESKY_API_KEY;
   if (!apiKey) throw new Error("Chybí EDESKY_API_KEY (klíč k API edesky.cz, viz README)");
 
@@ -397,11 +399,26 @@ const PARSERS = { vismo: parseVismo, joomla: parseJoomla, ginis: parseGinis, ofn
  */
 export async function fetchBoardNotices(board, { deep = false } = {}) {
   if (board.type === "edesky-api") return fetchEdeskyApi(board, { deep });
-  const url = listUrl(board);
-  const html = await fetchText(url, { timeoutMs: 30_000 });
-  const notices = PARSERS[board.type](html, url);
-  if (notices.length === 0) {
-    throw new Error(`Na úřední desce nebylo nalezeno žádné oznámení (změnila se struktura stránky?): ${url}`);
+  try {
+    const url = listUrl(board);
+    const html = await fetchText(url, { timeoutMs: 30_000 });
+    const notices = PARSERS[board.type](html, url);
+    if (notices.length === 0) {
+      throw new Error(`Na úřední desce nebylo nalezeno žádné oznámení (změnila se struktura stránky?): ${url}`);
+    }
+    return notices;
+  } catch (directErr) {
+    if (!board.edeskyFallbackId || !process.env.EDESKY_API_KEY) throw directErr;
+    // Přímé čtení nejde — zkusit tutéž obec přes edesky API (viz komentář u
+    // `edeskyFallbackId` v config.js). Když selže i tohle, jde ven PŮVODNÍ
+    // chyba přímého čtení (to je zdroj, který se má opravit/sledovat).
+    try {
+      const notices = await fetchEdeskyApi({ edeskyId: board.edeskyFallbackId, queries: EDESKY_QUERIES }, { deep });
+      console.log(`[${board.key}] přímé čtení selhalo (${directErr.message}) — použit záložní zdroj edesky.cz, ${notices.length} oznámení.`);
+      return notices;
+    } catch (fallbackErr) {
+      console.error(`[${board.key}] selhalo i záložní edesky.cz: ${fallbackErr.message}`);
+      throw directErr;
+    }
   }
-  return notices;
 }

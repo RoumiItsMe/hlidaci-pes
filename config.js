@@ -102,6 +102,14 @@ export const watches = [
 // z "nejnovější" stránky výsledků dřív, než by na tenhle limit došlo.
 export const maxSeenPerSource = 500;
 
+// Dotazy pro API edesky.cz (viz `queries` u desky okresu níž) — sdílené i s
+// per-obecním záložním čtením (`edeskyFallbackId`), ať se hledá všude stejně.
+export const EDESKY_QUERIES = [
+  { keywords: "draž* OR aukc* OR aukč*", texts: true },
+  { keywords: "byt OR bytu OR bytů OR bytové OR bytová OR bytový OR bytovou OR bytovém" },
+  { keywords: "prodej* OR prodat OR zcizen* OR odprodej*" },
+];
+
 // Úřední desky obcí — hledá se v nich záměr prodeje bytu, dražba apod. (viz
 // sources/uredni-desky.js a lib/notice-filter.js). Nezávislé na `watches`
 // výše: deska nemá cenu ani lokalitu, jen seznam oznámení, takže se
@@ -109,16 +117,30 @@ export const maxSeenPerSource = 500;
 //  - `key`   — stabilní identifikátor (klíč ve stavovém souboru, neměnit)
 //  - `type`  — parser desky: "vismo" | "joomla" | "ginis"
 //  - `url`   — vismo: kořen webu obce; joomla: adresa desky; ginis: adresa desky
+//  - `edeskyFallbackId` — ID téže obce na edesky.cz (`lib/okres-obce.json`).
+//    Když přímé čtení selže (viz sources/uredni-desky.js), zkusí se místo
+//    něj JEDNORÁZOVĚ za tenhle běh dotáhnout stejná obec přes edesky API
+//    (to samo o sobě z GitHub Actions funguje spolehlivě, viz deska okresu
+//    níž). Jakmile přímé čtení zase projde, vrátí se k němu samo — nic se
+//    trvale nepřepíná. Zjištěno naostro 2026-09-29: Letohrad/Žamberk/Česká
+//    Třebová/Králíky (všechny na CMS Vismo) přestaly být z GitHub Actions
+//    dostupné (funguje odjinud, vypadá na blokaci datacenter IP na jejich
+//    hostingu) — bez záložního zdroje by byl hlídací pes na tyhle 4 obce
+//    slepý po celou dobu výpadku.
+//    Vědomý kompromis: záložní oznámení mají jiné ID (`e<docId>` z edesky
+//    místo `d-…`/`f-…` z Visma) a chybí jim datum „vyvěšeno do" — po
+//    zotavení přímého čtení se tak stejné oznámení může nahlásit podruhé.
+//    Levnější než zůstat slepý po dobu výpadku.
 export const noticeBoards = [
   { key: "usti-nad-orlici", label: "Ústí nad Orlicí", type: "joomla", url: "https://www.ustinadorlici.cz/cs/urad/uredni-deska" },
-  { key: "letohrad", label: "Letohrad", type: "vismo", url: "https://www.letohrad.eu" },
-  { key: "zamberk", label: "Žamberk", type: "vismo", url: "https://www.zamberk.cz" },
-  { key: "ceska-trebova", label: "Česká Třebová", type: "vismo", url: "https://www.ceska-trebova.cz" },
+  { key: "letohrad", label: "Letohrad", type: "vismo", url: "https://www.letohrad.eu", edeskyFallbackId: 299 },
+  { key: "zamberk", label: "Žamberk", type: "vismo", url: "https://www.zamberk.cz", edeskyFallbackId: 1196 },
+  { key: "ceska-trebova", label: "Česká Třebová", type: "vismo", url: "https://www.ceska-trebova.cz", edeskyFallbackId: 131 },
   { key: "lanskroun", label: "Lanškroun", type: "ginis", url: "https://ude.ginis.cloud/mesto-lanskroun/" },
 
   // Další města okresu přes otevřená data úřední desky (OFN, JSON-LD) —
   // adresy feedů z Národního katalogu otevřených dat (data.gov.cz).
-  { key: "kraliky", label: "Králíky", type: "ofn", url: "https://www.kraliky.eu/opendata-uredni-deska" },
+  { key: "kraliky", label: "Králíky", type: "ofn", url: "https://www.kraliky.eu/opendata-uredni-deska", edeskyFallbackId: 381 },
   { key: "vysoke-myto", label: "Vysoké Mýto", type: "ofn", url: "https://www.vysoke-myto.cz/opendata-board.php" },
 
   // Obce na centrálně hostovaném GINIS (stejný systém jako Lanškroun). Adresa
@@ -149,11 +171,7 @@ export const noticeBoards = [
     edeskyId: 1033,
     url: "https://edesky.cz/desky/1033",
     minIntervalMinutes: 60,
-    queries: [
-      { keywords: "draž* OR aukc* OR aukč*", texts: true },
-      { keywords: "byt OR bytu OR bytů OR bytové OR bytová OR bytový OR bytovou OR bytovém" },
-      { keywords: "prodej* OR prodat OR zcizen* OR odprodej*" },
-    ],
+    queries: EDESKY_QUERIES,
     // Ústí n. O., Č. Třebová, Lanškroun, Letohrad, Žamberk, Králíky, Vysoké Mýto, Luková, Tatenice, Anenská Studánka
     skipBoardIds: [100, 131, 229, 299, 1196, 381, 215, 2252, 2088, 5211],
   },
