@@ -56,19 +56,19 @@
       "consecutiveFailures": 0
     },
     "board:letohrad": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     },
     "board:zamberk": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     },
     "board:ceska-trebova": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     },
     "board:lanskroun": {
       "failing": false,
@@ -81,9 +81,9 @@
       "consecutiveFailures": 0
     },
     "board:kraliky": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     },
     "board:vysoke-myto": {
       "failing": false,
@@ -1562,7 +1562,8 @@
     "12163",
     "12162",
     "12168",
-    "12167"
+    "12167",
+    "12169"
   ],
   "board:letohrad": [
     "d-74944",
@@ -2528,16 +2529,16 @@
     "OBAS0B00WGMO-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-09-29T07:31:13.837Z",
+    "board:usti-nad-orlici": "2026-09-29T07:46:17.259Z",
     "board:letohrad": "2026-09-29T07:31:13.837Z",
     "board:zamberk": "2026-09-29T07:31:13.837Z",
     "board:ceska-trebova": "2026-09-29T07:31:13.837Z",
-    "board:lanskroun": "2026-09-29T07:31:13.837Z",
+    "board:lanskroun": "2026-09-29T07:46:17.259Z",
     "board:kraliky": "2026-09-29T07:31:13.837Z",
-    "board:vysoke-myto": "2026-09-29T07:31:13.837Z",
-    "board:lukova": "2026-09-29T07:31:13.837Z",
-    "board:tatenice": "2026-09-29T07:31:13.837Z",
-    "board:anenska-studanka": "2026-09-29T07:31:13.837Z",
+    "board:vysoke-myto": "2026-09-29T07:46:17.259Z",
+    "board:lukova": "2026-09-29T07:46:17.259Z",
+    "board:tatenice": "2026-09-29T07:46:17.259Z",
+    "board:anenska-studanka": "2026-09-29T07:46:17.259Z",
     "board:okres-usti-nad-orlici": "2026-09-29T07:31:13.837Z"
   },
   "board:okres-usti-nad-orlici": [
