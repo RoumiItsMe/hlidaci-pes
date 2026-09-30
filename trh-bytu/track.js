@@ -24,8 +24,9 @@ import { fetchBazos } from "../sources/bazos.js";
 import { openDb, nowIso, getListing, insertListing, updateListingFields, insertEvent, insertPhoto, DATA_DIR } from "./db.js";
 import { handleDisappeared } from "./relist.js";
 import { reservationChange } from "./reservation.js";
-import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace } from "./parse.js";
+import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
 import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
+import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
 import { downloadPhotos } from "./photos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
@@ -111,13 +112,29 @@ async function processSource(db, source, watch) {
       // inzerátu a v textu nechá původní; viz README).
       const textPrice = item.priceCzk == null ? parsePriceFromDescription(detail.description) : null;
       const priceCzk = item.priceCzk ?? textPrice;
-      const address =
+      let address =
         item.address ||
         parseAddressFromTitle(item.title) ||
         zipToKnownPlace(detail.zip, watch) ||
         findKnownPlace(item.title, watch) ||
         findKnownPlace(detail.description, watch) ||
         null;
+      // Když všech pět úrovní skončilo jen na holém názvu sledovaného
+      // města, zkusí appka ještě najít ulici zmíněnou v textu ("… v ulici
+      // Velký Hájek.") a připojit ji — víc než jen město, i když to pořád
+      // není oficiální adresa. Fires jen na HOLÉ město (žádná jiná úroveň
+      // adresu už nezpřesnila), ať appka nepřepisuje konkrétnější adresu.
+      if (address && watch.locations.some((loc) => loc.label === address)) {
+        const street = parseStreetFromText(item.title) ?? parseStreetFromText(detail.description);
+        if (street) address = `${address}, ul. ${street}`;
+      }
+
+      // Text popisu jako záchranná síť pro patro/sklep/vlastnictví, když je
+      // portál buď vůbec nedává strukturovaně (Bazoš/iDNES/RealityMIX), nebo
+      // je má ve svém JSON prázdné (reálný případ: sreality:479404108má
+      // nativně `floorInfo: null`, popis přitom patro říká) — nativní
+      // hodnota od portálu má vždy přednost, viz mergeExtractedParams.
+      const params = mergeExtractedParams(extractParamsFromText(item.title, detail.description), detail.params || {});
 
       insertListing(db, {
         id: listingId,
@@ -133,7 +150,7 @@ async function processSource(db, source, watch) {
         status,
         first_seen_at: now,
         last_seen_at: now,
-        params_json: JSON.stringify(detail.params || {}),
+        params_json: JSON.stringify(params),
         price_from_text: textPrice != null,
       });
 

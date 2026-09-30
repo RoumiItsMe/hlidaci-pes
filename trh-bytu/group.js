@@ -450,21 +450,12 @@ export function pickOwnValue(members, column) {
   return found ? found[column] : null;
 }
 
-/**
- * Sloučí strukturované parametry (vlastnictví, stav, podlaží...) napříč
- * členy skupiny — pro každé pole se bere hodnota od nejdůvěryhodnějšího
- * zdroje, co ho má (v praxi jde skoro vždy jen o volbu mezi Sreality a
- * Bezrealitky — jediné dva zdroje s params vůbec, viz params.js — a
- * Sreality je v SOURCE_PRIORITY výš). Vrací obyčejný objekt
- * `{ pole: hodnota }` bez `null` položek.
- */
-export function mergeParams(members) {
-  const merged = {};
+function mergeJsonColumn(merged, members, column) {
   for (const m of byPriority(members)) {
-    if (!m.params_json) continue;
+    if (!m[column]) continue;
     let params;
     try {
-      params = JSON.parse(m.params_json);
+      params = JSON.parse(m[column]);
     } catch {
       continue;
     }
@@ -472,5 +463,22 @@ export function mergeParams(members) {
       if (value != null && merged[key] == null) merged[key] = value;
     }
   }
+}
+
+/**
+ * Sloučí strukturované parametry (vlastnictví, stav, podlaží...) napříč
+ * členy skupiny — pro každé pole se bere hodnota od nejdůvěryhodnějšího
+ * zdroje, co ho má (v praxi jde skoro vždy jen o volbu mezi Sreality a
+ * Bezrealitky — jediné dva zdroje s params vůbec, viz params.js — a
+ * Sreality je v SOURCE_PRIORITY výš). RUČNÍ doplnění uživatelem
+ * (`params_override_json`, viz db.js) má VŽDY přednost před portálovými
+ * daty — proto se slučuje jako první, portálová data pak doplní jen to, co
+ * override nemá. Vrací obyčejný objekt `{ pole: hodnota }` bez `null`
+ * položek.
+ */
+export function mergeParams(members) {
+  const merged = {};
+  mergeJsonColumn(merged, members, "params_override_json");
+  mergeJsonColumn(merged, members, "params_json");
   return merged;
 }

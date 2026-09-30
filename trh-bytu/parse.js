@@ -153,6 +153,31 @@ export function zipToKnownPlace(zip, watch) {
   return watch.locations.find((loc) => loc.zip === normalized)?.label ?? null;
 }
 
+// "…v Žamberku ulice Velký Hájek.", "…na ulici Trávník v České Třebové…" —
+// appka bere 1-3 slova hned za "ulice"/"ulici", končí na první slovo, co
+// NEzačíná velkým písmenem (typicky předložka "v"/"u" pokračující věty) —
+// pokrývá i víceslovné názvy ("U Dlouhoňovic", "Quido Kociana", "V Aleji").
+// VOLÁ SE na titulek a popis ZVLÁŠŤ, nikdy ne na jejich spojení — spojený
+// text má mezi nimi neoznačenou hranici a "ulice Popradská" na konci
+// titulku by pak zabralo i první (náhodou velkým písmenem začínající)
+// slova popisu za ní.
+const STREET_RE = /ulic[eiě]\s+([A-ZÁ-Ž][\p{L}]*(?:\s+[A-ZÁ-Ž][\p{L}]*){0,2})/u;
+
+// Reálný případ (iDNES popis, ne titulek): "…, ulice Popradská Nabízíme
+// Vám ke koupi byt…" — popis sám ZAČÍNÁ opakováním titulku bez tečky mezi
+// nimi, takže regex nahoře nemá jak poznat konec "ulice Popradská" od
+// začátku další věty jen podle velkého písmene. Žádné z těchhle slov není
+// součástí reálného názvu ulice ve vzorku appky — ořežou se z konce.
+const STREET_TRAILING_STOPWORDS = new Set(["Nabízíme", "Nabízí", "Vám", "Byt", "Dům", "Tento", "Tato", "Toto", "Nachází", "Prodej", "Prodáváme", "Jedná", "Hledáte", "Byty", "Součástí"]);
+
+export function parseStreetFromText(text) {
+  const m = text?.match(STREET_RE);
+  if (!m) return null;
+  const words = m[1].trim().split(/\s+/);
+  while (words.length > 1 && STREET_TRAILING_STOPWORDS.has(words[words.length - 1])) words.pop();
+  return words.join(" ");
+}
+
 // Bazoš nemá samostatné pole s adresou (na rozdíl od ostatních 4 portálů) —
 // lokalita, a často i ulice, bývá připsaná na konci titulku hned za
 // plochou, např. "... 67 m², Ústí nad Orlicí, ul. Quido Kociana". Použije

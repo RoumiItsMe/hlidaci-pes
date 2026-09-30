@@ -8,7 +8,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue } from "./group.js";
-import { PARAM_FIELDS, OWN_FIELDS } from "./params.js";
+import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
@@ -92,6 +92,26 @@ function ownFieldSelectHtml(column, currentValue, { autoSubmit = false } = {}) {
     .join("");
   const onChange = autoSubmit ? ` onchange="this.form.submit()"` : "";
   return `<select name="${column}"${onChange}>${opts}</select>`;
+}
+
+const PARAM_OVERRIDE_FIELD_BY_COLUMN = Object.fromEntries(PARAM_OVERRIDE_FIELDS.map((f) => [f.column, f]));
+
+// Vstup pro jedno ruční doplnění PARAM_FIELDS (viz PARAM_OVERRIDE_FIELDS)
+// — text nebo <select>, podle `field.type`. `currentValue` je efektivní
+// (sloučená, viz mergeParams) hodnota, ne jen override — pole tak ukazuje,
+// co appka aktuálně zobrazuje, ať už to vytěžila z portálu, z textu, nebo
+// to sem dřív ručně dopsal uživatel; needituje se přímo `params_json`, jen
+// `params_override_json`, který má vždy přednost (viz POST /params).
+function paramOverrideFieldHtml(column, currentValue, { autoSubmit = false } = {}) {
+  const field = PARAM_OVERRIDE_FIELD_BY_COLUMN[column];
+  const onChange = autoSubmit ? ` onchange="this.form.submit()"` : "";
+  if (field.type === "select") {
+    const opts = [`<option value="">—</option>`]
+      .concat(field.options.map(([v, label]) => `<option value="${esc(v)}" ${currentValue === v ? "selected" : ""}>${esc(label)}</option>`))
+      .join("");
+    return `<select name="${column}"${onChange}>${opts}</select>`;
+  }
+  return `<input type="text" name="${column}" value="${esc(currentValue)}" placeholder="—"${onChange}>`;
 }
 
 function esc(s) {
@@ -612,16 +632,21 @@ function renderComparisonTable(db, filters) {
       // odvozování jednoho jména z druhého.
       const ownSelect = (column, value) =>
         `<form class="cell-form" method="post" action="/byt/${encId}/notes">${ownFieldSelectHtml(column, value, { autoSubmit: true })}</form>`;
+      // Stejný vzorec jako ownSelect, jen jiný cíl (/params) a jiný
+      // generátor pole (text i select, viz PARAM_OVERRIDE_FIELDS).
+      const paramField = (column) =>
+        `<form class="cell-form" method="post" action="/byt/${encId}/params">${paramOverrideFieldHtml(column, e.params[column], { autoSubmit: true })}</form>`;
 
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
         <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
         <td>${esc(e.address || e.city || "—")}</td>
         <td>${esc(e.rep.disposition || "—")}</td>
         <td>${e.rep.area_m2 ? `${e.rep.area_m2} m²` : "—"}</td>
-        <td>${esc(e.params.floorInfo || "—")}</td>
-        <td>${esc(e.params.elevator || "—")}</td>
-        <td>${esc(e.params.balcony || "—")}</td>
-        <td>${esc(e.params.cellar || "—")}</td>
+        <td>${paramField("floorInfo")}</td>
+        <td>${paramField("elevator")}</td>
+        <td>${paramField("balcony")}</td>
+        <td>${paramField("cellar")}</td>
+        <td>${paramField("ownership")}</td>
         <td>${ownSelect("own_condition", e.ownCondition)}</td>
         <td>${ownSelect("own_construction", e.ownConstruction)}</td>
         <td>${ownSelect("own_revitalized", e.ownRevitalized)}</td>
@@ -644,7 +669,7 @@ function renderComparisonTable(db, filters) {
 
   const headers = [
     "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
-    "Patro", "Výtah", "Balkón", "Sklep",
+    "Patro", "Výtah", "Balkón", "Sklep", "Vlastnictví",
     "Stav", "Konstrukce", "Revitalizace", "Ve statistice",
   ];
 
@@ -761,6 +786,12 @@ function renderDetail(db, id) {
 
     <h2>Časová osa</h2>
     <ul class="timeline">${timeline}</ul>
+
+    <h2>Doplnit parametry</h2>
+    <form method="post" action="/byt/${encodeURIComponent(rep.id)}/params">
+      ${PARAM_OVERRIDE_FIELDS.map(({ column, label }) => `<label>${esc(label)}${paramOverrideFieldHtml(column, params[column])}</label>`).join("")}
+      <button type="submit">Uložit</button>
+    </form>
 
     <h2>Vlastní hodnocení a poznámky</h2>
     <form method="post" action="/byt/${encodeURIComponent(rep.id)}/notes">
@@ -1239,6 +1270,42 @@ const server = createServer(async (req, res) => {
         updates[column] = options.some(([v]) => v === fields[column]) ? fields[column] : null;
       }
       for (const m of group.members) updateListingFields(db, m.id, updates);
+    }
+    res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
+    return res.end();
+  }
+
+  // Ruční doplnění/oprava PARAM_FIELDS (viz PARAM_OVERRIDE_FIELDS) — na
+  // rozdíl od /notes to NEJSOU sloupce tabulky, ale klíče v JEDNOM JSON
+  // sloupci (params_override_json), takže partial update znamená
+  // READ→MERGE→WRITE: přečíst existující override (z primárního záznamu
+  // skupiny — appka ho vždy zapisuje shodně na všechny členy, viz níž),
+  // domíchat jen pole, která tenhle request opravdu nese, prázdnou hodnotou
+  // smazat jen TEN klíč (ne celý override), a zapsat na VŠECHNY členy
+  // skupiny (stejná úvaha jako u /notes).
+  const paramsMatch = url.pathname.match(/^\/byt\/([^/]+)\/params$/);
+  if (paramsMatch && req.method === "POST") {
+    const id = decodeURIComponent(paramsMatch[1]);
+    const fields = await parseBody(req);
+    const allListings = db.prepare("SELECT * FROM listings").all();
+    const group = findGroupForListing(allListings, id);
+    if (group) {
+      const rep = primaryListing(group.members);
+      let override = {};
+      try {
+        override = rep.params_override_json ? JSON.parse(rep.params_override_json) : {};
+      } catch {
+        override = {};
+      }
+      for (const field of PARAM_OVERRIDE_FIELDS) {
+        if (!(field.column in fields)) continue;
+        const raw = fields[field.column]?.trim();
+        const valid = field.type === "select" ? field.options.some(([v]) => v === raw) : Boolean(raw);
+        if (valid) override[field.column] = raw;
+        else delete override[field.column];
+      }
+      const json = Object.keys(override).length ? JSON.stringify(override) : null;
+      for (const m of group.members) updateListingFields(db, m.id, { params_override_json: json });
     }
     res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
     return res.end();

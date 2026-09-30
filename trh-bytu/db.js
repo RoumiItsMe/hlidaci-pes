@@ -96,6 +96,12 @@ const COLUMN_MIGRATIONS = [
   // úsudku (např. prodej mezi příbuznými pod cenou, nebo naopak byt bez
   // nálepky "renovated", který se prodal jako plně zrekonstruovaný).
   { table: "listings", column: "stats_include", ddl: "TEXT" },
+  // Ruční doplnění/oprava strukturovaných parametrů (patro, výtah, sklep,
+  // vlastnictví...), kde portál nic nedal a appka to ani nevytěžila z textu
+  // (viz extract-params.js) — JSON objekt `{ pole: hodnota }`, stejný tvar
+  // jako params_json, jen PSANÝ uživatelem. Má vždy přednost před
+  // params_json, viz mergeParams v group.js.
+  { table: "listings", column: "params_override_json", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {

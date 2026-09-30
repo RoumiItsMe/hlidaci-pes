@@ -2,12 +2,15 @@
 // atd. — podobně jako je Sreality/Bazoš ukazují u vlastní nabídky). Pořadí
 // pole = pořadí zobrazení v detailu.
 //
-// Data k těmhle polím umí dodat jen Sreality a Bezrealitky (obě mají
-// strukturovaný JSON na detailu — viz detail/sreality.js a
-// detail/bezrealitky.js). iDNES/RealityMIX/Bazoš vracejí prázdný objekt —
-// nemají strukturovaná data, jen HTML popisek, ze kterého by se tohle dalo
-// vytáhnout jen nespolehlivě regexem. Pole, které žádný zdroj nevyplnil, se
-// v detailu prostě nezobrazí (fail-soft, stejný princip jako u popisu).
+// Strukturovaně (JSON na detailu) je dávají jen Sreality a Bezrealitky —
+// viz detail/sreality.js a detail/bezrealitky.js. iDNES/RealityMIX/Bazoš
+// vracejí prázdný objekt, ale appka pro floorInfo/cellar/ownership zkouší
+// aspoň záchrannou síť z volného textu popisu (viz extract-params.js) —
+// funguje i tam, kde by strukturovaná data čekala marně, a doplní i
+// Sreality/Bezrealitky inzeráty, které mají dané pole nativně prázdné
+// (reálný případ, ne teorie). Pole, které se nepodaří vyplnit ani tak, se
+// v detailu prostě nezobrazí (fail-soft, stejný princip jako u popisu) —
+// nebo si ho uživatel dopíše ručně, viz PARAM_OVERRIDE_FIELDS níž.
 export const PARAM_FIELDS = [
   ["ownership", "Vlastnictví"],
   ["condition", "Stav"],
@@ -21,6 +24,22 @@ export const PARAM_FIELDS = [
   ["cellar", "Sklep"],
   ["parking", "Parkování"],
   ["garage", "Garáž"],
+];
+
+// Podmnožina PARAM_FIELDS, kterou appka dovolí ručně dopsat/opravit, když
+// portál ani text popisu nic neřekly (nebo řekly špatně) — přesně ty pole,
+// co uživatel v tabulce srovnání vidí prázdná nejčastěji. `type: "select"`
+// s `options` sdílí stejný `ownFieldSelectHtml` mechanismus jako OWN_FIELDS
+// (prázdná volba "—" = appka se vrátí k portálové/text hodnotě, viz
+// mergeParams v group.js); `type: "text"` je volné pole (podlaží a sklep
+// mívají doplňkovou informaci v závorce — "2. patro z 4", "Ano (5 m²)" —
+// kterou pevný výběr nepokryje).
+export const PARAM_OVERRIDE_FIELDS = [
+  { column: "floorInfo", label: "Podlaží", type: "text" },
+  { column: "elevator", label: "Výtah", type: "select", options: [["Ano", "Ano"], ["Ne", "Ne"]] },
+  { column: "balcony", label: "Balkón", type: "text" },
+  { column: "cellar", label: "Sklep", type: "text" },
+  { column: "ownership", label: "Vlastnictví", type: "select", options: [["Osobní", "Osobní"], ["Družstevní", "Družstevní"]] },
 ];
 
 // Vlastní hodnocení uživatele (sloupec v `listings`, viz db.js). Appka se
