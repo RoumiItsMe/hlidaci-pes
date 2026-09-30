@@ -11,14 +11,23 @@
 // RealityMIX), track.js zavolá TYTÉŽ funkce znovu na popis z detailu —
 // ten dispozici/plochu skoro vždy zmiňuje taky, viz reálný příklad níže.
 
-const DISPOSITION_RE = /(\d)\s*\+\s*(kk|\d)/i;
+// Dvě větve schválně NEsymetrické: mezi dvěma ČÍSLICEMI ("2+1") musí být
+// doslovné "+", jinak by "28" (plocha, cena, cokoliv) omylem vypadalo jako
+// dispozice "2+8" — číslice vedle sebe jsou v realitním textu běžné, "+"
+// mezi nimi ne. Před "kk" je "+" naopak VOLITELNÉ ("1kk" i "1+kk") — realitky
+// píšou "1+kk", soukromí inzerenti na Bazoši častěji "1kk" bez plusu (reálný
+// případ: "Byt 1kk 28m2"); "kk" samo o sobě je dost specifický řetězec, že
+// nehrozí omylem chycený jiný text.
+const DISPOSITION_RE = /(\d)\s*\+\s*(\d)|(\d)\s*\+?\s*(kk)\b/i;
 const AREA_M2_RE = /(\d+(?:[.,]\d+)?)\s*m[²2]/i;
 
 /** Vrátí dispozici jako "2+1"/"4+kk", nebo null když text nic takového neobsahuje. */
 export function parseDisposition(text) {
   const m = text?.match(DISPOSITION_RE);
   if (!m) return null;
-  return `${m[1]}+${m[2].toLowerCase()}`;
+  const num = m[1] ?? m[3];
+  const suffix = m[2] ?? m[4];
+  return `${num}+${suffix.toLowerCase()}`;
 }
 
 /** Vrátí plochu v m² jako číslo, nebo null. */
@@ -80,17 +89,36 @@ export function stripPriceNote(text) {
   return text ? text.replace(PRICE_NOTE_RE, "").trim() : text;
 }
 
+// Volný text popisu má město skloňované ("Prodám byt v České Třebové."),
+// zatímco `watch.locations[].label` je vždy 1. pád (nominativ) — musí být,
+// aby seděl na `config.js`, který je sdílený s hlídacím psem a needituje se
+// kvůli tomuhle. U měst, kde skloňování jen PŘIDÁ koncovku ke stejnému
+// základu ("Žamberk" → "Žamberku", "Letohrad" → "Letohradě"), substring
+// shoda náhodou projde i bez pomoci (nominativ zůstává jako předpona). Kde
+// se mění i základ slova — hlavně přídavné jméno v "Česká Třebová" → "České
+// Třebové" (oba tvary bez společné předpony) — substring shoda selže úplně
+// a bez explicitního tvaru by adresa zůstala navždy prázdná (reálný případ:
+// "Prodám 1kk byt v České Třebové."). "Ústí nad Orlicí" se neskloňuje vůbec.
+const DECLINED_FORMS = {
+  "Ústí nad Orlicí": [],
+  Letohrad: ["Letohradě", "Letohradu", "Letohradem"],
+  Žamberk: ["Žamberku", "Žamberkem"],
+  "Česká Třebová": ["České Třebové", "Českou Třebovou"],
+};
+
 /**
  * Poslední záchranná síť pro adresu — když ji nedal ani portál, ani
  * titulek (viz parseAddressFromTitle), zkusí v textu najít aspoň JMÉNO
  * sledovaného města (ze stejné konfigurace jako watch "byty" v
- * config.js). Ne přesná adresa, ale "aspoň víme, kde to je" — přesně to,
- * co uživatel chtěl u nabídek, které jinak žádnou adresu vůbec nemají.
+ * config.js), včetně běžných skloňovaných tvarů (viz DECLINED_FORMS výš).
+ * Ne přesná adresa, ale "aspoň víme, kde to je" — přesně to, co uživatel
+ * chtěl u nabídek, které jinak žádnou adresu vůbec nemají.
  */
 export function findKnownPlace(text, watch) {
   if (!text) return null;
   for (const loc of watch.locations) {
-    if (text.includes(loc.label)) return loc.label;
+    const forms = [loc.label, ...(DECLINED_FORMS[loc.label] || [])];
+    if (forms.some((form) => text.includes(form))) return loc.label;
   }
   return null;
 }

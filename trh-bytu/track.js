@@ -93,9 +93,12 @@ async function processSource(db, source, watch) {
       // Bazoš/RealityMIX) — v tom případě appka zkusí totéž vytáhnout z
       // popisu na detailu, ten je skoro vždy zmiňuje taky. Cena stejně:
       // "Cena na vyžádání"/"Dohodou" u samotné nabídky, ale popis přesto
-      // často konkrétní číslo obsahuje. Adresa má tři úrovně: pole od
-      // portálu → konec titulku (jen Bazoš) → aspoň název sledovaného
-      // města zmíněný v popisu (viz parse.js).
+      // často konkrétní číslo obsahuje. Adresa má čtyři úrovně: pole od
+      // portálu → konec titulku (jen Bazoš, formát "... m², Město, ulice")
+      // → název sledovaného města zmíněný přímo v titulku (např. "Moderní
+      // bydlení - Česká Třebová, byt 32m2" — město je v titulku, ale ne v
+      // pozici za plochou, na kterou cílí předchozí krok) → totéž v popisu
+      // na detailu, vč. skloňovaných tvarů (viz findKnownPlace v parse.js).
       const disposition = parseDisposition(item.title) ?? parseDisposition(detail.description);
       const areaM2 = parseAreaM2(item.title) ?? parseAreaM2(detail.description);
       // Cena z popisu jen tam, kde ji portál vůbec neuvedl — a značí se
@@ -103,7 +106,12 @@ async function processSource(db, source, watch) {
       // inzerátu a v textu nechá původní; viz README).
       const textPrice = item.priceCzk == null ? parsePriceFromDescription(detail.description) : null;
       const priceCzk = item.priceCzk ?? textPrice;
-      const address = item.address || parseAddressFromTitle(item.title) || findKnownPlace(detail.description, watch) || null;
+      const address =
+        item.address ||
+        parseAddressFromTitle(item.title) ||
+        findKnownPlace(item.title, watch) ||
+        findKnownPlace(detail.description, watch) ||
+        null;
 
       insertListing(db, {
         id: listingId,
