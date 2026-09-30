@@ -25,6 +25,7 @@ import { openDb, nowIso, getListing, insertListing, updateListingFields, insertE
 import { handleDisappeared } from "./relist.js";
 import { reservationChange } from "./reservation.js";
 import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace } from "./parse.js";
+import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
 import { downloadPhotos } from "./photos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
@@ -135,6 +136,22 @@ async function processSource(db, source, watch) {
         params_json: JSON.stringify(detail.params || {}),
         price_from_text: textPrice != null,
       });
+
+      // Odhad vlastního hodnocení (viz detect-own-fields.js) — VŽDY jen jako
+      // výchozí návrh pro čerstvě zaevidovaný inzerát (pole je teď jistě
+      // NULL, insertListing na ně vůbec nesahá). Appka je pak sama od sebe
+      // už nikdy nepřepíše, jedině uživatel ručně přes <select> — proto
+      // stačí zapsat jednou tady, žádná ochrana proti přepsání navíc není
+      // potřeba.
+      const ownFields = {};
+      const detectionText = `${item.title} ${detail.description || ""}`;
+      const ownCondition = detectOwnCondition(detectionText);
+      const ownConstruction = detectOwnConstruction(detectionText);
+      const ownRevitalized = detectOwnRevitalized(detectionText);
+      if (ownCondition != null) ownFields.own_condition = ownCondition;
+      if (ownConstruction != null) ownFields.own_construction = ownConstruction;
+      if (ownRevitalized != null) ownFields.own_revitalized = ownRevitalized;
+      if (Object.keys(ownFields).length > 0) updateListingFields(db, listingId, ownFields);
       insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: priceCzk, occurred_at: now });
       createdThisRun.push({ id: listingId, disposition, area_m2: areaM2, description: detail.description, price_czk: priceCzk });
       if (status === "reserved") {
