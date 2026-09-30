@@ -178,6 +178,23 @@ export function parseStreetFromText(text) {
   return words.join(" ");
 }
 
+// České datum "D. M. RRRR" (Sreality: "21. 7. 2026") nebo "D.M. RRRR"
+// (Bazoš: "29.9. 2026") — mezera po tečce nepovinná u obou míst, `\s*`
+// pokryje oba tvary jedním výrazem. Vrací ISO datum (půlnoc UTC — appka
+// nezná přesný čas zveřejnění, jen den), nebo `null`.
+const CZECH_DATE_RE = /(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/;
+
+export function parseCzechDateToIso(text) {
+  const m = text?.match(CZECH_DATE_RE);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const day = parseInt(d, 10);
+  const month = parseInt(mo, 10);
+  const year = parseInt(y, 10);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00.000Z`;
+}
+
 // Bazoš nemá samostatné pole s adresou (na rozdíl od ostatních 4 portálů) —
 // lokalita, a často i ulice, bývá připsaná na konci titulku hned za
 // plochou, např. "... 67 m², Ústí nad Orlicí, ul. Quido Kociana". Použije

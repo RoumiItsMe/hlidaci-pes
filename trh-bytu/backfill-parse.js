@@ -21,6 +21,12 @@
 //   4. Offline — PARAM_FIELDS z textu (patro/sklep/vlastnictví, viz
 //      extract-params.js). Doplňuje jen chybějící KLÍČE uvnitř params_json,
 //      nikdy nepřepíše, co tam portál nebo dřívější běh appky už dal.
+//   5. Offline — ulice u adresy, co skončila jen na holém městě.
+//   6. Sreality+Bazoš síťová fáze — skutečné datum zveřejnění (`listed_at`,
+//      viz db.js) appka historicky neukládala, i tady musí znovu navštívit
+//      živý detail. Nejpomalejší fáze (desítky requestů, zdvořilostní
+//      pauza u každého) — běží jako poslední a jen pro řádky bez
+//      `listed_at`.
 //
 // Idempotentní: nikdy nepřepíše hodnotu, která už je vyplněná (jen NULL →
 // něco) — ani hodnotu, kterou mezitím ručně upravil uživatel přes <select> v
@@ -34,6 +40,7 @@ import { parseDisposition, parseAddressFromTitle, findKnownPlace, zipToKnownPlac
 import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
 import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
+import { fetchSrealityDetail } from "./detail/sreality.js";
 import { watches } from "../config.js";
 
 function sleep(ms) {
@@ -208,5 +215,27 @@ for (const row of bareCityRows) {
 }
 
 console.log(`Fáze 5 hotovo. Zkoumáno ${bareCityRows.length} záznamů s holou městskou adresou — ulice doplněna u ${fixedStreet}.`);
+
+// --- Fáze 6: Sreality + Bazoš síťová fáze, skutečné datum zveřejnění ---
+const listedAtRows = db.prepare("SELECT id, source, url FROM listings WHERE source IN ('sreality','bazos') AND listed_at IS NULL").all();
+
+let fixedListedAt = 0;
+for (const row of listedAtRows) {
+  const fetchDetail = row.source === "sreality" ? fetchSrealityDetail : fetchBazosDetail;
+  const detail = await fetchDetail(row.url);
+  if (detail.listedAt) {
+    const listedTime = new Date(detail.listedAt).getTime();
+    // Stejná pojistka jako v track.js — nikdy datum v budoucnu ani
+    // nesmyslně staré (chybný parsing by appku jinak tiše zmátl).
+    if (Number.isFinite(listedTime) && listedTime <= Date.now() && listedTime > Date.now() - 5 * 365 * 24 * 60 * 60 * 1000) {
+      db.prepare("UPDATE listings SET listed_at = ? WHERE id = ?").run(detail.listedAt, row.id);
+      fixedListedAt++;
+      console.log(`${row.id}: {"listed_at":"${detail.listedAt}"}`);
+    }
+  }
+  await sleep(300); // zdvořilost vůči portálu, stejná pauza jako track.js
+}
+
+console.log(`Fáze 6 hotovo. Zkoumáno ${listedAtRows.length} Sreality/Bazoš záznamů bez data zveřejnění — doplněno u ${fixedListedAt}.`);
 
 db.close();

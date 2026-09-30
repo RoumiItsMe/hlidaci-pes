@@ -302,8 +302,18 @@ export function mergedStatus(members) {
   return "removed";
 }
 
-export function earliestFirstSeen(members) {
-  return members.reduce((min, m) => (m.first_seen_at < min ? m.first_seen_at : min), members[0].first_seen_at);
+// Nejstarší ZNÁMÉ datum, kdy byl byt v nabídce — přednost má portálovo
+// vlastní `listed_at` (Sreality/Bazoš, viz db.js), u členů BEZ něj appka
+// padá na `first_seen_at` (kdy ho poprvé zaevidovala ona sama — o dost
+// pozdější horní odhad, ale jediný, co má). Min napříč CELOU skupinou, ne
+// jen primárním záznamem — u sloučeného bytu dá i inzerát na portálu bez
+// `listed_at` k dispozici aspoň svoje `first_seen_at`, které může být
+// dřívější než `listed_at` jiného člena (appka ho tam prostě zahlédla dřív).
+export function earliestListedAt(members) {
+  return members.reduce((min, m) => {
+    const at = m.listed_at ?? m.first_seen_at;
+    return at < min ? at : min;
+  }, members[0].listed_at ?? members[0].first_seen_at);
 }
 
 /**

@@ -168,6 +168,16 @@ async function processSource(db, source, watch) {
       if (ownCondition != null) ownFields.own_condition = ownCondition;
       if (ownConstruction != null) ownFields.own_construction = ownConstruction;
       if (ownRevitalized != null) ownFields.own_revitalized = ownRevitalized;
+      // Skutečné datum zveřejnění od portálu (jen Sreality/Bazoš to umí,
+      // viz db.js) — appka mu nevěří naslepo, jen když je v minulosti (ne v
+      // budoucnu, což by značilo špatně rozparsované datum) a ne řádově
+      // vzdálenější než pár let (fail-soft proti pádnému parsovacímu omylu).
+      if (detail.listedAt) {
+        const listedTime = new Date(detail.listedAt).getTime();
+        if (Number.isFinite(listedTime) && listedTime <= Date.now() && listedTime > Date.now() - 5 * 365 * 24 * 60 * 60 * 1000) {
+          ownFields.listed_at = detail.listedAt;
+        }
+      }
       if (Object.keys(ownFields).length > 0) updateListingFields(db, listingId, ownFields);
       insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: priceCzk, occurred_at: now });
       createdThisRun.push({ id: listingId, disposition, area_m2: areaM2, description: detail.description, price_czk: priceCzk });

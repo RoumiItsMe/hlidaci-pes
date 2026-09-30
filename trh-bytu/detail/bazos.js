@@ -19,6 +19,7 @@
 // fail-soft, prázdný řetězec `.text()` dá `zip: null`.
 import * as cheerio from "cheerio";
 import { fetchText } from "../../lib/http.js";
+import { parseCzechDateToIso } from "../parse.js";
 
 export async function fetchBazosDetail(url) {
   try {
@@ -27,6 +28,11 @@ export async function fetchBazosDetail(url) {
 
     const description = $(".popisdetail").first().text().replace(/\s+/g, " ").trim() || null;
     const zip = $('a[title="Přibližná lokalita"]').first().text().replace(/\s+/g, "") || null;
+    // Datum přidání je hned vedle nadpisu inzerátu: "Byt 1kk 28m2 - [29.9.
+    // 2026]" — appka bere jen ten span, ne celou stránku, protože stejné
+    // datové tvary se objevují i jinde (postranní panel s podobnými
+    // inzeráty).
+    const listedAt = parseCzechDateToIso($(".inzeratydetnadpis .velikost10").first().text());
 
     const photoUrls = [];
     const seen = new Set();
@@ -38,9 +44,9 @@ export async function fetchBazosDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description, photoUrls, reserved: false, params: {}, zip };
+    return { description, photoUrls, reserved: false, params: {}, zip, listedAt };
   } catch (err) {
     console.warn(`[detail/bazos] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false, params: {}, zip: null };
+    return { description: null, photoUrls: [], reserved: false, params: {}, zip: null, listedAt: null };
   }
 }

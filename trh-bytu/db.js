@@ -102,6 +102,13 @@ const COLUMN_MIGRATIONS = [
   // jako params_json, jen PSANÝ uživatelem. Má vždy přednost před
   // params_json, viz mergeParams v group.js.
   { table: "listings", column: "params_override_json", ddl: "TEXT" },
+  // Skutečné datum zveřejnění inzerátu PODLE PORTÁLU (Sreality "Vloženo:",
+  // Bazoš "[D.M. RRRR]" u nadpisu) — na rozdíl od `first_seen_at` (kdy ho
+  // poprvé uviděla APPKA, může být klidně týdny/měsíce po skutečném
+  // vystavení). NULL, když ho zdroj neumí dát (iDNES/RealityMIX/
+  // Bezrealitky nemají tohle pole vůbec, viz detail/*.js) — appka pak
+  // padá zpátky na first_seen_at, nikdy netvrdí datum, které nezná.
+  { table: "listings", column: "listed_at", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {

@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue } from "./group.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
@@ -364,7 +364,11 @@ function computeEntries(db) {
   }
 
   const entries = allGroups.map((g) => {
-    const firstSeenAt = earliestFirstSeen(g.members);
+    // "Přidáno" ukazuje NEJSTARŠÍ ZNÁMÉ datum (portálovo vlastní "Vloženo",
+    // viz earliestListedAt v group.js) — appka nemá jak potvrdit den
+    // přesně, ale je to výrazně blíž realitě než kdy si toho appka poprvé
+    // všimla, hlavně u bytů zaevidovaných dávno po jejich zveřejnění.
+    const firstSeenAt = earliestListedAt(g.members);
     const events = groupEvents(g.members);
     const change = latestChange(events);
     const rep = primaryListing(g.members);
@@ -763,7 +767,7 @@ function renderDetail(db, id) {
 
   const address = bestAddress(members) || "";
   const latest = latestChange(events);
-  const updates = updatesChips(earliestFirstSeen(members), latest, changeSources(members, events, latest));
+  const updates = updatesChips(earliestListedAt(members), latest, changeSources(members, events, latest));
 
   return `
     <p><a href="/">← Zpět na seznam</a></p>

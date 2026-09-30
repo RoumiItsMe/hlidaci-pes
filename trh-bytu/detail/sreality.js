@@ -26,6 +26,20 @@
 // závorce, pokud je známá.
 
 import { fetchText } from "../../lib/http.js";
+import { parseCzechDateToIso } from "../parse.js";
+
+// "Vloženo: 21. 7. 2026" — vykreslené přímo v HTML (React hydration
+// nechává mezi textem a dvojtečkou prázdný komentář `<!-- -->`), NENÍ
+// součástí `estate` JSON objektu z __NEXT_DATA__ výš, proto samostatný
+// regex na syrové HTML. Schválně "Vloženo" ("Upraveno" o kus dál je datum
+// PORTÁLOVÉ poslední editace, ne první zveřejnění — appka mu nevěří, viz
+// komentář u CHANGE_EVENT_TYPES v group.js, stejný důvod).
+const LISTED_AT_RE = /Vloženo[^:]*:<\/dt>\s*<dd[^>]*>([^<]+)<\/dd>/;
+
+function extractListedAt(html) {
+  const m = html.match(LISTED_AT_RE);
+  return m ? parseCzechDateToIso(m[1]) : null;
+}
 
 function extractNextData(html) {
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
@@ -91,17 +105,17 @@ export async function fetchSrealityDetail(url) {
     const dh = data?.props?.pageProps?.dehydratedState;
     const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
     const est = q?.state?.data;
-    if (!est) return { description: null, photoUrls: [], reserved: null, params: {} };
+    if (!est) return { description: null, photoUrls: [], reserved: null, params: {}, listedAt: null };
 
     const photoUrls = (est.images || [])
       .map((img) => (img.url?.startsWith("//") ? `https:${img.url}` : img.url))
       .filter(Boolean);
 
-    return { description: est.description || null, photoUrls, reserved: isReserved(est), params: extractParams(est) };
+    return { description: est.description || null, photoUrls, reserved: isReserved(est), params: extractParams(est), listedAt: extractListedAt(html) };
   } catch (err) {
     console.warn(`[detail/sreality] ${url}: ${err.message}`);
     // `reserved: null` = "nevíme" (ne "není rezervováno") — chyba stažení
     // nesmí rezervaci u známého inzerátu zrušit, viz track.js.
-    return { description: null, photoUrls: [], reserved: null, params: {} };
+    return { description: null, photoUrls: [], reserved: null, params: {}, listedAt: null };
   }
 }
