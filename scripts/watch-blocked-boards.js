@@ -25,7 +25,7 @@
 
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { appendFileSync, mkdirSync } from "node:fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,9 +65,12 @@ function hasLocalStateChanges() {
 }
 
 async function main() {
-  const { noticeBoards } = await import(path.join(REPO_ROOT, "config.js"));
-  const { loadState, saveState } = await import(path.join(REPO_ROOT, "lib", "state.js"));
-  const { runNoticeBoards } = await import(path.join(REPO_ROOT, "lib", "boards-runner.js"));
+  // Absolutní Windows cesta ("C:\...") není platné ESM URL schéma — musí
+  // se převést na file:// URL (stejná past jako jinde v projektu).
+  const importAbs = (...segments) => import(pathToFileURL(path.join(REPO_ROOT, ...segments)).href);
+  const { noticeBoards } = await importAbs("config.js");
+  const { loadState, saveState } = await importAbs("lib", "state.js");
+  const { runNoticeBoards } = await importAbs("lib", "boards-runner.js");
 
   log("=== Start běhu (domácí záloha blokovaných desek) ===");
 
