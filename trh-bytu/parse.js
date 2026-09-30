@@ -21,13 +21,27 @@
 const DISPOSITION_RE = /(\d)\s*\+\s*(\d)|(\d)\s*\+?\s*(kk)\b/i;
 const AREA_M2_RE = /(\d+(?:[.,]\d+)?)\s*m[²2]/i;
 
+// "Garsonka"/"garsoniéra" (a jejich skloněné tvary — garsonku, garsonky,
+// garsoniéru...) je slovní název dispozice, ne číselný zápis — realitky ho
+// běžně používají MÍSTO "1+kk", ne vedle něj (reálný případ: "Prodej
+// garsonky se zahradou v České Třebové" na Bazoši je TENTÝŽ byt jako
+// "1+kk" na Sreality/iDNES — stejná cena, stejná plocha, stejný popis).
+// Bez rozpoznání by appka takový byt nesloučila s jeho verzí na jiném
+// portálu (sloučení vyžaduje shodnou dispozici, viz group.js) a preferovaný
+// zdroj (Sreality) by se nikdy nepoužil. Obě slova sdílí stejný základ
+// "garson", stačí jeden regex na obě varianty i jejich pády.
+const GARSONKA_RE = /garson/i;
+
 /** Vrátí dispozici jako "2+1"/"4+kk", nebo null když text nic takového neobsahuje. */
 export function parseDisposition(text) {
-  const m = text?.match(DISPOSITION_RE);
-  if (!m) return null;
-  const num = m[1] ?? m[3];
-  const suffix = m[2] ?? m[4];
-  return `${num}+${suffix.toLowerCase()}`;
+  if (!text) return null;
+  const m = text.match(DISPOSITION_RE);
+  if (m) {
+    const num = m[1] ?? m[3];
+    const suffix = m[2] ?? m[4];
+    return `${num}+${suffix.toLowerCase()}`;
+  }
+  return GARSONKA_RE.test(text) ? "1+kk" : null;
 }
 
 /** Vrátí plochu v m² jako číslo, nebo null. */
