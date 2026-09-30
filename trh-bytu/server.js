@@ -643,9 +643,9 @@ function renderComparisonTable(db, filters) {
 
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
         <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
-        <td>${esc(e.address || e.city || "—")}</td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="address" value="${esc(e.address || e.city)}" placeholder="adresa…" onchange="this.form.submit()"></form></td>
         <td>${esc(e.rep.disposition || "—")}</td>
-        <td>${e.rep.area_m2 ? `${e.rep.area_m2} m²` : "—"}</td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="number" name="area_m2" value="${e.rep.area_m2 ?? ""}" step="0.1" placeholder="m²" onchange="this.form.submit()"></form></td>
         <td>${paramField("floorInfo")}</td>
         <td>${paramField("elevator")}</td>
         <td>${paramField("balcony")}</td>
@@ -799,6 +799,8 @@ function renderDetail(db, id) {
 
     <h2>Vlastní hodnocení a poznámky</h2>
     <form method="post" action="/byt/${encodeURIComponent(rep.id)}/notes">
+      <label>Adresa / lokalita<input type="text" name="address" value="${esc(address)}"></label>
+      <label>Plocha (m²)<input type="number" name="area_m2" value="${rep.area_m2 ?? ""}" step="0.1"></label>
       ${OWN_FIELDS.map(
         ({ column, label }) => `<label>${esc(label)}${ownFieldSelectHtml(column, pickOwnValue(members, column))}</label>`
       ).join("")}
@@ -863,7 +865,12 @@ function formatSignedCzk(n) {
 function renderFlipCalculator(rep, inputs, result) {
   const encId = encodeURIComponent(rep.id);
   const fmt = (n) => formatCzk(n != null ? Math.round(n) : null);
-  const marginClass = (m) => (m == null ? "" : m >= 20 ? "margin-good" : m >= 10 ? "margin-ok" : "margin-bad");
+  // Maximální nákupní cena nemá vlastní %, jen znaménko — záporná = žádná
+  // nákupní cena (ani nulová) by cílovou marži nedala, kladná = jde to.
+  const signClass = (n) => (n == null ? "" : n > 0 ? "margin-good" : n < 0 ? "margin-bad" : "");
+  // Tři pásma podle SKUTEČNÉ marže (ne podle znaménka) — přesně prahy z
+  // návodu: pod 10 % oranžová, 10–20 % tmavší žlutá, nad 20 % zelená.
+  const marginTierClass = (m) => (m == null ? "" : m >= 20 ? "margin-good" : m >= 10 ? "margin-mid" : "margin-low");
 
   return `
     <p><a href="/byt/${encId}">← Zpět na byt</a></p>
@@ -902,13 +909,13 @@ function renderFlipCalculator(rep, inputs, result) {
     </table>
 
     <h2>Výsledek</h2>
-    <div class="flip-result">
+    <div class="flip-result ${signClass(result.maxBuyPrice)}">
       <div class="flip-result-headline">Maximální nákupní cena pro ${esc(String(inputs.targetMarginPct))} % marži</div>
       <div class="flip-result-value">${fmt(result.maxBuyPrice)}</div>
     </div>
     ${
       inputs.currentAskingPriceCzk != null && result.marginAtAsking != null
-        ? `<div class="flip-result flip-result--secondary ${marginClass(result.marginAtAsking)}">
+        ? `<div class="flip-result flip-result--secondary ${marginTierClass(result.marginAtAsking)}">
             <div class="flip-result-headline">Při dnešní inzerované ceně (${fmt(inputs.currentAskingPriceCzk)})</div>
             <div class="flip-result-value">${formatSignedCzk(result.profitAtAsking)} <span class="flip-result-margin">(${result.marginAtAsking.toFixed(1)} % marže)</span></div>
           </div>`
@@ -1263,6 +1270,13 @@ const server = createServer(async (req, res) => {
       const updates = {};
       if ("notes" in fields) updates.notes = fields.notes || null;
       if ("seller_motivation" in fields) updates.seller_motivation = fields.seller_motivation || null;
+      // Plocha a adresa jsou normálně auto-parsované (viz parse.js/
+      // track.js), ale appka je odjinud nedopočítá vždy — ruční doplnění
+      // se zapisuje přímo do stejných sloupců, na VŠECHNY členy skupiny
+      // (stejně jako ostatní pole tady), aby to viděl každý čtenář dat bez
+      // ohledu na to, kdo je zrovna primaryListing.
+      if ("area_m2" in fields) updates.area_m2 = fields.area_m2 ? Number(fields.area_m2) : null;
+      if ("address" in fields) updates.address = fields.address || null;
       if ("verified_sale_price_czk" in fields) {
         updates.verified_sale_price_czk = fields.verified_sale_price_czk ? Number(fields.verified_sale_price_czk) : null;
       }
