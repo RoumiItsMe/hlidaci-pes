@@ -22,3 +22,38 @@ export const PARAM_FIELDS = [
   ["parking", "Parkování"],
   ["garage", "Garáž"],
 ];
+
+// Vlastní hodnocení uživatele (sloupec v `listings`, viz db.js) — na rozdíl
+// od PARAM_FIELDS výš to NIKDY nepřijde z portálu, appka to jen ukládá a
+// zobrazuje. Tvar `{ column, label, options: [[hodnota, popisek], …] }` —
+// `options` slouží jak pro <select> v tabulce srovnání, tak pro překlad
+// uložené hodnoty na český popisek při zobrazení. Uložená hodnota, která v
+// `options` není (např. po ruční úpravě DB), se zobrazí jako prázdná —
+// appka si nic nevymýšlí.
+export const OWN_FIELDS = [
+  {
+    column: "own_condition",
+    label: "Stav",
+    options: [
+      ["needs_reno", "Nutná rekonstrukce"],
+      ["maintained", "Udržovaný"],
+      ["renovated", "Po rekonstrukci"],
+    ],
+  },
+  {
+    column: "own_construction",
+    label: "Konstrukce",
+    options: [
+      ["panel", "Panel"],
+      ["brick", "Cihla"],
+    ],
+  },
+  {
+    column: "own_revitalized",
+    label: "Revitalizace domu",
+    options: [
+      ["yes", "Ano"],
+      ["no", "Ne"],
+    ],
+  },
+];

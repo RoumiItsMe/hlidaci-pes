@@ -403,6 +403,20 @@ export function isHidden(members) {
 }
 
 /**
+ * Hodnota vlastního pole uživatele (own_condition/own_construction/
+ * own_revitalized, notes, verified_sale_*, viz db.js) přes CELOU skupinu,
+ * stejná úvaha jako u isStarred/isHidden výš — appka na tahle pole vždy
+ * zapisuje na VŠECHNY členy skupiny (viz server.js), takže čtení odsud
+ * najde hodnotu bez ohledu na to, který člen je zrovna primaryListing.
+ * Když se hodnoty mezi členy přesto rozejdou (např. stará data z doby před
+ * touhle opravou), vyhrává ta od nejdůvěryhodnějšího zdroje.
+ */
+export function pickOwnValue(members, column) {
+  const found = byPriority(members).find((m) => m[column] != null && m[column] !== "");
+  return found ? found[column] : null;
+}
+
+/**
  * Sloučí strukturované parametry (vlastnictví, stav, podlaží...) napříč
  * členy skupiny — pro každé pole se bere hodnota od nejdůvěryhodnějšího
  * zdroje, co ho má (v praxi jde skoro vždy jen o volbu mezi Sreality a

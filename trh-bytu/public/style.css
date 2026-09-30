@@ -258,3 +258,42 @@ form button { align-self: flex-start; padding: 0.5rem 1.2rem; background: var(--
 .notif--new { border-color: #f59e0b; background: #fffbeb; }
 .notif-title { font-weight: 600; }
 .notif-meta { font-size: 0.82rem; color: var(--muted); }
+
+/* Tabulka srovnání (/tabulka) — hodně sloupců vedle sebe je záměr (rychlé
+   porovnání víc bytů), proto vodorovné scrollování ve vlastním obalu místo
+   rozbíjení `main`ova max-width pro celou appku. */
+.compare-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+table.compare { border-radius: 0; white-space: nowrap; }
+table.compare th, table.compare td { padding: 0.4rem 0.6rem; font-size: 0.83rem; }
+table.compare thead th { background: var(--bg); color: var(--muted); font-weight: 600; white-space: nowrap; }
+table.compare tbody tr:hover { background: #fafafa; }
+table.compare tbody tr.row--hidden { opacity: 0.6; }
+.compare-actions { display: flex; gap: 0.2rem; }
+.compare-actions .icon-btn { width: 1.6rem; height: 1.6rem; font-size: 0.8rem; }
+.compare-links a { white-space: nowrap; }
+
+/* Odkaz v hlavičce sloupce, přes který se řadí — vypadá jako obyčejný
+   nadpis sloupce, ne jako tlačítko, jen s šipkou u aktivně řazeného. */
+.compare-sort { color: inherit; text-decoration: none; font-weight: 600; }
+.compare-sort.active { color: var(--accent); }
+.compare-sort:hover { text-decoration: underline; }
+
+/* Editovatelná buňka = vlastní <form> jen kolem jednoho ovládacího prvku —
+   MUSÍ přebít obecné `form { ... }` boxové styly (padding/border/pozadí),
+   jinak by každá buňka vypadala jako samostatná karta. */
+.cell-form { display: contents; }
+.cell-form select, .cell-form input {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.83rem;
+  width: 100%;
+  min-width: 6rem;
+}
+.cell-form select:hover, .cell-form input:hover,
+.cell-form select:focus, .cell-form input:focus {
+  border-color: var(--border);
+  background: var(--card);
+}

@@ -78,6 +78,13 @@ const COLUMN_MIGRATIONS = [
   { table: "listings", column: "replaced_by", ddl: "TEXT" }, // ID inzerátu, který tenhle nahradil při opětovném vložení na portálu, viz relist.js
   { table: "listings", column: "missed_since", ddl: "TEXT" }, // kdy se inzerát poprvé nenašel ve výpisu; "zmizel" se potvrdí až dalším během, viz relist.js
   { table: "listings", column: "price_from_text", ddl: "INTEGER NOT NULL DEFAULT 0" }, // 1 = cenu portál neuvedl, appka ji vyčetla z popisu (může být zastaralá)
+  // Vlastní hodnocení uživatele — NIKDY z portálu (na rozdíl od params_json
+  // condition/buildingType, které jsou skoro vždy prázdné, viz params.js).
+  // Hodnoty jsou stabilní anglické klíče, viz OWN_FIELDS v params.js pro
+  // popisky a povolené volby; NULL = zatím nezhodnoceno.
+  { table: "listings", column: "own_condition", ddl: "TEXT" }, // needs_reno | maintained | renovated
+  { table: "listings", column: "own_construction", ddl: "TEXT" }, // panel | brick
+  { table: "listings", column: "own_revitalized", ddl: "TEXT" }, // yes | no
 ];
 
 function runMigrations(db) {

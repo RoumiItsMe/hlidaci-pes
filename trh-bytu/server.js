@@ -6,9 +6,9 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { openDb, DATA_DIR } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden } from "./group.js";
-import { PARAM_FIELDS } from "./params.js";
+import { openDb, DATA_DIR, updateListingFields } from "./db.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue } from "./group.js";
+import { PARAM_FIELDS, OWN_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { watches } from "../config.js";
@@ -45,6 +45,31 @@ const EVENT_LABELS = {
 const PARAM_LABEL_BY_KEY = Object.fromEntries(PARAM_FIELDS);
 const AMENITY_KEYS = ["balcony", "loggia", "terrace", "cellar", "parking", "garage"];
 const DESCRIPTIVE_KEYS = ["ownership", "condition", "buildingType", "floorInfo", "energyRating"];
+
+// Vlastní hodnocení uživatele (viz OWN_FIELDS v params.js) — jen sloupce
+// dovolené v `POST /byt/:id/own/:field` a popisek uložené hodnoty.
+const OWN_FIELD_BY_COLUMN = Object.fromEntries(OWN_FIELDS.map((f) => [f.column, f]));
+function ownValueLabel(column, value) {
+  if (!value) return null;
+  return OWN_FIELD_BY_COLUMN[column]?.options.find(([v]) => v === value)?.[1] ?? null;
+}
+
+function formatPricePerM2(pricePerM2) {
+  return pricePerM2 == null ? "—" : `${pricePerM2.toLocaleString("cs-CZ")} Kč/m²`;
+}
+
+// <select> pro jedno vlastní hodnocení (viz OWN_FIELDS) — sdílené mezi
+// detailem (jeden formulář, tlačítko Uložit) a tabulkou srovnání (auto-submit
+// při změně, viz .own-select-form v CSS). Prázdná volba "—" vždy první, ať
+// jde hodnocení i vymazat, ne jen nastavit.
+function ownFieldSelectHtml(column, currentValue, { autoSubmit = false } = {}) {
+  const field = OWN_FIELD_BY_COLUMN[column];
+  const opts = [`<option value="">—</option>`]
+    .concat(field.options.map(([v, label]) => `<option value="${esc(v)}" ${currentValue === v ? "selected" : ""}>${esc(label)}</option>`))
+    .join("");
+  const onChange = autoSubmit ? ` onchange="this.form.submit()"` : "";
+  return `<select name="${column}"${onChange}>${opts}</select>`;
+}
 
 function esc(s) {
   if (s == null) return "";
@@ -147,7 +172,7 @@ function layout(title, body) {
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/stats">Statistiky</a>${bell}</header>
+<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a>${bell}</header>
 <main>${body}</main>
 </body>
 </html>`;
@@ -254,9 +279,11 @@ const SORT_LABELS = [
   ["price_desc", "Cena ↓"],
 ];
 
-function renderTable(db, filters) {
-  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView } = filters;
-  const showHidden = hiddenView === "show";
+// Odvozené údaje spočítané JEDNOU za skupinu, sdílené mezi přehledem
+// (renderTable) a srovnávací tabulkou (renderComparisonTable) — obě jen
+// čtou, žádné opakované JSON.parse/reduce nad stejnou skupinou vícekrát na
+// dvou různých stránkách.
+function computeEntries(db) {
   const allListings = db.prepare("SELECT * FROM listings").all();
   // Skupiny (ne syrové řádky) — stejná nemovitost napříč portály se ukáže
   // jen jednou, viz group.js.
@@ -290,20 +317,22 @@ function renderTable(db, filters) {
     return members.flatMap((m) => eventsByListing.get(m.id) || []);
   }
 
-  // Odvozené údaje spočítané JEDNOU za skupinu — filtr, řazení i
-  // vykreslení pak jen čtou, žádné opakované JSON.parse/reduce nad
-  // stejnou skupinou vícekrát.
   const entries = allGroups.map((g) => {
     const firstSeenAt = earliestFirstSeen(g.members);
     const events = groupEvents(g.members);
     const change = latestChange(events);
+    const rep = primaryListing(g.members);
+    const price = bestPrice(g.members);
     return {
       g,
-      rep: primaryListing(g.members),
+      rep,
       params: mergeParams(g.members),
       address: bestAddress(g.members),
-      price: bestPrice(g.members),
+      price,
       priceLabel: priceLabel(g.members),
+      // Cena za m² — appka ji nikde nezíská hotovou, dopočítá se z ceny a
+      // plochy primárního záznamu (stejný zdroj plochy jako titulek řádku).
+      pricePerM2: price != null && rep.area_m2 ? Math.round(price / rep.area_m2) : null,
       status: mergedStatus(g.members),
       firstSeenAt,
       change,
@@ -314,9 +343,24 @@ function renderTable(db, filters) {
       activityAt: change && change.occurred_at > firstSeenAt ? change.occurred_at : firstSeenAt,
       starred: isStarred(g.members),
       hidden: isHidden(g.members),
+      thumb: groupThumbnail(g.members),
+      // Vlastní hodnocení uživatele (viz OWN_FIELDS v params.js) — nikdy z
+      // portálu, appka na ně jen ukládá to, co uživatel sám vybere.
+      ownCondition: pickOwnValue(g.members, "own_condition"),
+      ownConstruction: pickOwnValue(g.members, "own_construction"),
+      ownRevitalized: pickOwnValue(g.members, "own_revitalized"),
+      notes: pickOwnValue(g.members, "notes"),
     };
   });
   for (const e of entries) e.city = extractCity(e.address, BYTY_WATCH);
+  return entries;
+}
+
+function renderTable(db, filters) {
+  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView } = filters;
+  const showHidden = hiddenView === "show";
+  const entries = computeEntries(db);
+  const allGroups = entries.map((e) => e.g);
 
   // Volby pro "Město"/"Vlastnictví" — jen hodnoty, co se v datech opravdu
   // vyskytují (ze SEBE, ne z hardcoded seznamu, ať appka nenabízí volbu,
@@ -372,7 +416,7 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, priceLabel: priceText_, status, firstSeenAt, change, changeWhere, starred, hidden }) => {
+    .map(({ g, rep, params, address, priceLabel: priceText_, status, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
       const st = STATUS_LABELS[status] || { text: status, color: "#000" };
       const { live, gone, reserved } = sourcesByAvailability(g.members);
       // Když byt někde zmizel a jinde je, ukáže se to hned v řádku — "zmizelo
@@ -386,7 +430,6 @@ function renderTable(db, filters) {
       // tam ať je jasné, proč tu je, i když ho uživatel dřív vyřadil.
       const hiddenNote = hidden && !showHidden ? ` <span class="hidden-note">· skryto (↺ vrátí do přehledu)</span>` : "";
       const linkBadge = g.merged ? ` <span class="link-badge" title="Stejná nemovitost nalezená na víc portálech">🔗</span>` : "";
-      const thumb = groupThumbnail(g.members);
       const photo = thumb
         ? `<img src="/photos/${encodeURIComponent(thumb.replace(/^photos[\\/]/, ""))}" loading="lazy" alt="">`
         : `<div class="row-photo-empty">Bez fotky</div>`;
@@ -439,6 +482,137 @@ function renderTable(db, filters) {
           : "Nic nenalezeno pro zvolené filtry."
       }</p>`
     }</div>`;
+}
+
+// Sloupce tabulky srovnání, u kterých jde kliknutím na hlavičku přepínat
+// řazení. Klíč je hodnota `sort` v URL, `dir` výchozí směr PRVNÍHO kliknutí
+// (další klik na tentýž sloupec vždy přepne opačně) — u čísel/data "nejdřív
+// nejvíc/nejnovější" je užitečnější výchozí pohled než vzestupně od nuly.
+const COMPARE_SORT_COLUMNS = {
+  added: { get: (e) => e.firstSeenAt, label: "Přidáno", firstDir: "desc" },
+  price: { get: (e) => e.price, label: "Cena", firstDir: "desc" },
+  price_m2: { get: (e) => e.pricePerM2, label: "Cena/m²", firstDir: "asc" },
+  area: { get: (e) => e.rep.area_m2, label: "Plocha", firstDir: "desc" },
+};
+
+function compareSortHeader(current, key, label) {
+  const col = COMPARE_SORT_COLUMNS[key];
+  const [curKey, curDir] = (current || "").split("_dir_");
+  const isActive = curKey === key;
+  // První klik na sloupec jede ve `firstDir`u, druhý klik na TENTÝŽ sloupec
+  // směr otočí — třetí zase zpátky atd.
+  const nextDir = isActive ? (curDir === "asc" ? "desc" : "asc") : col.firstDir;
+  const arrow = isActive ? (curDir === "asc" ? " ↑" : " ↓") : "";
+  return `<a class="compare-sort${isActive ? " active" : ""}" href="?sort=${key}_dir_${nextDir}">${esc(label)}${arrow}</a>`;
+}
+
+/**
+ * Tabulka srovnání — jeden byt = jeden řádek, VŠECHNY sledované údaje jako
+ * sloupce vedle sebe (na rozdíl od `renderTable`, který je pro procházení s
+ * fotkou a úryvkem popisu). K rychlému porovnání víc bytů najednou a k
+ * zapsání vlastního hodnocení (stav/konstrukce/revitalizace/poznámka) bez
+ * proklikávání do detailu — každá editovatelná buňka je vlastní malý
+ * formulář s auto-submitem při změně (žádný klientský JS mimo
+ * `this.form.submit()`, stejný vzorec jako filtr Město/Vlastnictví na "/").
+ */
+function renderComparisonTable(db, filters) {
+  const { status: statusFilter, city: cityFilter, sort: sortParam } = filters;
+  const entries = computeEntries(db);
+
+  const cityOptions = [...new Set(entries.map((e) => e.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
+
+  // Skryté (křížkem vyřazené) se z tabulky srovnání vylučují stejně jako z
+  // hlavního přehledu — je to uživatelovo "tohle mě nezajímá".
+  let filtered = entries.filter((e) => !e.hidden);
+  if (statusFilter) filtered = filtered.filter((e) => e.status === statusFilter);
+  if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
+
+  const [sortKey, sortDir] = (sortParam || "added_dir_desc").split("_dir_");
+  const sortCol = COMPARE_SORT_COLUMNS[sortKey] || COMPARE_SORT_COLUMNS.added;
+  const dir = sortDir === "asc" ? "asc" : "desc";
+  filtered = [...filtered].sort((a, b) => {
+    const va = sortCol.get(a);
+    const vb = sortCol.get(b);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1; // chybějící hodnota vždy na konec, bez ohledu na směr
+    if (vb == null) return -1;
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return dir === "asc" ? cmp : -cmp;
+  });
+
+  const current = { status: statusFilter, city: cityFilter, sort: sortParam };
+  const filterLinks = ["", "active", "reserved", "removed"]
+    .map((s) => {
+      const label = s ? STATUS_LABELS[s].text : "Vše";
+      const active = statusFilter === s || (!statusFilter && !s) ? "active" : "";
+      return `<a class="filter ${active}" href="${buildQuery(current, { status: s })}">${esc(label)}</a>`;
+    })
+    .join("");
+  const cityOptionsHtml = [`<option value="">Všechna města</option>`]
+    .concat(cityOptions.map((c) => `<option value="${esc(c)}" ${cityFilter === c ? "selected" : ""}>${esc(c)}</option>`))
+    .join("");
+
+  const rows = filtered
+    .map((e) => {
+      const encId = encodeURIComponent(e.rep.id);
+      const st = STATUS_LABELS[e.status] || { text: e.status, color: "#000" };
+      // column = sloupec v DB ("own_condition"...), value = odpovídající
+      // předpočítaná hodnota entry (e.ownCondition...) — přímé mapování, ne
+      // odvozování jednoho jména z druhého.
+      const ownSelect = (column, value) =>
+        `<form class="cell-form" method="post" action="/byt/${encId}/notes">${ownFieldSelectHtml(column, value, { autoSubmit: true })}</form>`;
+
+      return `<tr class="${e.hidden ? "row--hidden" : ""}">
+        <td class="compare-actions">${rowActionButtons(e.rep.id, e.starred, e.hidden)}</td>
+        <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
+        <td>${esc(e.address || e.city || "—")}</td>
+        <td>${esc(e.rep.disposition || "—")}</td>
+        <td>${e.rep.area_m2 ? `${e.rep.area_m2} m²` : "—"}</td>
+        <td>${esc(e.params.floorInfo || "—")}</td>
+        <td>${esc(e.params.elevator || "—")}</td>
+        <td>${esc(e.params.balcony || "—")}</td>
+        <td>${esc(e.params.cellar || "—")}</td>
+        <td>${ownSelect("own_condition", e.ownCondition)}</td>
+        <td>${ownSelect("own_construction", e.ownConstruction)}</td>
+        <td>${ownSelect("own_revitalized", e.ownRevitalized)}</td>
+        <td>${esc(e.priceLabel)}</td>
+        <td>${esc(formatPricePerM2(e.pricePerM2))}</td>
+        <td>${esc(formatDateOnly(e.firstSeenAt))}</td>
+        <td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(e.rep.url)}" target="_blank" rel="noopener">Inzerát ↗</a></td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="notes" value="${esc(e.notes)}" placeholder="poznámka…" onchange="this.form.submit()"></form></td>
+      </tr>`;
+    })
+    .join("");
+
+  const headers = [
+    "", "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
+    "Patro", "Výtah", "Balkón", "Sklep",
+    "Stav", "Konstrukce", "Revitalizace",
+  ];
+
+  return `
+    <h1>Srovnání bytů (${filtered.length})</h1>
+    <div class="filters">${filterLinks}</div>
+    <div class="toolbar">
+      <form method="get" action="/tabulka" class="select-filters">
+        <input type="hidden" name="status" value="${esc(statusFilter || "")}">
+        <input type="hidden" name="sort" value="${esc(sortParam || "")}">
+        <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
+      </form>
+    </div>
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead><tr>
+          ${headers.map((h) => `<th>${esc(h)}</th>`).join("")}
+          <th>${compareSortHeader(sortParam, "price", "Cena")}</th>
+          <th>${compareSortHeader(sortParam, "price_m2", "Cena/m²")}</th>
+          <th>${compareSortHeader(sortParam, "added", "Přidáno")}</th>
+          <th>Odkaz</th>
+          <th>Poznámka</th>
+        </tr></thead>
+        <tbody>${rows || `<tr><td colspan="${headers.length + 5}" class="empty">Nic nenalezeno pro zvolené filtry.</td></tr>`}</tbody>
+      </table>
+    </div>`;
 }
 
 function renderDetail(db, id) {
@@ -525,11 +699,14 @@ function renderDetail(db, id) {
     <h2>Časová osa</h2>
     <ul class="timeline">${timeline}</ul>
 
-    <h2>Vlastní poznámky</h2>
+    <h2>Vlastní hodnocení a poznámky</h2>
     <form method="post" action="/byt/${encodeURIComponent(rep.id)}/notes">
-      <label>Ověřená prodejní cena (Kč)<input type="number" name="verified_sale_price_czk" value="${rep.verified_sale_price_czk ?? ""}"></label>
-      <label>Datum prodeje<input type="date" name="verified_sale_date" value="${rep.verified_sale_date ?? ""}"></label>
-      <label>Poznámka<textarea name="notes" rows="3">${esc(rep.notes)}</textarea></label>
+      ${OWN_FIELDS.map(
+        ({ column, label }) => `<label>${esc(label)}${ownFieldSelectHtml(column, pickOwnValue(members, column))}</label>`
+      ).join("")}
+      <label>Ověřená prodejní cena (Kč)<input type="number" name="verified_sale_price_czk" value="${pickOwnValue(members, "verified_sale_price_czk") ?? ""}"></label>
+      <label>Datum prodeje<input type="date" name="verified_sale_date" value="${pickOwnValue(members, "verified_sale_date") ?? ""}"></label>
+      <label>Poznámka<textarea name="notes" rows="3">${esc(pickOwnValue(members, "notes"))}</textarea></label>
       <button type="submit">Uložit</button>
     </form>`;
 }
@@ -696,6 +873,16 @@ const server = createServer(async (req, res) => {
     return res.end(layout("Trh bytů", renderTable(db, filters)));
   }
 
+  if (url.pathname === "/tabulka" && req.method === "GET") {
+    const filters = {
+      status: url.searchParams.get("status") || null,
+      city: url.searchParams.get("city") || null,
+      sort: url.searchParams.get("sort") || null,
+    };
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    return res.end(layout("Srovnání — Trh bytů", renderComparisonTable(db, filters)));
+  }
+
   if (url.pathname === "/upozorneni" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(layout("Upozornění — Trh bytů", renderNotifications(db, url.searchParams.get("typ"))));
@@ -748,19 +935,37 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
 
+  // Vlastní poznámky a hodnocení (notes, ověřená prodejní cena/datum, viz
+  // detail; own_condition/own_construction/own_revitalized, viz tabulka
+  // srovnání) — JEDEN endpoint pro obě stránky, PARTIAL update: aktualizuje
+  // se jen to pole, které tělo požadavku opravdu nese (detail posílá
+  // všechno najednou z jednoho <form>, tabulka posílá jedno pole na
+  // auto-submit <select>/<input>) — chybějící pole se NEpřepisuje na NULL,
+  // jinak by uložení jednoho pole z tabulky smazalo zbytek. Zapisuje se na
+  // VŠECHNY členy skupiny (ne jen na ID v URL), stejná úvaha jako u
+  // isStarred/isHidden — přežije to i budoucí přerovnání SOURCE_PRIORITY.
   const notesMatch = url.pathname.match(/^\/byt\/([^/]+)\/notes$/);
   if (notesMatch && req.method === "POST") {
     const id = decodeURIComponent(notesMatch[1]);
     const fields = await parseBody(req);
-    db.prepare(
-      "UPDATE listings SET notes = ?, verified_sale_price_czk = ?, verified_sale_date = ? WHERE id = ?"
-    ).run(
-      fields.notes || null,
-      fields.verified_sale_price_czk ? Number(fields.verified_sale_price_czk) : null,
-      fields.verified_sale_date || null,
-      id
-    );
-    res.writeHead(302, { Location: `/byt/${encodeURIComponent(id)}` });
+    const allListings = db.prepare("SELECT * FROM listings").all();
+    const group = findGroupForListing(allListings, id);
+    if (group) {
+      const updates = {};
+      if ("notes" in fields) updates.notes = fields.notes || null;
+      if ("verified_sale_price_czk" in fields) {
+        updates.verified_sale_price_czk = fields.verified_sale_price_czk ? Number(fields.verified_sale_price_czk) : null;
+      }
+      if ("verified_sale_date" in fields) updates.verified_sale_date = fields.verified_sale_date || null;
+      for (const { column, options } of OWN_FIELDS) {
+        if (!(column in fields)) continue;
+        // Neplatná hodnota (ručně upravené URL apod.) se bere jako "vymazat",
+        // ne jako by nedorazila — appka si žádnou cizí hodnotu nevymýšlí.
+        updates[column] = options.some(([v]) => v === fields[column]) ? fields[column] : null;
+      }
+      for (const m of group.members) updateListingFields(db, m.id, updates);
+    }
+    res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
     return res.end();
   }
 
