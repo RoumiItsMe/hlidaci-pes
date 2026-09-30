@@ -158,11 +158,14 @@ function rowActionButtons(id, starred, hidden) {
   return `${starBtn}${hideBtn}`;
 }
 
-function layout(title, body) {
+function layout(title, body, { wide = false } = {}) {
   // Zvoneček: počet nepřečtených upozornění — rezervace, změny cen, nové
   // nabídky (viz notifications.js).
   const unread = countUnread(getNotifications(db), getNotificationsSeenAt(db));
   const bell = `<a href="/upozorneni" class="bell" title="${unread ? `Nepřečtená upozornění: ${unread}` : "Upozornění (rezervace, změny cen, nové nabídky)"}">🔔${unread ? `<span class="bell-badge">${unread}</span>` : ""}</a>`;
+  // Srovnávací tabulka má hodně sloupců a potřebuje co nejvíc vodorovného
+  // místa — na rozdíl od ostatních stránek (karty, detail), kterým sedí
+  // úzký čitelný sloupec uprostřed, viz main.wide v CSS.
   return `<!doctype html>
 <html lang="cs">
 <head>
@@ -173,7 +176,7 @@ function layout(title, body) {
 </head>
 <body>
 <header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a>${bell}</header>
-<main>${body}</main>
+<main${wide ? ' class="wide"' : ""}>${body}</main>
 </body>
 </html>`;
 }
@@ -561,8 +564,12 @@ function renderComparisonTable(db, filters) {
       // odvozování jednoho jména z druhého.
       const ownSelect = (column, value) =>
         `<form class="cell-form" method="post" action="/byt/${encId}/notes">${ownFieldSelectHtml(column, value, { autoSubmit: true })}</form>`;
+      const photoCell = e.thumb
+        ? `<img class="compare-thumb" src="/photos/${encodeURIComponent(e.thumb.replace(/^photos[\\/]/, ""))}" loading="lazy" alt="">`
+        : `<div class="compare-thumb compare-thumb--empty">–</div>`;
 
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
+        <td class="compare-photo"><a href="/byt/${encId}">${photoCell}</a></td>
         <td class="compare-actions">${rowActionButtons(e.rep.id, e.starred, e.hidden)}</td>
         <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
         <td>${esc(e.address || e.city || "—")}</td>
@@ -585,7 +592,7 @@ function renderComparisonTable(db, filters) {
     .join("");
 
   const headers = [
-    "", "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
+    "Foto", "", "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
     "Patro", "Výtah", "Balkón", "Sklep",
     "Stav", "Konstrukce", "Revitalizace",
   ];
@@ -880,7 +887,7 @@ const server = createServer(async (req, res) => {
       sort: url.searchParams.get("sort") || null,
     };
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Srovnání — Trh bytů", renderComparisonTable(db, filters)));
+    return res.end(layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
   }
 
   if (url.pathname === "/upozorneni" && req.method === "GET") {

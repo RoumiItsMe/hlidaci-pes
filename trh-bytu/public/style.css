@@ -36,6 +36,9 @@ main {
   margin: 0 auto;
   padding: 1.5rem;
 }
+/* Srovnávací tabulka (/tabulka) má hodně sloupců vedle sebe — na rozdíl od
+   ostatních stránek jí úzký středový sloupec jen škodí (víc scrollu). */
+main.wide { max-width: none; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }
@@ -260,14 +263,70 @@ form button { align-self: flex-start; padding: 0.5rem 1.2rem; background: var(--
 .notif-meta { font-size: 0.82rem; color: var(--muted); }
 
 /* Tabulka srovnání (/tabulka) — hodně sloupců vedle sebe je záměr (rychlé
-   porovnání víc bytů), proto vodorovné scrollování ve vlastním obalu místo
-   rozbíjení `main`ova max-width pro celou appku. */
-.compare-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
-table.compare { border-radius: 0; white-space: nowrap; }
+   porovnání víc bytů). Vlastní obal má OMEZENOU výšku a scrolluje se v obou
+   směrech uvnitř sebe (ne že by táhl celou stránku dolů) — díky tomu je
+   vodorovný posuvník vždycky hned pod tabulkou, kousek pod hlavičkou
+   appky, a ne až za desítkami řádků dole na stránce. */
+.compare-wrap {
+  overflow: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  max-height: calc(100vh - 260px);
+}
+/* `table { overflow: hidden }` (obecné pravidlo výš, kvůli zaoblení rohů)
+   by tady rozbilo `position: sticky` na buňkách — se sebou samým jako
+   "overflow" předkem by se přilepené sloupce lepily na TABULKU, ne na
+   scrollující `.compare-wrap`, takže se vodorovně netáhnou s obsahem.
+   Zaoblení rohů obstará `.compare-wrap` (border-radius + overflow: auto). */
+table.compare { border-radius: 0; white-space: nowrap; border-collapse: separate; border-spacing: 0; overflow: visible; }
 table.compare th, table.compare td { padding: 0.4rem 0.6rem; font-size: 0.83rem; }
-table.compare thead th { background: var(--bg); color: var(--muted); font-weight: 600; white-space: nowrap; }
+/* Hlavička zůstává vidět i při svislém scrollu uvnitř obalu. */
+table.compare thead th {
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
 table.compare tbody tr:hover { background: #fafafa; }
 table.compare tbody tr.row--hidden { opacity: 0.6; }
+
+/* Foto a akce (hvězdička/skrýt) zůstávají přilepené vlevo i při vodorovném
+   scrollu — ať je i u pravého okraje tabulky jasné, o který byt jde. Šířka
+   fotky je pevná (viz .compare-thumb), takže offset druhého sloupce jde
+   natvrdo spočítat. */
+table.compare th:nth-child(1), table.compare td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 60px;
+  background: var(--card);
+}
+table.compare th:nth-child(2), table.compare td:nth-child(2) {
+  position: sticky;
+  left: 60px;
+  z-index: 1;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+}
+table.compare thead th:nth-child(1), table.compare thead th:nth-child(2) {
+  z-index: 3;
+  background: var(--bg);
+}
+table.compare tbody tr:hover td:nth-child(1), table.compare tbody tr:hover td:nth-child(2) { background: #fafafa; }
+
+.compare-photo { padding: 0.3rem !important; }
+.compare-thumb { display: block; width: 48px; height: 36px; object-fit: cover; border-radius: 4px; }
+.compare-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eceef1;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
 .compare-actions { display: flex; gap: 0.2rem; }
 .compare-actions .icon-btn { width: 1.6rem; height: 1.6rem; font-size: 0.8rem; }
 .compare-links a { white-space: nowrap; }
