@@ -1842,7 +1842,9 @@
     "d-29689",
     "f-29693",
     "f-29695",
-    "d-29696"
+    "d-29696",
+    "d-29702",
+    "f-29700"
   ],
   "board:ceska-trebova": [
     "f-48081",
@@ -2284,7 +2286,8 @@
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=334921",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=334943",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=334766",
-    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=334968"
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=334968",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335041"
   ],
   "board:vysoke-myto": [
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-a-iii-tr-v-pusobnosti-orp-vysoke-myto-v-ramci-poradani-cyklistickeho-zavodu-letape-czech-republic-by-tour-de-france-pardubice/",
@@ -2610,17 +2613,17 @@
     "OBAS1000A56B-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-09-30T17:31:12.086Z",
-    "board:letohrad": "2026-09-30T17:31:12.086Z",
-    "board:zamberk": "2026-09-30T17:31:12.086Z",
-    "board:ceska-trebova": "2026-09-30T17:31:12.086Z",
-    "board:lanskroun": "2026-09-30T17:31:12.086Z",
-    "board:kraliky": "2026-09-30T17:31:12.086Z",
-    "board:vysoke-myto": "2026-09-30T17:31:12.086Z",
-    "board:lukova": "2026-09-30T17:31:12.086Z",
-    "board:tatenice": "2026-09-30T17:31:12.086Z",
-    "board:anenska-studanka": "2026-09-30T17:31:12.086Z",
-    "board:okres-usti-nad-orlici": "2026-09-30T16:45:57.007Z"
+    "board:usti-nad-orlici": "2026-09-30T17:46:17.556Z",
+    "board:letohrad": "2026-09-30T17:46:17.556Z",
+    "board:zamberk": "2026-09-30T17:46:17.556Z",
+    "board:ceska-trebova": "2026-09-30T17:46:17.556Z",
+    "board:lanskroun": "2026-09-30T17:46:17.556Z",
+    "board:kraliky": "2026-09-30T17:46:17.556Z",
+    "board:vysoke-myto": "2026-09-30T17:46:17.556Z",
+    "board:lukova": "2026-09-30T17:46:17.556Z",
+    "board:tatenice": "2026-09-30T17:46:17.556Z",
+    "board:anenska-studanka": "2026-09-30T17:46:17.556Z",
+    "board:okres-usti-nad-orlici": "2026-09-30T17:46:17.556Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
