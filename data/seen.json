@@ -1628,7 +1628,9 @@
     "12170",
     "12174",
     "12176",
-    "12175"
+    "12175",
+    "12178",
+    "12177"
   ],
   "board:letohrad": [
     "d-74944",
@@ -2440,7 +2442,9 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-zverejneni-navrhu-opatreni-obecne-povahy-ke-stanoveni-mistni-upravy-provozu-na-pozemnich-komunikacich-na-pozemcich-p-c-390-3-50-2-a-59-v-k-u-sec-u-brandysa-nad-orlici/",
     "https://www.vysoke-myto.cz/uredni-deska/vyberove-rizeni-10-2026-referent-ka-odboru-socialnich-veci-a-zdravotnictvi/",
     "https://www.vysoke-myto.cz/uredni-deska/drazebni-vyhlaska-206ex-2588-26-36-peugeot-308/",
-    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-chocen-pod-chlumem-p-1263-23-knn-iv-12-2020656/"
+    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-chocen-pod-chlumem-p-1263-23-knn-iv-12-2020656/",
+    "https://www.vysoke-myto.cz/uredni-deska/opatreni-sucho-prodlouzeni-doby-trvani-opatreni-sucho/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-jeronymova-v-k-u-a-obci-vysoke-myto-z-duvodu-opravy-vodovodni-pripojky-domu-c-p-269/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2606,16 +2610,16 @@
     "OBAS1000A56B-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-09-30T14:01:36.123Z",
-    "board:letohrad": "2026-09-30T14:01:36.123Z",
-    "board:zamberk": "2026-09-30T14:01:36.123Z",
-    "board:ceska-trebova": "2026-09-30T14:01:36.123Z",
-    "board:lanskroun": "2026-09-30T14:01:36.123Z",
-    "board:kraliky": "2026-09-30T14:01:36.123Z",
-    "board:vysoke-myto": "2026-09-30T14:01:36.123Z",
-    "board:lukova": "2026-09-30T14:01:36.123Z",
-    "board:tatenice": "2026-09-30T14:01:36.123Z",
-    "board:anenska-studanka": "2026-09-30T14:01:36.123Z",
+    "board:usti-nad-orlici": "2026-09-30T14:16:07.708Z",
+    "board:letohrad": "2026-09-30T14:16:07.708Z",
+    "board:zamberk": "2026-09-30T14:16:07.708Z",
+    "board:ceska-trebova": "2026-09-30T14:16:07.708Z",
+    "board:lanskroun": "2026-09-30T14:16:07.708Z",
+    "board:kraliky": "2026-09-30T14:16:07.708Z",
+    "board:vysoke-myto": "2026-09-30T14:16:07.708Z",
+    "board:lukova": "2026-09-30T14:16:07.708Z",
+    "board:tatenice": "2026-09-30T14:16:07.708Z",
+    "board:anenska-studanka": "2026-09-30T14:16:07.708Z",
     "board:okres-usti-nad-orlici": "2026-09-30T13:16:20.592Z"
   },
   "board:okres-usti-nad-orlici": [
