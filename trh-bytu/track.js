@@ -24,7 +24,7 @@ import { fetchBazos } from "../sources/bazos.js";
 import { openDb, nowIso, getListing, insertListing, updateListingFields, insertEvent, insertPhoto, DATA_DIR } from "./db.js";
 import { handleDisappeared } from "./relist.js";
 import { reservationChange } from "./reservation.js";
-import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace } from "./parse.js";
+import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace } from "./parse.js";
 import { downloadPhotos } from "./photos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
@@ -93,12 +93,16 @@ async function processSource(db, source, watch) {
       // Bazoš/RealityMIX) — v tom případě appka zkusí totéž vytáhnout z
       // popisu na detailu, ten je skoro vždy zmiňuje taky. Cena stejně:
       // "Cena na vyžádání"/"Dohodou" u samotné nabídky, ale popis přesto
-      // často konkrétní číslo obsahuje. Adresa má čtyři úrovně: pole od
+      // často konkrétní číslo obsahuje. Adresa má PĚT úrovní: pole od
       // portálu → konec titulku (jen Bazoš, formát "... m², Město, ulice")
-      // → název sledovaného města zmíněný přímo v titulku (např. "Moderní
-      // bydlení - Česká Třebová, byt 32m2" — město je v titulku, ale ne v
-      // pozici za plochou, na kterou cílí předchozí krok) → totéž v popisu
-      // na detailu, vč. skloňovaných tvarů (viz findKnownPlace v parse.js).
+      // → PSČ z Bazošova vlastního detailu (viz zipToKnownPlace — jde o
+      // jeho geokódování, přesnější než hádání ze slov, ale on sám u
+      // "Lokalita:" ukazuje jen nejbližší okresní město, takže se řadí až
+      // za titulek) → název sledovaného města zmíněný přímo v titulku
+      // (např. "Moderní bydlení - Česká Třebová, byt 32m2" — město je v
+      // titulku, ale ne v pozici za plochou, na kterou cílí druhý krok) →
+      // totéž v popisu na detailu, vč. skloňovaných tvarů (findKnownPlace
+      // v parse.js).
       const disposition = parseDisposition(item.title) ?? parseDisposition(detail.description);
       const areaM2 = parseAreaM2(item.title) ?? parseAreaM2(detail.description);
       // Cena z popisu jen tam, kde ji portál vůbec neuvedl — a značí se
@@ -109,6 +113,7 @@ async function processSource(db, source, watch) {
       const address =
         item.address ||
         parseAddressFromTitle(item.title) ||
+        zipToKnownPlace(detail.zip, watch) ||
         findKnownPlace(item.title, watch) ||
         findKnownPlace(detail.description, watch) ||
         null;

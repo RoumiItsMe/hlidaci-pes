@@ -137,6 +137,22 @@ export function findKnownPlace(text, watch) {
   return null;
 }
 
+/**
+ * PSČ → sledované město, podle `watch.locations[].zip` (stejná čísla, co
+ * appka posílá Bazoši jako `hlokalita` při hledání, viz sources/bazos.js) —
+ * spolehlivější než hádání z volného textu (viz findKnownPlace výš), protože
+ * jde o Bazošovo VLASTNÍ geokódování inzerátu, ne o shodu slov. Bazoš u
+ * "Lokalita:" v detailu ukazuje název jen nejbližšího VĚTŠÍHO okresního
+ * města (proto by u bytu v Žamberku klidně ukázal "Ústí nad Orlicí"), ale
+ * PSČ vedle něj je přesné. `zip` s mezerou ("564 01") i bez ("56401") oboje
+ * projde. Nemá k čemu — např. byt mimo 4 sledovaná města — vrátí `null`.
+ */
+export function zipToKnownPlace(zip, watch) {
+  if (!zip) return null;
+  const normalized = zip.replace(/\s+/g, "");
+  return watch.locations.find((loc) => loc.zip === normalized)?.label ?? null;
+}
+
 // Bazoš nemá samostatné pole s adresou (na rozdíl od ostatních 4 portálů) —
 // lokalita, a často i ulice, bývá připsaná na konci titulku hned za
 // plochou, např. "... 67 m², Ústí nad Orlicí, ul. Quido Kociana". Použije

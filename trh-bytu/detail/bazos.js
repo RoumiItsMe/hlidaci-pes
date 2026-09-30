@@ -10,7 +10,13 @@
 // — reserved-detekce pro Bazoš není k dispozici. Strukturovaná pole
 // `params` (viz ../params.js) Bazoš vůbec nenabízí — bez embedded JSON by
 // šla vytáhnout jen nespolehlivě z volného textu popisu, vrací se prázdné.
-
+//
+// PSČ ale strukturované je: řádek "Lokalita:" v detailu má odkaz
+// `title="Přibližná lokalita"` s viditelným textem PSČ ("564 01") — sám
+// Bazoš si ho geokóduje z toho, co inzerent zadal, takže je spolehlivější
+// než hádání města z volného textu (viz parse.js zipToKnownPlace). Ne
+// každý inzerát ho má (starší/bez geokódování prostě řádek chybí) —
+// fail-soft, prázdný řetězec `.text()` dá `zip: null`.
 import * as cheerio from "cheerio";
 import { fetchText } from "../../lib/http.js";
 
@@ -20,6 +26,7 @@ export async function fetchBazosDetail(url) {
     const $ = cheerio.load(html);
 
     const description = $(".popisdetail").first().text().replace(/\s+/g, " ").trim() || null;
+    const zip = $('a[title="Přibližná lokalita"]').first().text().replace(/\s+/g, "") || null;
 
     const photoUrls = [];
     const seen = new Set();
@@ -31,9 +38,9 @@ export async function fetchBazosDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description, photoUrls, reserved: false, params: {} };
+    return { description, photoUrls, reserved: false, params: {}, zip };
   } catch (err) {
     console.warn(`[detail/bazos] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false, params: {} };
+    return { description: null, photoUrls: [], reserved: false, params: {}, zip: null };
   }
 }
