@@ -564,13 +564,8 @@ function renderComparisonTable(db, filters) {
       // odvozování jednoho jména z druhého.
       const ownSelect = (column, value) =>
         `<form class="cell-form" method="post" action="/byt/${encId}/notes">${ownFieldSelectHtml(column, value, { autoSubmit: true })}</form>`;
-      const photoCell = e.thumb
-        ? `<img class="compare-thumb" src="/photos/${encodeURIComponent(e.thumb.replace(/^photos[\\/]/, ""))}" loading="lazy" alt="">`
-        : `<div class="compare-thumb compare-thumb--empty">–</div>`;
 
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
-        <td class="compare-photo"><a href="/byt/${encId}">${photoCell}</a></td>
-        <td class="compare-actions">${rowActionButtons(e.rep.id, e.starred, e.hidden)}</td>
         <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
         <td>${esc(e.address || e.city || "—")}</td>
         <td>${esc(e.rep.disposition || "—")}</td>
@@ -592,7 +587,7 @@ function renderComparisonTable(db, filters) {
     .join("");
 
   const headers = [
-    "Foto", "", "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
+    "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
     "Patro", "Výtah", "Balkón", "Sklep",
     "Stav", "Konstrukce", "Revitalizace",
   ];
