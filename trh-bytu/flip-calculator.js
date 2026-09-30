@@ -62,9 +62,16 @@ export function calculateFlip(rawInputs) {
   const costsWithoutBuy = totalRenoCost != null ? totalRenoCost + agentCommission + carryCost : null;
 
   let maxBuyPrice = null;
+  let profitAtMaxBuy = null;
   if (i.salePriceCzk != null && costsWithoutBuy != null) {
     const m = i.targetMarginPct / 100;
     maxBuyPrice = i.salePriceCzk / (1 + m) - costsWithoutBuy;
+    // Zisk při MAXIMÁLNÍ nákupní ceně = přesně cílová marže z konstrukce
+    // (maxBuyPrice je odvozená tak, aby to sedělo, viz odvození výš) —
+    // dopočítá se stejnou definicí (S − náklady celkem), ne jako
+    // `prodejní cena × m`, ať oba výsledky v appce vždy sedí na stejný
+    // vzorec.
+    profitAtMaxBuy = i.salePriceCzk - (maxBuyPrice + costsWithoutBuy);
   }
 
   let profitAtAsking = null;
@@ -75,5 +82,5 @@ export function calculateFlip(rawInputs) {
     marginAtAsking = totalCostAtAsking > 0 ? (profitAtAsking / totalCostAtAsking) * 100 : null;
   }
 
-  return { renoCost, softCosts, totalRenoCost, agentCommission, carryCost, costsWithoutBuy, maxBuyPrice, profitAtAsking, marginAtAsking };
+  return { renoCost, softCosts, totalRenoCost, agentCommission, carryCost, costsWithoutBuy, maxBuyPrice, profitAtMaxBuy, profitAtAsking, marginAtAsking };
 }

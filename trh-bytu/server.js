@@ -848,8 +848,12 @@ function parseFlipQuery(searchParams, rep) {
 
 function formatSignedCzk(n) {
   if (n == null) return "—";
+  // Zaokrouhlení nesmí chybět — vstup bývá výsledek procentního počtu
+  // (provize RK apod.), takže skoro nikdy není celé číslo; bez zaokrouhlení
+  // by `toLocaleString` ukázalo i haléře desetinných míst ("−1 071 327,662 Kč").
+  const rounded = Math.round(Math.abs(n));
   const sign = n > 0 ? "+" : n < 0 ? "−" : "";
-  return `${sign}${formatCzk(Math.abs(n))}`;
+  return `${sign}${formatCzk(rounded)}`;
 }
 
 /**
@@ -865,11 +869,11 @@ function formatSignedCzk(n) {
 function renderFlipCalculator(rep, inputs, result) {
   const encId = encodeURIComponent(rep.id);
   const fmt = (n) => formatCzk(n != null ? Math.round(n) : null);
-  // Maximální nákupní cena nemá vlastní %, jen znaménko — záporná = žádná
-  // nákupní cena (ani nulová) by cílovou marži nedala, kladná = jde to.
-  const signClass = (n) => (n == null ? "" : n > 0 ? "margin-good" : n < 0 ? "margin-bad" : "");
-  // Tři pásma podle SKUTEČNÉ marže (ne podle znaménka) — přesně prahy z
-  // návodu: pod 10 % oranžová, 10–20 % tmavší žlutá, nad 20 % zelená.
+  // Barevné pásmo patří VÝHRADNĚ ke kontrolnímu srovnání s dnešní
+  // inzerovanou cenou — maximální nákupní cena zůstává neutrální (černá),
+  // je to jen dopočítané číslo, ne hodnocení "dobrý/špatný deal". Tři
+  // pásma podle SKUTEČNÉ marže, prahy přesně z návodu: pod 10 % oranžová,
+  // 10–20 % tmavší žlutá, nad 20 % zelená.
   const marginTierClass = (m) => (m == null ? "" : m >= 20 ? "margin-good" : m >= 10 ? "margin-mid" : "margin-low");
 
   return `
@@ -909,9 +913,10 @@ function renderFlipCalculator(rep, inputs, result) {
     </table>
 
     <h2>Výsledek</h2>
-    <div class="flip-result ${signClass(result.maxBuyPrice)}">
+    <div class="flip-result">
       <div class="flip-result-headline">Maximální nákupní cena pro ${esc(String(inputs.targetMarginPct))} % marži</div>
       <div class="flip-result-value">${fmt(result.maxBuyPrice)}</div>
+      <div class="flip-result-margin">Čistý zisk při této ceně: ${formatSignedCzk(result.profitAtMaxBuy)}</div>
     </div>
     ${
       inputs.currentAskingPriceCzk != null && result.marginAtAsking != null

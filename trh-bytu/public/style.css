@@ -344,14 +344,13 @@ table.stats-table thead th { color: var(--muted); font-weight: 600; text-align: 
 .flip-result-value { font-size: 1.6rem; font-weight: 700; }
 .flip-result--secondary .flip-result-value { font-size: 1.2rem; }
 .flip-result-margin { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
-/* Maximální nákupní cena: zelená/červená podle znaménka (viz signClass).
-   Kontrolní srovnání s dnešní cenou: tři pásma podle SKUTEČNÉ marže (viz
-   marginTierClass) — prahy 10 %/20 % z návodu. */
-.flip-result.margin-good { border-color: #16a34a; }
-.flip-result.margin-good .flip-result-value { color: #16a34a; }
-.flip-result.margin-mid { border-color: #a16207; }
-.flip-result.margin-mid .flip-result-value { color: #a16207; }
-.flip-result.margin-low { border-color: #ea580c; }
-.flip-result.margin-low .flip-result-value { color: #ea580c; }
-.flip-result.margin-bad { border-color: #dc2626; }
-.flip-result.margin-bad .flip-result-value { color: #dc2626; }
+/* Barva patří jen kontrolnímu srovnání s dnešní cenou (viz marginTierClass
+   v server.js) — maximální nákupní cena je neutrální dopočet, ne
+   hodnocení, proto zůstává bez těchhle tříd i bez barvy. Tři pásma podle
+   SKUTEČNÉ marže, prahy 10 %/20 % z návodu. */
+.flip-result--secondary.margin-good { border-color: #16a34a; }
+.flip-result--secondary.margin-good .flip-result-value { color: #16a34a; }
+.flip-result--secondary.margin-mid { border-color: #a16207; }
+.flip-result--secondary.margin-mid .flip-result-value { color: #a16207; }
+.flip-result--secondary.margin-low { border-color: #ea580c; }
+.flip-result--secondary.margin-low .flip-result-value { color: #ea580c; }
