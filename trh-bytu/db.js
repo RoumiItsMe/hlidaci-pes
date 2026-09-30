@@ -82,9 +82,20 @@ const COLUMN_MIGRATIONS = [
   // condition/buildingType, které jsou skoro vždy prázdné, viz params.js).
   // Hodnoty jsou stabilní anglické klíče, viz OWN_FIELDS v params.js pro
   // popisky a povolené volby; NULL = zatím nezhodnoceno.
-  { table: "listings", column: "own_condition", ddl: "TEXT" }, // needs_reno | maintained | renovated
+  { table: "listings", column: "own_condition", ddl: "TEXT" }, // needs_reno | maintained | renovated | novostavba
   { table: "listings", column: "own_construction", ddl: "TEXT" }, // panel | brick
   { table: "listings", column: "own_revitalized", ddl: "TEXT" }, // yes | no
+  // Volný text — proč prodávající prodává (dědictví, rozvod, stěhování...),
+  // zjištěné typicky až prvním telefonátem. Nikdy z portálu, appka na to
+  // pole jen ukládá to, co uživatel sám vyplní (stejná úvaha jako notes).
+  { table: "listings", column: "seller_motivation", ddl: "TEXT" },
+  // Ruční přehlasování automatického zařazení do statistik "ceny po reko"
+  // (viz OWN_FIELDS v params.js a renderRenovatedStats v server.js). NULL =
+  // auto (rozhodne kritérium status=removed + own_condition=renovated),
+  // "include"/"exclude" = uživatel to vědomě přehlasoval podle vlastního
+  // úsudku (např. prodej mezi příbuznými pod cenou, nebo naopak byt bez
+  // nálepky "renovated", který se prodal jako plně zrekonstruovaný).
+  { table: "listings", column: "stats_include", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {

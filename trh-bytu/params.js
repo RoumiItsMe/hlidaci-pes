@@ -61,4 +61,17 @@ export const OWN_FIELDS = [
       ["no", "Ne"],
     ],
   },
+  // Přehlasování automatického zařazení do statistik "ceny po reko" (viz
+  // stats_include v db.js) — NENÍ vlastnost bytu jako předchozí tři pole,
+  // je to řízení appky. Přesto stejný <select> mechanismus (auto-submit,
+  // sdílená validace v POST handleru) sedí beze změny: prázdná volba "—" =
+  // auto podle kritéria, zbylé dvě = vědomá ruční výjimka.
+  {
+    column: "stats_include",
+    label: "Ve statistice",
+    options: [
+      ["include", "Zahrnout"],
+      ["exclude", "Vynechat"],
+    ],
+  },
 ];

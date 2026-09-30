@@ -6,10 +6,11 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { openDb, DATA_DIR, updateListingFields } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue } from "./group.js";
+import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
+import { groupListings, primaryListing, mergedStatus, earliestFirstSeen, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue } from "./group.js";
 import { PARAM_FIELDS, OWN_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
+import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { watches } from "../config.js";
 
@@ -56,6 +57,28 @@ function ownValueLabel(column, value) {
 
 function formatPricePerM2(pricePerM2) {
   return pricePerM2 == null ? "—" : `${pricePerM2.toLocaleString("cs-CZ")} Kč/m²`;
+}
+
+// Skloňování "den/dny/dní" — 1 den, 2-4 dny, 0 a 5+ dní.
+function daysWord(n) {
+  return n === 1 ? "den" : n >= 2 && n <= 4 ? "dny" : "dní";
+}
+
+// "45 dní" u živé/rezervované nabídky, "67 dní (staženo 12. 8. 2026)" u
+// zmizelé — obojí odpovídá na stejnou otázku "jak dlouho už to leží", jen s
+// jiným koncovým bodem (dnešek, vs. datum zmizení).
+function daysOnMarketLabel(e) {
+  const base = `${e.daysOnMarket} ${daysWord(e.daysOnMarket)}`;
+  return e.status === "removed" && e.removedAt ? `${base} (staženo ${formatDateOnly(e.removedAt)})` : base;
+}
+
+// "2× (−450 000 Kč)" — kolikrát cena SKUTEČNĚ klesla a o kolik celkem od
+// prvně zaznamenané ceny. "—" když appka žádnou slevu nezaznamenala (ať už
+// proto, že k ní nedošlo, nebo appka byt zaevidovala až po ní).
+function priceDropLabel(e) {
+  if (!e.priceDropCount) return "—";
+  const amount = e.totalDiscountCzk ? ` (−${formatCzk(e.totalDiscountCzk)})` : "";
+  return `${e.priceDropCount}×${amount}`;
 }
 
 // <select> pro jedno vlastní hodnocení (viz OWN_FIELDS) — sdílené mezi
@@ -326,6 +349,14 @@ function computeEntries(db) {
     const change = latestChange(events);
     const rep = primaryListing(g.members);
     const price = bestPrice(g.members);
+    const status = mergedStatus(g.members);
+    const removedAt = status === "removed" ? latestRemovedAt(g.members) : null;
+    const { dropCount, originalPrice } = priceDropSummary(events);
+    // "Doba v nabídce" počítá do DNEŠKA u živých/rezervovaných nabídek,
+    // u zmizelých do data zmizení — obojí je "jak dlouho byl byt na trhu",
+    // jen s jiným koncovým bodem. `removedAt` je `null` u živých/
+    // rezervovaných, `?? nowIso()` proto pokryje obojí jedním výrazem.
+    const daysOnMarket = Math.round((new Date(removedAt ?? nowIso()) - new Date(firstSeenAt)) / (24 * 60 * 60 * 1000));
     return {
       g,
       rep,
@@ -336,8 +367,15 @@ function computeEntries(db) {
       // Cena za m² — appka ji nikde nezíská hotovou, dopočítá se z ceny a
       // plochy primárního záznamu (stejný zdroj plochy jako titulek řádku).
       pricePerM2: price != null && rep.area_m2 ? Math.round(price / rep.area_m2) : null,
-      status: mergedStatus(g.members),
+      status,
       firstSeenAt,
+      removedAt,
+      daysOnMarket,
+      priceDropCount: dropCount,
+      // Sleva celkem od prvně zaznamenané ceny do AKTUÁLNÍ (ne do poslední
+      // eventu) — u živé nabídky je "aktuální" = `price` teď, u zmizelé je
+      // to poslední cena, kterou appka viděla těsně před zmizením.
+      totalDiscountCzk: originalPrice != null && price != null ? originalPrice - price : null,
       change,
       changeWhere: changeSources(g.members, events, change),
       // "Aktivita" pro výchozí řazení = novější z (zaevidováno, poslední
@@ -347,12 +385,17 @@ function computeEntries(db) {
       starred: isStarred(g.members),
       hidden: isHidden(g.members),
       thumb: groupThumbnail(g.members),
-      // Vlastní hodnocení uživatele (viz OWN_FIELDS v params.js) — nikdy z
-      // portálu, appka na ně jen ukládá to, co uživatel sám vybere.
+      // Vlastní hodnocení uživatele (viz OWN_FIELDS v params.js) — appka se
+      // pokusí odhadnout z textu (viz detect-own-fields.js, track.js), ale
+      // nikdy nepřepíše, co appka/uživatel už jednou nastavili.
       ownCondition: pickOwnValue(g.members, "own_condition"),
       ownConstruction: pickOwnValue(g.members, "own_construction"),
       ownRevitalized: pickOwnValue(g.members, "own_revitalized"),
+      statsInclude: pickOwnValue(g.members, "stats_include"),
       notes: pickOwnValue(g.members, "notes"),
+      sellerMotivation: pickOwnValue(g.members, "seller_motivation"),
+      verifiedSalePrice: pickOwnValue(g.members, "verified_sale_price_czk"),
+      verifiedSaleDate: pickOwnValue(g.members, "verified_sale_date"),
     };
   });
   for (const e of entries) e.city = extractCity(e.address, BYTY_WATCH);
@@ -496,6 +539,11 @@ const COMPARE_SORT_COLUMNS = {
   price: { get: (e) => e.price, label: "Cena", firstDir: "desc" },
   price_m2: { get: (e) => e.pricePerM2, label: "Cena/m²", firstDir: "asc" },
   area: { get: (e) => e.rep.area_m2, label: "Plocha", firstDir: "desc" },
+  // Sleva sestupně = nejvyjednatelnější případy nahoře ("kolik už dolů
+  // šel"). Doba v nabídce sestupně = nejdéle ležící nahoře — obojí přesně
+  // ty signály z návodu ("leží 2 měsíce a zlevnil dvakrát").
+  discount: { get: (e) => e.totalDiscountCzk, label: "Sleva", firstDir: "desc" },
+  days: { get: (e) => e.daysOnMarket, label: "Doba v nabídce", firstDir: "desc" },
 };
 
 function compareSortHeader(current, key, label) {
@@ -577,11 +625,19 @@ function renderComparisonTable(db, filters) {
         <td>${ownSelect("own_condition", e.ownCondition)}</td>
         <td>${ownSelect("own_construction", e.ownConstruction)}</td>
         <td>${ownSelect("own_revitalized", e.ownRevitalized)}</td>
+        <td>${ownSelect("stats_include", e.statsInclude)}</td>
         <td>${esc(e.priceLabel)}</td>
         <td>${esc(formatPricePerM2(e.pricePerM2))}</td>
+        <td>${esc(priceDropLabel(e))}</td>
         <td>${esc(formatDateOnly(e.firstSeenAt))}</td>
-        <td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(e.rep.url)}" target="_blank" rel="noopener">Inzerát ↗</a></td>
+        <td>${esc(daysOnMarketLabel(e))}</td>
+        <td><form class="cell-form cell-form--stack" method="post" action="/byt/${encId}/notes">
+          <input type="number" name="verified_sale_price_czk" value="${e.verifiedSalePrice ?? ""}" placeholder="Kč" onchange="this.form.submit()">
+          <input type="date" name="verified_sale_date" value="${e.verifiedSaleDate ?? ""}" onchange="this.form.submit()">
+        </form></td>
+        <td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(e.rep.url)}" target="_blank" rel="noopener">Inzerát ↗</a> · <a href="/byt/${encId}/kalkulacka">Kalkulačka</a></td>
         <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="notes" value="${esc(e.notes)}" placeholder="poznámka…" onchange="this.form.submit()"></form></td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="seller_motivation" value="${esc(e.sellerMotivation)}" placeholder="motivace…" onchange="this.form.submit()"></form></td>
       </tr>`;
     })
     .join("");
@@ -589,7 +645,7 @@ function renderComparisonTable(db, filters) {
   const headers = [
     "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
     "Patro", "Výtah", "Balkón", "Sklep",
-    "Stav", "Konstrukce", "Revitalizace",
+    "Stav", "Konstrukce", "Revitalizace", "Ve statistice",
   ];
 
   return `
@@ -608,11 +664,15 @@ function renderComparisonTable(db, filters) {
           ${headers.map((h) => `<th>${esc(h)}</th>`).join("")}
           <th>${compareSortHeader(sortParam, "price", "Cena")}</th>
           <th>${compareSortHeader(sortParam, "price_m2", "Cena/m²")}</th>
+          <th>${compareSortHeader(sortParam, "discount", "Sleva")}</th>
           <th>${compareSortHeader(sortParam, "added", "Přidáno")}</th>
+          <th>${compareSortHeader(sortParam, "days", "Doba v nabídce")}</th>
+          <th>Ověřená cena</th>
           <th>Odkaz</th>
           <th>Poznámka</th>
+          <th>Motivace prodávajícího</th>
         </tr></thead>
-        <tbody>${rows || `<tr><td colspan="${headers.length + 5}" class="empty">Nic nenalezeno pro zvolené filtry.</td></tr>`}</tbody>
+        <tbody>${rows || `<tr><td colspan="${headers.length + 9}" class="empty">Nic nenalezeno pro zvolené filtry.</td></tr>`}</tbody>
       </table>
     </div>`;
 }
@@ -691,6 +751,7 @@ function renderDetail(db, id) {
       ${group.merged ? `· nalezeno na ${new Set(members.map((m) => m.source)).size} portálech` : ""}
     </p>
     <ul class="source-links">${sourceLinks}</ul>
+    <p><a href="/byt/${encodeURIComponent(rep.id)}/kalkulacka">🧮 Kalkulačka marže re-flipu</a></p>
     <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${esc(priceLabel(members))}</p>
     <p>${esc(address)}</p>
     <div class="row-updates">${updates}</div>
@@ -708,9 +769,117 @@ function renderDetail(db, id) {
       ).join("")}
       <label>Ověřená prodejní cena (Kč)<input type="number" name="verified_sale_price_czk" value="${pickOwnValue(members, "verified_sale_price_czk") ?? ""}"></label>
       <label>Datum prodeje<input type="date" name="verified_sale_date" value="${pickOwnValue(members, "verified_sale_date") ?? ""}"></label>
+      <label>Motivace prodávajícího<input type="text" name="seller_motivation" value="${esc(pickOwnValue(members, "seller_motivation"))}" placeholder="dědictví, rozvod, stěhování…"></label>
       <label>Poznámka<textarea name="notes" rows="3">${esc(pickOwnValue(members, "notes"))}</textarea></label>
       <button type="submit">Uložit</button>
     </form>`;
+}
+
+// Query string → vstupy kalkulačky (viz flip-calculator.js). `f=1` (skryté
+// pole formuláře) rozlišuje "čerstvě otevřená stránka" (žádné parametry v
+// URL — vezmi rozumné výchozí hodnoty + cenu/plochu bytu) od "formulář byl
+// odeslaný" (i kdyby uživatel nastavil hodnoty shodou okolností stejné jako
+// výchozí, nebo odškrtl checkbox — nezaškrtnuté <input type="checkbox">
+// se v query stringu vůbec neobjeví, takže "chybí" NENÍ totéž co "ještě
+// nikdy neodesláno").
+function parseFlipQuery(searchParams, rep) {
+  const submitted = searchParams.get("f") === "1";
+  const num = (key, fallback) => {
+    if (!submitted) return fallback;
+    const raw = searchParams.get(key);
+    if (raw == null || raw === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  return {
+    salePriceCzk: num("salePriceCzk", null),
+    currentAskingPriceCzk: submitted ? num("currentAskingPriceCzk", null) : rep.price_czk ?? null,
+    areaM2: submitted ? num("areaM2", null) : rep.area_m2 ?? null,
+    renoRatePerM2Czk: num("renoRatePerM2Czk", DEFAULT_FLIP_INPUTS.renoRatePerM2Czk),
+    kitchenCostCzk: num("kitchenCostCzk", DEFAULT_FLIP_INPUTS.kitchenCostCzk),
+    clearingCostCzk: num("clearingCostCzk", DEFAULT_FLIP_INPUTS.clearingCostCzk),
+    photographerCostCzk: num("photographerCostCzk", DEFAULT_FLIP_INPUTS.photographerCostCzk),
+    lawyerCostCzk: num("lawyerCostCzk", DEFAULT_FLIP_INPUTS.lawyerCostCzk),
+    sellViaAgent: submitted ? searchParams.get("sellViaAgent") === "on" : true,
+    agentCommissionPct: num("agentCommissionPct", DEFAULT_FLIP_INPUTS.agentCommissionPct),
+    vatPct: num("vatPct", DEFAULT_FLIP_INPUTS.vatPct),
+    carryMonthlyCostCzk: num("carryMonthlyCostCzk", DEFAULT_FLIP_INPUTS.carryMonthlyCostCzk),
+    carryMonths: num("carryMonths", DEFAULT_FLIP_INPUTS.carryMonths),
+    targetMarginPct: num("targetMarginPct", DEFAULT_FLIP_INPUTS.targetMarginPct),
+  };
+}
+
+function formatSignedCzk(n) {
+  if (n == null) return "—";
+  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+  return `${sign}${formatCzk(Math.abs(n))}`;
+}
+
+/**
+ * Kalkulačka marže re-flipu (`/byt/:id/kalkulacka`) — implementuje
+ * uživatelovu vlastní metodiku (viz flip-calculator.js): zadá se odhad
+ * prodejní ceny po reku (appka ho sama neodhaduje — návod cílí na
+ * srovnatelné byty ze statistik, viz /stats), appka dopočítá náklady a
+ * maximální nákupní cenu pro zvolenou cílovou marži. Klasický GET formulář
+ * s tlačítkem "Přepočítat" (ne auto-submit jako v tabulce srovnání) — na
+ * rozdíl od jednopolíčkových buněk tabulky tu uživatel typicky ladí víc
+ * polí najednou, než chce nový výpočet.
+ */
+function renderFlipCalculator(rep, inputs, result) {
+  const encId = encodeURIComponent(rep.id);
+  const fmt = (n) => formatCzk(n != null ? Math.round(n) : null);
+  const marginClass = (m) => (m == null ? "" : m >= 20 ? "margin-good" : m >= 10 ? "margin-ok" : "margin-bad");
+
+  return `
+    <p><a href="/byt/${encId}">← Zpět na byt</a></p>
+    <h1>Kalkulačka marže re-flipu</h1>
+    <p class="muted">
+      ${esc(rep.disposition || "")} ${rep.area_m2 ? `${rep.area_m2} m²` : ""} — inzerováno za ${esc(priceLabel([rep]))}.
+      Odhad prodejní ceny po reku si udělej ze srovnatelných bytů na <a href="/stats">statistikách</a>,
+      appka dopočítá náklady a maximální nákupní cenu pro tvou cílovou marži.
+    </p>
+
+    <form method="get" action="/byt/${encId}/kalkulacka">
+      <input type="hidden" name="f" value="1">
+      <label>Odhad prodejní ceny po reku (Kč)<input type="number" name="salePriceCzk" value="${inputs.salePriceCzk ?? ""}" required></label>
+      <label>Dnešní inzerovaná cena (Kč) — jen pro kontrolní srovnání<input type="number" name="currentAskingPriceCzk" value="${inputs.currentAskingPriceCzk ?? ""}"></label>
+      <label>Plocha (m²)<input type="number" name="areaM2" value="${inputs.areaM2 ?? ""}" step="0.1"></label>
+      <label>Sazba rekonstrukce (Kč/m²)<input type="number" name="renoRatePerM2Czk" value="${inputs.renoRatePerM2Czk}"></label>
+      <label>Kuchyň a spotřebiče (Kč)<input type="number" name="kitchenCostCzk" value="${inputs.kitchenCostCzk}"></label>
+      <label>Vyklizení (Kč)<input type="number" name="clearingCostCzk" value="${inputs.clearingCostCzk}"></label>
+      <label>Fotograf (Kč)<input type="number" name="photographerCostCzk" value="${inputs.photographerCostCzk}"></label>
+      <label>Advokát na kupní smlouvu (Kč)<input type="number" name="lawyerCostCzk" value="${inputs.lawyerCostCzk}"></label>
+      <label class="checkbox-label"><input type="checkbox" name="sellViaAgent" ${inputs.sellViaAgent ? "checked" : ""}> Prodávat přes realitní kancelář</label>
+      <label>Provize RK (%)<input type="number" name="agentCommissionPct" value="${inputs.agentCommissionPct}" step="0.1"></label>
+      <label>DPH na provizi (%)<input type="number" name="vatPct" value="${inputs.vatPct}" step="0.1"></label>
+      <label>Carry náklady měsíčně (Kč)<input type="number" name="carryMonthlyCostCzk" value="${inputs.carryMonthlyCostCzk}"></label>
+      <label>Předpokládaná doba realizace (měsíců)<input type="number" name="carryMonths" value="${inputs.carryMonths}"></label>
+      <label>Cílová čistá marže (%)<input type="number" name="targetMarginPct" value="${inputs.targetMarginPct}" step="0.1"></label>
+      <button type="submit">Přepočítat</button>
+    </form>
+
+    <h2>Náklady</h2>
+    <table class="params">
+      <tr><th>Rekonstrukce + vybavení celkem</th><td>${fmt(result.totalRenoCost)}</td></tr>
+      <tr><th>Provize RK (vč. DPH)</th><td>${fmt(result.agentCommission)}</td></tr>
+      <tr><th>Carry náklady celkem</th><td>${fmt(result.carryCost)}</td></tr>
+      <tr><th>Náklady celkem (bez nákupní ceny)</th><td>${fmt(result.costsWithoutBuy)}</td></tr>
+    </table>
+
+    <h2>Výsledek</h2>
+    <div class="flip-result">
+      <div class="flip-result-headline">Maximální nákupní cena pro ${esc(String(inputs.targetMarginPct))} % marži</div>
+      <div class="flip-result-value">${fmt(result.maxBuyPrice)}</div>
+    </div>
+    ${
+      inputs.currentAskingPriceCzk != null && result.marginAtAsking != null
+        ? `<div class="flip-result flip-result--secondary ${marginClass(result.marginAtAsking)}">
+            <div class="flip-result-headline">Při dnešní inzerované ceně (${fmt(inputs.currentAskingPriceCzk)})</div>
+            <div class="flip-result-value">${formatSignedCzk(result.profitAtAsking)} <span class="flip-result-margin">(${result.marginAtAsking.toFixed(1)} % marže)</span></div>
+          </div>`
+        : ""
+    }
+    <p class="muted">Marže = čistý zisk ÷ celkové náklady (vč. nákupní ceny) × 100. Cíl 20–30 % je kvalitní deal, 10–20 % okrajové, pod 10 % nedoporučeno.</p>`;
 }
 
 const NOTIFICATION_TYPES = {
@@ -777,36 +946,113 @@ function renderNotifications(db, typeFilter) {
     <div class="notifs">${items || `<p class="empty">${esc(empty)}</p>`}</div>`;
 }
 
+// Byt patří do statistiky "ceny po rekonstrukci", pokud to uživatel vědomě
+// nepřehlasoval (`statsInclude`, viz OWN_FIELDS "Ve statistice") — jinak
+// auto-kritérium: zmizel z nabídky (= pravděpodobně prodáno/rezervováno
+// jinde) A appka/uživatel ho označili jako "Po rekonstrukci". Novostavba se
+// SCHVÁLNĚ nepočítá do stejného koše (jiný cenový segment), kdo ji chce
+// zahrnout, přehlasuje ručně přes "Zahrnout".
+function isEligibleForRenoStats(e) {
+  if (e.statsInclude === "exclude") return false;
+  if (e.statsInclude === "include") return true;
+  return e.status === "removed" && e.ownCondition === "renovated";
+}
+
+// Ověřená prodejní cena (uživatel si ji dohledal v katastru) má vždy
+// přednost — je to REÁLNÁ transakce. Bez ní appka bere poslední evidovanou
+// (inzerovanou) cenu těsně před zmizením — návod výslovně upozorňuje, že to
+// NENÍ prodejní cena (typicky o pár % výš), proto se u takových řádků
+// značí "odhad" a počet ověřených/odhadnutých se ukazuje zvlášť.
+function effectivePriceForStats(e) {
+  return e.verifiedSalePrice ?? e.price;
+}
+
+// Souhrn "cena/m² u prodaných bytů po rekonstrukci" rozdělený podle
+// dispozice a podle města (viz uživatelův požadavek) — dvě NEZÁVISLÉ
+// tabulky (ne křížení dispozice×město), protože při pár desítkách bytů
+// napříč 4 městy a ~6 dispozicemi by kombinovaný rozpad dal skupiny o 0-1
+// vzorku, tedy nevypovídající. Vrací i `count`, ať je u každého řádku vidět
+// velikost vzorku, appka si nic nevymýšlí za nedostatek dat.
+function renovatedSaleStats(entries) {
+  const eligible = entries
+    .filter(isEligibleForRenoStats)
+    .map((e) => ({
+      pricePerM2: (() => {
+        const price = effectivePriceForStats(e);
+        return price != null && e.rep.area_m2 ? price / e.rep.area_m2 : null;
+      })(),
+      disposition: e.rep.disposition || "—",
+      city: e.city || "—",
+      verified: e.verifiedSalePrice != null,
+    }))
+    .filter((r) => r.pricePerM2 != null);
+
+  function groupBy(key) {
+    const groups = new Map();
+    for (const r of eligible) {
+      if (!groups.has(r[key])) groups.set(r[key], []);
+      groups.get(r[key]).push(r);
+    }
+    return [...groups.entries()]
+      .map(([label, rows]) => {
+        const values = rows.map((r) => r.pricePerM2);
+        return {
+          label,
+          count: rows.length,
+          verifiedCount: rows.filter((r) => r.verified).length,
+          avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
+          min: Math.round(Math.min(...values)),
+          max: Math.round(Math.max(...values)),
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+  }
+
+  return { byDisposition: groupBy("disposition"), byCity: groupBy("city"), totalEligible: eligible.length };
+}
+
+function renderPriceStatsTable(title, rows) {
+  if (!rows.length) return `<h3>${esc(title)}</h3><p class="muted">Zatím žádná data.</p>`;
+  const body = rows
+    .map(
+      (r) => `<tr>
+        <td>${esc(r.label)}</td>
+        <td>${r.count}${r.verifiedCount ? ` <span class="muted">(${r.verifiedCount}× ověřeno)</span>` : ""}</td>
+        <td>${formatCzk(r.avg)}/m²</td>
+        <td class="muted">${formatCzk(r.min)}–${formatCzk(r.max)}/m²</td>
+      </tr>`
+    )
+    .join("");
+  return `<h3>${esc(title)}</h3>
+    <table class="stats-table">
+      <thead><tr><th></th><th>Počet</th><th>Průměr</th><th>Rozsah</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+
 function renderStats(db) {
-  const allListings = db.prepare("SELECT * FROM listings").all();
   // Skryté (křížkem vyřazené) položky se do statistik nepočítají — hidden
   // je uživatelovo "tohle mě nezajímá", stejná úvaha jako v přehledu.
-  const groups = groupListings(allListings).filter((g) => !isHidden(g.members));
+  const entries = computeEntries(db).filter((e) => !e.hidden);
 
   // Počítáno na SKUPINY (skutečné nemovitosti), ne syrové řádky — jinak by
   // stejný byt nalezený na 2 portálech vyšel v součtu jako 2 byty.
   const counts = { active: 0, reserved: 0, removed: 0 };
-  for (const g of groups) counts[mergedStatus(g.members)]++;
+  for (const e of entries) counts[e.status]++;
   const countRows = Object.entries(counts)
     .map(([k, n]) => `<li>${esc(STATUS_LABELS[k].text)}: <strong>${n}</strong></li>`)
     .join("");
-  const mergedCount = groups.filter((g) => g.merged).length;
+  const mergedCount = entries.filter((e) => e.g.merged).length;
 
   const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
-  const removedRecentWithData = groups
-    .filter((g) => mergedStatus(g.members) === "removed")
-    .filter((g) => {
-      // Skupina "zmizela" datem POSLEDNÍHO zmizení mezi jejími členy —
-      // dokud byla vidět aspoň na jednom portálu, pořád byla na trhu.
-      const latest = g.members.reduce((max, m) => (m.removed_at && m.removed_at > max ? m.removed_at : max), "");
-      return latest && new Date(latest).getTime() >= cutoff;
-    })
-    .map((g) => ({ price_czk: bestPrice(g.members), area_m2: primaryListing(g.members).area_m2 }))
-    .filter((r) => r.price_czk != null && r.area_m2 != null);
-
+  const removedRecentWithData = entries.filter(
+    (e) => e.status === "removed" && e.removedAt && new Date(e.removedAt).getTime() >= cutoff && e.price != null && e.rep.area_m2 != null
+  );
   const avgPerM2 = removedRecentWithData.length
-    ? Math.round(removedRecentWithData.reduce((sum, r) => sum + r.price_czk / r.area_m2, 0) / removedRecentWithData.length)
+    ? Math.round(removedRecentWithData.reduce((sum, e) => sum + e.price / e.rep.area_m2, 0) / removedRecentWithData.length)
     : null;
+
+  const renoStats = renovatedSaleStats(entries);
 
   return `
     <p><a href="/">← Zpět na seznam</a></p>
@@ -818,7 +1064,17 @@ function renderStats(db) {
       removedRecentWithData.length
         ? `${removedRecentWithData.length} bytů, průměr ${formatCzk(avgPerM2)}/m² (z poslední evidované ceny, ne nutně skutečná prodejní cena)`
         : "Zatím žádná data."
-    }</p>`;
+    }</p>
+
+    <h2>Ceny po rekonstrukci (prodané byty)</h2>
+    <p class="muted">
+      Byty zmizelé z nabídky se stavem „Po rekonstrukci", případně ručně
+      přehlasované přes sloupec „Ve statistice" v tabulce srovnání. Cena je ověřená prodejní, pokud ji máš dohledanou
+      v katastru, jinak poslední inzerovaná cena před zmizením — u ní počítej s návodovým odečtem cca 5 % pro
+      konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
+    </p>
+    ${renderPriceStatsTable("Podle dispozice", renoStats.byDisposition)}
+    ${renderPriceStatsTable("Podle města", renoStats.byCity)}`;
 }
 
 function serveStatic(res, filePath, contentType) {
@@ -913,6 +1169,22 @@ const server = createServer(async (req, res) => {
     return res.end(layout("Byt — Trh bytů", body));
   }
 
+  const calcMatch = url.pathname.match(/^\/byt\/([^/]+)\/kalkulacka$/);
+  if (calcMatch && req.method === "GET") {
+    const id = decodeURIComponent(calcMatch[1]);
+    const allListings = db.prepare("SELECT * FROM listings").all();
+    const group = findGroupForListing(allListings, id);
+    if (!group) {
+      res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end(layout("Nenalezeno", "<p>Byt nenalezen.</p>"));
+    }
+    const rep = primaryListing(group.members);
+    const inputs = parseFlipQuery(url.searchParams, rep);
+    const result = calculateFlip(inputs);
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    return res.end(layout("Kalkulačka marže — Trh bytů", renderFlipCalculator(rep, inputs, result)));
+  }
+
   // TOP (hvězdička) a Skrýt (křížek) jsou prosté toggly — přečti si
   // aktuální hodnotu a přehoď ji. Uloženo na LISTING, do kterého ukazuje
   // ID v URL (tj. primaryListing skupiny v okamžiku vykreslení stránky,
@@ -955,6 +1227,7 @@ const server = createServer(async (req, res) => {
     if (group) {
       const updates = {};
       if ("notes" in fields) updates.notes = fields.notes || null;
+      if ("seller_motivation" in fields) updates.seller_motivation = fields.seller_motivation || null;
       if ("verified_sale_price_czk" in fields) {
         updates.verified_sale_price_czk = fields.verified_sale_price_czk ? Number(fields.verified_sale_price_czk) : null;
       }

@@ -306,6 +306,40 @@ export function earliestFirstSeen(members) {
   return members.reduce((min, m) => (m.first_seen_at < min ? m.first_seen_at : min), members[0].first_seen_at);
 }
 
+/**
+ * Kdy skupina naposledy zmizela z nabídky — `null`, dokud je aktivní/
+ * rezervovaná aspoň na jednom portálu (mergedStatus by pak nebyl "removed").
+ * Bere se NEJPOZDĚJŠÍ `removed_at` napříč členy, ne první — dokud byl byt
+ * vidět aspoň na jednom portálu, na trhu pořád byl (stejná úvaha jako
+ * `removedRecentWithData` dřív počítal inline v renderStats).
+ */
+export function latestRemovedAt(members) {
+  return members.reduce((max, m) => (m.removed_at && m.removed_at > max ? m.removed_at : max), "") || null;
+}
+
+/**
+ * Souhrn vývoje ceny napříč danými událostmi (typicky spojené ze všech členů
+ * skupiny, jako u latestChange) — kolikrát cena SKUTEČNĚ klesla (ne stoupla —
+ * zdražení je vzácné a pro re-flip kalkulaci nezajímavé) a jaká byla úplně
+ * PRVNÍ zaznamenaná cena (z `created` eventu). Volající si z toho dopočítá
+ * "sleva celkem" = originalPrice − aktuální cena (viz server.js). `null`
+ * originalPrice, když appka ani jeden `created` event s cenou nemá (cena na
+ * vyžádání od začátku).
+ */
+export function priceDropSummary(events) {
+  let dropCount = 0;
+  let earliestCreated = null;
+  for (const e of events) {
+    if (e.event_type === "price_change" && e.old_price_czk != null && e.new_price_czk != null && e.new_price_czk < e.old_price_czk) {
+      dropCount++;
+    }
+    if (e.event_type === "created" && e.new_price_czk != null) {
+      if (!earliestCreated || e.occurred_at < earliestCreated.occurred_at) earliestCreated = e;
+    }
+  }
+  return { dropCount, originalPrice: earliestCreated?.new_price_czk ?? null };
+}
+
 // Typy událostí, co appka počítá jako SKUTEČNOU pozdější změnu u už
 // zaevidovaného inzerátu — výhradně z VLASTNÍ historie appky (změna ceny,
 // zmizení z nabídky, návrat do nabídky, znovu vložení inzerátu pod novým
