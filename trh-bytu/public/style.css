@@ -330,6 +330,11 @@ table.stats-table { width: auto; min-width: 420px; margin-bottom: 1.2rem; }
 table.stats-table th, table.stats-table td { padding: 0.4rem 0.8rem; }
 table.stats-table thead th { color: var(--muted); font-weight: 600; text-align: left; }
 
+/* Rozklikávací seznam bytů za průměrem, viz renderStatsItemsList. */
+.stats-items summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; }
+.stats-items ul { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; }
+.stats-items li { margin-bottom: 0.2rem; }
+
 /* Kalkulačka marže re-flipu (/byt/:id/kalkulacka) */
 .checkbox-label { flex-direction: row !important; align-items: center; gap: 0.5rem !important; }
 .checkbox-label input { width: auto; }

@@ -1034,6 +1034,12 @@ function renovatedSaleStats(entries) {
       disposition: e.rep.disposition || "—",
       city: e.city || "—",
       verified: e.verifiedSalePrice != null,
+      // Pro rozklikávací seznam bytů za průměrem (viz renderCityStatsTable)
+      // — appka jinak ukazovala jen holé číslo bez možnosti ověřit, ze
+      // kterých konkrétních bytů vzniklo.
+      id: e.rep.id,
+      address: e.address || e.city,
+      areaM2: e.rep.area_m2,
     }))
     .filter((r) => r.pricePerM2 != null);
 
@@ -1045,6 +1051,9 @@ function renovatedSaleStats(entries) {
       avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
       min: Math.round(Math.min(...values)),
       max: Math.round(Math.max(...values)),
+      // Od nejlevnějšího po nejdražší — stejné pořadí, v jakém appka jinak
+      // ukazuje rozsah (min–max).
+      items: rows.slice().sort((a, b) => a.pricePerM2 - b.pricePerM2),
     };
   }
 
@@ -1069,12 +1078,26 @@ function renovatedSaleStats(entries) {
   return { cities, totalEligible: eligible.length };
 }
 
+// Seznam bytů za jedním průměrem — rozklikávací `<details>` uvnitř buňky
+// (žádný JS potřeba), ať jde ověřit, ze kterých konkrétních nabídek číslo
+// vzniklo, místo slepé důvěry holému průměru.
+function renderStatsItemsList(items) {
+  const rows = items
+    .map((it) => {
+      const verifiedBadge = it.verified ? ` <span class="muted">(ověřeno)</span>` : "";
+      const areaLabel = it.areaM2 ? `, ${it.areaM2} m²` : "";
+      return `<li><a href="/byt/${encodeURIComponent(it.id)}">${esc(it.address)}${areaLabel}</a> — ${formatCzk(Math.round(it.pricePerM2))}/m²${verifiedBadge}</li>`;
+    })
+    .join("");
+  return `<details class="stats-items"><summary>${items.length} bytů</summary><ul>${rows}</ul></details>`;
+}
+
 function renderCityStatsTable(cityStats) {
   const body = cityStats.dispositions
     .map(
       (d) => `<tr>
         <td>${esc(d.disposition)}</td>
-        <td>${d.count}${d.verifiedCount ? ` <span class="muted">(${d.verifiedCount}× ověřeno)</span>` : ""}</td>
+        <td>${renderStatsItemsList(d.items)}${d.verifiedCount ? ` <span class="muted">(${d.verifiedCount}× ověřeno)</span>` : ""}</td>
         <td>${formatCzk(d.avg)}/m²</td>
         <td class="muted">${formatCzk(d.min)}–${formatCzk(d.max)}/m²</td>
       </tr>`
