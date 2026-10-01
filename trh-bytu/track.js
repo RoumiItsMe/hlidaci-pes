@@ -15,7 +15,9 @@
 
 import { appendFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { watches } from "../config.js";
+import { sendTelegramMessage } from "../lib/telegram.js";
 import { fetchSrealityAllPages } from "../sources/sreality.js";
 import { fetchBezrealitky } from "../sources/bezrealitky.js";
 import { fetchIdnes } from "../sources/idnes.js";
@@ -35,6 +37,19 @@ import { fetchRealitymixDetail } from "./detail/realitymix.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
 
 const LOG_PATH = path.join(DATA_DIR, "track.log");
+
+// Telegram token/chat ID z `.env.local` v kořeni repa (git-ignored) —
+// stejný mechanismus a stejné proměnné jako hlídací pes (viz
+// scripts/watch-blocked-boards.js): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+// Appka na ně normálně nesahá (sdílí env jen kvůli téhle jedné notifikaci),
+// chybějící soubor proto fail-soft ignoruje — upozornění na rezervaci pak
+// jen zaloguje chybu a běh pokračuje dál.
+try {
+  process.loadEnvFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".env.local"));
+} catch {
+  // Viz komentář výš — appka běží bez dohledu, chybějící .env.local nesmí
+  // shodit celý sběrný běh.
+}
 
 const SOURCES = [
   // Sreality stahujeme přes VŠECHNY stránky výpisu — jen z 1. stránky by
@@ -60,6 +75,25 @@ function log(line) {
     appendFileSync(LOG_PATH, stamped + "\n", "utf-8");
   } catch {
     // Appka běží bez dohledu — pád zápisu do logu nesmí shodit celý běh.
+  }
+}
+
+// Telegram upozornění na rezervaci — uživatel chce vědět HNED, že nabídka
+// přešla do rezervace, aby stihl zkontrolovat převod v katastru nemovitostí.
+// Posílá se jak u nabídky, která se rovnou zaeviduje jako rezervovaná
+// (appka ji vidí poprvé), tak u známé nabídky, co se rezervovala mezi dvěma
+// běhy — v obou případech je to STEJNÁ informace ("tenhle byt je pravděpodobně
+// prodáno/rezervováno"), jen jinou cestou appka k ní došla. Fail-soft: appka
+// běží bez dohledu (naplánovaná úloha), chybějící token nebo výpadek
+// Telegramu nesmí shodit celý sběrný běh, jen se zaloguje.
+async function notifyReservation(listing) {
+  const specs = [listing.disposition, listing.area_m2 ? `${listing.area_m2} m²` : null].filter(Boolean).join(", ");
+  const price = listing.price_czk != null ? `${listing.price_czk.toLocaleString("cs-CZ")} Kč` : "cena na vyžádání";
+  const text = `🔒 Rezervováno: ${specs || "byt"}${listing.address ? `, ${listing.address}` : ""}\n${price}\n${listing.url}`;
+  try {
+    await sendTelegramMessage(text);
+  } catch (err) {
+    log(`Telegram upozornění na rezervaci selhalo: ${err.message}`);
   }
 }
 
@@ -183,6 +217,7 @@ async function processSource(db, source, watch) {
       createdThisRun.push({ id: listingId, disposition, area_m2: areaM2, description: detail.description, price_czk: priceCzk });
       if (status === "reserved") {
         insertEvent(db, { listing_id: listingId, event_type: "reserved", occurred_at: now });
+        await notifyReservation({ disposition, area_m2: areaM2, address, price_czk: priceCzk, url: item.url });
       }
 
       if (detail.photoUrls.length > 0) {
@@ -234,6 +269,15 @@ async function processSource(db, source, watch) {
       insertEvent(db, { listing_id: listingId, event_type: reservation.eventType, occurred_at: now });
       reservationCount++;
       log(`[${source.name}] ${reservation.eventType === "reserved" ? "rezervováno" : "rezervace zrušena"}: ${listingId}`);
+      if (reservation.eventType === "reserved") {
+        await notifyReservation({
+          disposition: existing.disposition,
+          area_m2: existing.area_m2,
+          address: existing.address,
+          price_czk: fields.price_czk ?? existing.price_czk,
+          url: item.url,
+        });
+      }
     }
     updateListingFields(db, listingId, fields);
   }

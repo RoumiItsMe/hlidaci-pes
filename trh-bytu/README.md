@@ -338,6 +338,16 @@ detailu Sreality), stav se nemění — chybějící informace rezervaci ani
 nevytvoří, ani nezruší. Datum události je okamžik, kdy ji appka poprvé
 uviděla (ne kdy ji zadala RK).
 
+**Telegram upozornění:** appka na rezervaci pošle i zprávu přes stejného
+Telegram bota jako hlídací pes (`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` v
+`.env.local` v kořeni repa — appka na ně jinak nesahá, jen kvůli týhle jedné
+notifikaci). Důvod: zvoneček v appce uvidíš, jen když appku zrovna otevřeš,
+ale "je rezervováno" je signál na okamžitou akci (zkontrolovat převod v
+katastru), ne něco, co počká do příští návštěvy appky. Posílá se při nové
+rezervaci na kterémkoli portálu (i u bytu, který appka zaeviduje už jako
+rezervovaný), nikdy při zrušení rezervace. Chybějící `.env.local` nebo
+výpadek Telegramu sběrný běh nezastaví, jen se zaloguje.
+
 ## Zvoneček (upozornění)
 
 V hlavičce appky je **🔔** — červené číslo u něj říká, kolik upozornění
