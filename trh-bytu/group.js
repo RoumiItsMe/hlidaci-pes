@@ -205,8 +205,13 @@ function sameFlatAcrossPortals(a, b) {
 //    ukazující na nový) — nový bývá bez ceny ("Dohodou");
 //  - inzeráty bez ceny napříč portály (viz sameFlatAcrossPortals) — cenu
 //    neuvádí RK, ne appka, takže je nemá čím spojit jinak.
-// Porovnávají se jen dvojice, kde aspoň jeden inzerát cenu nemá — dva
-// inzeráty s cenou, které se v ceně neshodují, jsou vědomě dva byty.
+// Porovnávají se dvojice, kde aspoň jeden inzerát cenu nemá, NEBO mají obě
+// stejnou cenu — dva inzeráty s cenou, které se v ceně NEshodují, jsou
+// vědomě dva byty. (Stejná cena ale RŮZNÁ plocha napříč portály typicky
+// znamená, že RK uvedla dvě různá čísla plochy ve svém inzerátu — např.
+// "66 m2 s příslušenstvím, z toho 61 m2 vlastní plocha" — a různé portály
+// si vybraly každý jiné; `sameFlatAcrossPortals`/`areasCompatible` to musí
+// dostat šanci rozpoznat, ne to rovnou zavřít na vstupu.)
 // `merged` (= nalezeno na víc PORTÁLECH) se přepočítá — dvě ID téhož portálu
 // ho nezapínají.
 function mergeLinkedGroups(groups, listings) {
@@ -236,7 +241,7 @@ function mergeLinkedGroups(groups, listings) {
   for (const same of byDisposition.values()) {
     for (let i = 0; i < same.length; i++) {
       for (let j = i + 1; j < same.length; j++) {
-        if (same[i].price_czk != null && same[j].price_czk != null) continue;
+        if (same[i].price_czk != null && same[j].price_czk != null && same[i].price_czk !== same[j].price_czk) continue;
         if (sameFlatAcrossPortals(same[i], same[j])) link(same[i].id, same[j].id);
       }
     }
