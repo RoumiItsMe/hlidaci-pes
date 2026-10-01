@@ -17,11 +17,28 @@
 // vůbec) — "1. patro" bez "z X" je pořád mnohem víc, než prázdné pole.
 const NADZEMNI_PODLAZI_RE = /(\d+)\.\s*nadzemním?\s*podlaží/i;
 
+// Přímé označení patra ("Byt se nachází v 3 patře", "ve 2. patře") — na
+// rozdíl od "N. nadzemní podlaží" výš tohle číslo UŽ je v číslování, na
+// které je appka zvyklá z portálů (bez přepočtu -1). Vyžaduje předložku
+// "v"/"ve" bezprostředně před číslem, ať se nechytí věta o CELKOVÉM počtu
+// podlaží domu ("dům má 3 patra") — tu appka záměrně nehádá (viz komentář
+// u NADZEMNI_PODLAZI_RE).
+const PATRO_RE = /\bve?\s+(\d+)\.?\s*patř/i;
+const PRIZEMI_RE = /\bv\s+přízemí\b/i;
+
 function parseFloorFromText(text) {
-  const m = text?.match(NADZEMNI_PODLAZI_RE);
-  if (!m) return null;
-  const np = parseInt(m[1], 10);
-  return np === 1 ? "Přízemí" : `${np - 1}. patro`;
+  if (PRIZEMI_RE.test(text || "")) return "Přízemí";
+  const nadzemni = text?.match(NADZEMNI_PODLAZI_RE);
+  if (nadzemni) {
+    const np = parseInt(nadzemni[1], 10);
+    return np === 1 ? "Přízemí" : `${np - 1}. patro`;
+  }
+  const patro = text?.match(PATRO_RE);
+  if (patro) {
+    const n = parseInt(patro[1], 10);
+    return n === 0 ? "Přízemí" : `${n}. patro`;
+  }
+  return null;
 }
 
 // "Sklepní kóje 3,10m2" / "sklepní kója o velikosti 5 m²" → "Ano (X m²)",

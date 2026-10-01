@@ -90,7 +90,10 @@ function ownFieldSelectHtml(column, currentValue, { autoSubmit = false } = {}) {
   const opts = [`<option value="">—</option>`]
     .concat(field.options.map(([v, label]) => `<option value="${esc(v)}" ${currentValue === v ? "selected" : ""}>${esc(label)}</option>`))
     .join("");
-  const onChange = autoSubmit ? ` onchange="this.form.submit()"` : "";
+  // `requestSubmit()`, NE `submit()` — `submit()` obchází submit event úplně
+  // (WHATWG spec), takže by ho klientský JS (viz app.js) nikdy nezachytil a
+  // skončilo by to normální navigací se skokem nahoru stránky.
+  const onChange = autoSubmit ? ` onchange="this.form.requestSubmit()"` : "";
   return `<select name="${column}"${onChange}>${opts}</select>`;
 }
 
@@ -104,7 +107,7 @@ const PARAM_OVERRIDE_FIELD_BY_COLUMN = Object.fromEntries(PARAM_OVERRIDE_FIELDS.
 // `params_override_json`, který má vždy přednost (viz POST /params).
 function paramOverrideFieldHtml(column, currentValue, { autoSubmit = false } = {}) {
   const field = PARAM_OVERRIDE_FIELD_BY_COLUMN[column];
-  const onChange = autoSubmit ? ` onchange="this.form.submit()"` : "";
+  const onChange = autoSubmit ? ` onchange="this.form.requestSubmit()"` : "";
   if (field.type === "select") {
     const opts = [`<option value="">—</option>`]
       .concat(field.options.map(([v, label]) => `<option value="${esc(v)}" ${currentValue === v ? "selected" : ""}>${esc(label)}</option>`))
@@ -216,6 +219,7 @@ function layout(title, body, { wide = false } = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
 </head>
 <body>
 <header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a>${bell}</header>
@@ -643,9 +647,9 @@ function renderComparisonTable(db, filters) {
 
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
         <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="address" value="${esc(e.address || e.city)}" placeholder="adresa…" onchange="this.form.submit()"></form></td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="address" value="${esc(e.address || e.city)}" placeholder="adresa…" onchange="this.form.requestSubmit()"></form></td>
         <td>${esc(e.rep.disposition || "—")}</td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="number" name="area_m2" value="${e.rep.area_m2 ?? ""}" step="0.1" placeholder="m²" onchange="this.form.submit()"></form></td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="number" name="area_m2" value="${e.rep.area_m2 ?? ""}" step="0.1" placeholder="m²" onchange="this.form.requestSubmit()"></form></td>
         <td>${paramField("floorInfo")}</td>
         <td>${paramField("elevator")}</td>
         <td>${paramField("balcony")}</td>
@@ -661,12 +665,12 @@ function renderComparisonTable(db, filters) {
         <td>${esc(formatDateOnly(e.firstSeenAt))}</td>
         <td>${esc(daysOnMarketLabel(e))}</td>
         <td><form class="cell-form cell-form--stack" method="post" action="/byt/${encId}/notes">
-          <input type="number" name="verified_sale_price_czk" value="${e.verifiedSalePrice ?? ""}" placeholder="Kč" onchange="this.form.submit()">
-          <input type="date" name="verified_sale_date" value="${e.verifiedSaleDate ?? ""}" onchange="this.form.submit()">
+          <input type="number" name="verified_sale_price_czk" value="${e.verifiedSalePrice ?? ""}" placeholder="Kč" onchange="this.form.requestSubmit()">
+          <input type="date" name="verified_sale_date" value="${e.verifiedSaleDate ?? ""}" onchange="this.form.requestSubmit()">
         </form></td>
         <td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(e.rep.url)}" target="_blank" rel="noopener">Inzerát ↗</a> · <a href="/byt/${encId}/kalkulacka">Kalkulačka</a></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="notes" value="${esc(e.notes)}" placeholder="poznámka…" onchange="this.form.submit()"></form></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="seller_motivation" value="${esc(e.sellerMotivation)}" placeholder="motivace…" onchange="this.form.submit()"></form></td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="notes" value="${esc(e.notes)}" placeholder="poznámka…" onchange="this.form.requestSubmit()"></form></td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="seller_motivation" value="${esc(e.sellerMotivation)}" placeholder="motivace…" onchange="this.form.requestSubmit()"></form></td>
       </tr>`;
     })
     .join("");
@@ -1157,6 +1161,9 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/style.css") {
     return serveStatic(res, path.join(import.meta.dirname, "public", "style.css"), "text/css");
+  }
+  if (url.pathname === "/app.js") {
+    return serveStatic(res, path.join(import.meta.dirname, "public", "app.js"), "text/javascript");
   }
   if (url.pathname.startsWith("/photos/")) {
     const rel = decodeURIComponent(url.pathname.replace("/photos/", ""));
