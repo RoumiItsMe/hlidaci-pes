@@ -18,6 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { watches } from "../config.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
+import { scheduleFollowup, sendDueFollowups, processTelegramActions } from "./reservation-reminders.js";
 import { fetchSrealityAllPages } from "../sources/sreality.js";
 import { fetchBezrealitky } from "../sources/bezrealitky.js";
 import { fetchIdnes } from "../sources/idnes.js";
@@ -218,6 +219,7 @@ async function processSource(db, source, watch) {
       if (status === "reserved") {
         insertEvent(db, { listing_id: listingId, event_type: "reserved", occurred_at: now });
         await notifyReservation({ disposition, area_m2: areaM2, address, price_czk: priceCzk, url: item.url });
+        scheduleFollowup(db, listingId);
       }
 
       if (detail.photoUrls.length > 0) {
@@ -277,6 +279,7 @@ async function processSource(db, source, watch) {
           price_czk: fields.price_czk ?? existing.price_czk,
           url: item.url,
         });
+        scheduleFollowup(db, listingId);
       }
     }
     updateListingFields(db, listingId, fields);
@@ -318,6 +321,14 @@ async function run() {
     `Hotovo. ${totalNew} nových bytů zaevidováno, ${totalPriceChanges} změn ceny, ${totalRemoved} zmizelo z nabídky, ${totalRelisted} znovu vloženo, ${totalReservations} změn rezervace.` +
       (hadError ? " (u některého zdroje selhalo stahování — zkontroluj log výše.)" : "")
   );
+
+  // Nejdřív přečíst kliknutí na tlačítka z PŘEDCHOZÍCH připomínek (ať
+  // čerstvě odložená rezervace neprotáhne další kolo zbytečně brzy), pak
+  // teprve poslat připomínky, kterým dnes uplynula lhůta. Nezávislé na
+  // výsledku sběru výš (fail-soft, viz reservation-reminders.js).
+  await processTelegramActions(db, log);
+  await sendDueFollowups(db, log);
+
   db.close();
 }
 

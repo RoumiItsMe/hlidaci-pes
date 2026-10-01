@@ -348,6 +348,44 @@ rezervaci na kterémkoli portálu (i u bytu, který appka zaeviduje už jako
 rezervovaný), nikdy při zrušení rezervace. Chybějící `.env.local` nebo
 výpadek Telegramu sběrný běh nezastaví, jen se zaloguje.
 
+### Opakovaná připomínka "pořád rezervováno?" (každé 3 týdny)
+
+Appka si u každé rezervace naplánuje DALŠÍ zprávu za **21 dní** — "⏰ Pořád
+rezervováno: ..., zkontroloval jsi převod v katastru?" — se dvěma tlačítky:
+
+- **✅ Prodáno** — appka přestane připomínat, zapíše si `reservation_sold_at`
+  (jen rychlé "ano, potvrzuju" z telefonu, NENÍ totéž jako ověřená prodejní
+  cena/datum z detailu bytu — na to pořád slouží samostatné pole).
+- **⏳ Odložit o 3 týdny** — appka naplánuje další připomínku za 21 dní od
+  TOHOTO kliknutí.
+
+Kdyby nikdo nikdy neklikl, appka se sama "uzdraví": po odeslání připomínky
+rovnou naplánuje další kolo za 21 dní, takže se ptá dál, dokud buď nepřijde
+"Prodáno", nebo byt nezmizí z rezervovaného stavu úplně.
+
+**Zpracování kliknutí NENÍ okamžité** — appka nemá žádný server běžící na
+pozadí (na rozdíl od webhooku by to vyžadovalo appku vystavenou na
+veřejnou adresu, což tahle appka záměrně nedělá), takže Telegram jen čeká,
+až se appka sama zeptá, jestli něco nového přišlo (`getUpdates`). K tomu
+slouží **samostatná naplánovaná úloha** `trh-bytu/process-telegram.js` —
+na rozdíl od `track.js` (jednou denně, plný sběr) tahle neumí nic jiného
+než přečíst čekající kliknutí, takže se dá spouštět často beze zátěže na
+sledované portály:
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "node" -Argument "trh-bytu\process-telegram.js" -WorkingDirectory "C:\Users\roman\Documents\Hlídací pes"
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
+Register-ScheduledTask -TaskName "Trh bytu - telegram tlacitka" -Action $action -Trigger $trigger -Description "Kazdych 5 minut zpracuje kliknuti na Prodano/Odlozit z Telegram pripominek (Trh bytu appka)"
+```
+
+S během po 5 minutách se kliknutí projeví do ~5 minut (ne okamžitě, ale ne
+ani "až zítra"). Po zpracování appka: smaže tlačítka z původní zprávy (ať
+nejdou zmáčknout podruhé) a pošle novou, TRVALOU zprávu do chatu s
+potvrzením ("✅ .../⏳ ... — odloženo, příští připomínka DD.MM.RRRR.") —
+Telegramova vlastní "načítá se" bublina po kliknutí totiž zmizí po pár
+vteřinách a snadno unikne pozornosti, pokud se appka k vyřízení dostane,
+až když zrovna nekoukáš na telefon.
+
 ## Zvoneček (upozornění)
 
 V hlavičce appky je **🔔** — červené číslo u něj říká, kolik upozornění

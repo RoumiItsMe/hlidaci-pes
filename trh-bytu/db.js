@@ -109,6 +109,15 @@ const COLUMN_MIGRATIONS = [
   // Bezrealitky nemají tohle pole vůbec, viz detail/*.js) — appka pak
   // padá zpátky na first_seen_at, nikdy netvrdí datum, které nezná.
   { table: "listings", column: "listed_at", ddl: "TEXT" },
+  // Telegram připomínky na rezervaci (viz reservation-reminders.js) —
+  // `reservation_followup_due`: kdy poslat DALŠÍ připomínku "pořád
+  // rezervováno?" (NULL = žádná naplánovaná — buď nikdy nebyl rezervovaný,
+  // nebo uživatel potvrdil "Prodáno"). `reservation_sold_at`: kdy uživatel
+  // kliknutím na Telegram tlačítko potvrdil prodej — NENÍ totéž jako
+  // `verified_sale_price_czk`/`verified_sale_date` (to je přesná částka a
+  // datum dohledané v katastru), jen rychlé "ano, potvrzuju" z telefonu.
+  { table: "listings", column: "reservation_followup_due", ddl: "TEXT" },
+  { table: "listings", column: "reservation_sold_at", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {
