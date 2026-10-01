@@ -2447,7 +2447,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/drazebni-vyhlaska-206ex-2588-26-36-peugeot-308/",
     "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-chocen-pod-chlumem-p-1263-23-knn-iv-12-2020656/",
     "https://www.vysoke-myto.cz/uredni-deska/opatreni-sucho-prodlouzeni-doby-trvani-opatreni-sucho/",
-    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-jeronymova-v-k-u-a-obci-vysoke-myto-z-duvodu-opravy-vodovodni-pripojky-domu-c-p-269/"
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-jeronymova-v-k-u-a-obci-vysoke-myto-z-duvodu-opravy-vodovodni-pripojky-domu-c-p-269/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-zverejneni-navrhu-opatreni-obecne-povahy-ke-stanoveni-mistni-upravy-provozu-na-mistni-komunikacich-v-ulicich-lidicka-lezaku-a-17-listopadu-ve-vysokem-myte/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2613,17 +2614,17 @@
     "OBAS1000A56B-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-01T06:08:29.781Z",
-    "board:letohrad": "2026-10-01T06:08:29.781Z",
-    "board:zamberk": "2026-10-01T06:08:29.781Z",
-    "board:ceska-trebova": "2026-10-01T06:08:29.781Z",
-    "board:lanskroun": "2026-10-01T06:08:29.781Z",
-    "board:kraliky": "2026-10-01T06:08:29.781Z",
-    "board:vysoke-myto": "2026-10-01T06:08:29.781Z",
-    "board:lukova": "2026-10-01T06:08:29.781Z",
-    "board:tatenice": "2026-10-01T06:08:29.781Z",
-    "board:anenska-studanka": "2026-10-01T06:08:29.781Z",
-    "board:okres-usti-nad-orlici": "2026-10-01T05:15:56.177Z"
+    "board:usti-nad-orlici": "2026-10-01T06:15:56.597Z",
+    "board:letohrad": "2026-10-01T06:15:56.597Z",
+    "board:zamberk": "2026-10-01T06:15:56.597Z",
+    "board:ceska-trebova": "2026-10-01T06:15:56.597Z",
+    "board:lanskroun": "2026-10-01T06:15:56.597Z",
+    "board:kraliky": "2026-10-01T06:15:56.597Z",
+    "board:vysoke-myto": "2026-10-01T06:15:56.597Z",
+    "board:lukova": "2026-10-01T06:15:56.597Z",
+    "board:tatenice": "2026-10-01T06:15:56.597Z",
+    "board:anenska-studanka": "2026-10-01T06:15:56.597Z",
+    "board:okres-usti-nad-orlici": "2026-10-01T06:15:56.597Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
