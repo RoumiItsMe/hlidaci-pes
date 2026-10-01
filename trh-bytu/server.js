@@ -1014,12 +1014,11 @@ function effectivePriceForStats(e) {
   return e.verifiedSalePrice ?? e.price;
 }
 
-// Souhrn "cena/m² u prodaných bytů po rekonstrukci" rozdělený podle
-// dispozice a podle města (viz uživatelův požadavek) — dvě NEZÁVISLÉ
-// tabulky (ne křížení dispozice×město), protože při pár desítkách bytů
-// napříč 4 městy a ~6 dispozicemi by kombinovaný rozpad dal skupiny o 0-1
-// vzorku, tedy nevypovídající. Vrací i `count`, ať je u každého řádku vidět
-// velikost vzorku, appka si nic nevymýšlí za nedostatek dat.
+// Souhrn "cena/m² u prodaných bytů po rekonstrukci" — PRIMÁRNĚ podle
+// města, uvnitř každého města rozpad podle dispozice (přesně v tomhle
+// pořadí chtěl uživatel, ne dvě oddělené tabulky vedle sebe). Vrací i
+// `count` u každého řádku, ať je i při řídkých datech vidět velikost
+// vzorku — appka si nic nevymýšlí za nedostatek dat, jen ho ukáže.
 function renovatedSaleStats(entries) {
   const eligible = entries
     .filter(isEligibleForRenoStats)
@@ -1034,45 +1033,52 @@ function renovatedSaleStats(entries) {
     }))
     .filter((r) => r.pricePerM2 != null);
 
-  function groupBy(key) {
-    const groups = new Map();
-    for (const r of eligible) {
-      if (!groups.has(r[key])) groups.set(r[key], []);
-      groups.get(r[key]).push(r);
-    }
-    return [...groups.entries()]
-      .map(([label, rows]) => {
-        const values = rows.map((r) => r.pricePerM2);
-        return {
-          label,
-          count: rows.length,
-          verifiedCount: rows.filter((r) => r.verified).length,
-          avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
-          min: Math.round(Math.min(...values)),
-          max: Math.round(Math.max(...values)),
-        };
-      })
-      .sort((a, b) => b.count - a.count);
+  function summarize(rows) {
+    const values = rows.map((r) => r.pricePerM2);
+    return {
+      count: rows.length,
+      verifiedCount: rows.filter((r) => r.verified).length,
+      avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
+      min: Math.round(Math.min(...values)),
+      max: Math.round(Math.max(...values)),
+    };
   }
 
-  return { byDisposition: groupBy("disposition"), byCity: groupBy("city"), totalEligible: eligible.length };
+  const byCity = new Map();
+  for (const r of eligible) {
+    if (!byCity.has(r.city)) byCity.set(r.city, new Map());
+    const byDisposition = byCity.get(r.city);
+    if (!byDisposition.has(r.disposition)) byDisposition.set(r.disposition, []);
+    byDisposition.get(r.disposition).push(r);
+  }
+
+  const cities = [...byCity.entries()]
+    .map(([city, byDisposition]) => {
+      const dispositions = [...byDisposition.entries()]
+        .map(([disposition, rows]) => ({ disposition, ...summarize(rows) }))
+        .sort((a, b) => b.count - a.count);
+      const totalCount = dispositions.reduce((sum, d) => sum + d.count, 0);
+      return { city, dispositions, totalCount };
+    })
+    .sort((a, b) => b.totalCount - a.totalCount);
+
+  return { cities, totalEligible: eligible.length };
 }
 
-function renderPriceStatsTable(title, rows) {
-  if (!rows.length) return `<h3>${esc(title)}</h3><p class="muted">Zatím žádná data.</p>`;
-  const body = rows
+function renderCityStatsTable(cityStats) {
+  const body = cityStats.dispositions
     .map(
-      (r) => `<tr>
-        <td>${esc(r.label)}</td>
-        <td>${r.count}${r.verifiedCount ? ` <span class="muted">(${r.verifiedCount}× ověřeno)</span>` : ""}</td>
-        <td>${formatCzk(r.avg)}/m²</td>
-        <td class="muted">${formatCzk(r.min)}–${formatCzk(r.max)}/m²</td>
+      (d) => `<tr>
+        <td>${esc(d.disposition)}</td>
+        <td>${d.count}${d.verifiedCount ? ` <span class="muted">(${d.verifiedCount}× ověřeno)</span>` : ""}</td>
+        <td>${formatCzk(d.avg)}/m²</td>
+        <td class="muted">${formatCzk(d.min)}–${formatCzk(d.max)}/m²</td>
       </tr>`
     )
     .join("");
-  return `<h3>${esc(title)}</h3>
+  return `<h3>${esc(cityStats.city)} <span class="muted">(${cityStats.totalCount})</span></h3>
     <table class="stats-table">
-      <thead><tr><th></th><th>Počet</th><th>Průměr</th><th>Rozsah</th></tr></thead>
+      <thead><tr><th>Dispozice</th><th>Počet</th><th>Průměr</th><th>Rozsah</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`;
 }
@@ -1120,8 +1126,7 @@ function renderStats(db) {
       v katastru, jinak poslední inzerovaná cena před zmizením — u ní počítej s návodovým odečtem cca 5 % pro
       konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
     </p>
-    ${renderPriceStatsTable("Podle dispozice", renoStats.byDisposition)}
-    ${renderPriceStatsTable("Podle města", renoStats.byCity)}`;
+    ${renoStats.cities.length ? renoStats.cities.map(renderCityStatsTable).join("") : `<p class="muted">Zatím žádná data.</p>`}`;
 }
 
 function serveStatic(res, filePath, contentType) {
