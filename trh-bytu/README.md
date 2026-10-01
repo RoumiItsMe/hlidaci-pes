@@ -151,10 +151,14 @@ Ať appka sbírá data sama, bez ručního spouštění, nastav naplánovanou ú
 **Přes PowerShell (jednorázově, jako správce nebo běžný uživatel):**
 
 ```powershell
-$action = New-ScheduledTaskAction -Execute "node" -Argument "trh-bytu\track.js" -WorkingDirectory "C:\Users\roman\Documents\Hlídací pes"
+$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument '"C:\Users\roman\Documents\Hlídací pes\scripts\run-hidden.vbs" "trh-bytu\track.js"'
 $trigger = New-ScheduledTaskTrigger -Daily -At 8:00am
 Register-ScheduledTask -TaskName "Trh bytu - sber dat" -Action $action -Trigger $trigger -Description "Denni sber dat o bytech na prodej (Trh bytu appka)"
 ```
+
+Akce jde přes `scripts/run-hidden.vbs` (`wscript.exe <vbs> <skript>`), ne
+přímo `node <skript>` — Task Scheduler jinak při každém běhu na vteřinu
+bliká černé okno příkazové řádky, viz "Spuštění bez blikajícího okna" níž.
 
 **Nebo přes GUI:** Otevři *Plánovač úloh* (Task Scheduler) → *Vytvořit
 základní úlohu* → název „Trh bytů — sběr dat" → spouštět *Denně*, čas dle
@@ -181,7 +185,7 @@ den nevadí.
 
 ```powershell
 $taskName = "Trh bytu - sber dat"
-$action = New-ScheduledTaskAction -Execute "node" -Argument "trh-bytu\track.js" -WorkingDirectory "C:\Users\roman\Documents\Hlídací pes"
+$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument '"C:\Users\roman\Documents\Hlídací pes\scripts\run-hidden.vbs" "trh-bytu\track.js"'
 
 $dailyTrigger = New-ScheduledTaskTrigger -Daily -At 8:00am
 
@@ -200,6 +204,36 @@ Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($dailyTrig
 Ověření: `(Get-ScheduledTask -TaskName "Trh bytu - sber dat").Triggers` má
 mít 3 položky (`MSFT_TaskDailyTrigger`, `MSFT_TaskBootTrigger`,
 `MSFT_TaskEventTrigger`).
+
+### Spuštění bez blikajícího okna
+
+Naplánovaná úloha s akcí `node <skript>` při každém běhu na vteřinu
+bliknou černým oknem příkazové řádky — otravné hlavně u úlohy, co běží
+každých 5 minut (viz "Telegram tlačítka" níž). Řešení: `scripts/run-hidden.vbs`
+— spustí se přes `wscript.exe` místo přímo `node`, skript pak node spustí
+v úplně skrytém okně (`objShell.Run ..., 0, True`):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument '"C:\Users\roman\Documents\Hlídací pes\scripts\run-hidden.vbs" "trh-bytu\<skript>.js"'
+```
+
+**Past, na kterou appka narazila naostro:** `run-hidden.vbs` má v sobě
+natvrdo cestu k repu, a "Hlídací pes" obsahuje české znaky — klasický
+VBScript engine (cscript/wscript) čte `.vbs` soubor v ANSI kódové stránce,
+ne UTF-8, takže "í" v cestě dokázal rozbít natolik, že `objShell.Run`
+hlásil `Systém nemůže nalézt uvedený soubor` (kód 80070002), i když cesta
+evidentně existovala. Oprava: použít KRÁTKOU (8.3) variantu cesty, ta je
+vždy čistě ASCII:
+
+```powershell
+$fso = New-Object -ComObject Scripting.FileSystemObject
+$fso.GetFolder("C:\Users\roman\Documents\Hlídací pes").ShortPath
+# → C:\Users\roman\DOCUME~1\HLDACP~1
+```
+
+`run-hidden.vbs` tuhle krátkou cestu už má zapsanou — při přesunu repa
+jinam (jiný PC, jiná složka) je potřeba vygenerovat ji znovu a soubor
+upravit.
 
 ## Kde jsou data
 
@@ -373,10 +407,14 @@ než přečíst čekající kliknutí, takže se dá spouštět často beze zát
 sledované portály:
 
 ```powershell
-$action = New-ScheduledTaskAction -Execute "node" -Argument "trh-bytu\process-telegram.js" -WorkingDirectory "C:\Users\roman\Documents\Hlídací pes"
+$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument '"C:\Users\roman\Documents\Hlídací pes\scripts\run-hidden.vbs" "trh-bytu\process-telegram.js"'
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
 Register-ScheduledTask -TaskName "Trh bytu - telegram tlacitka" -Action $action -Trigger $trigger -Description "Kazdych 5 minut zpracuje kliknuti na Prodano/Odlozit z Telegram pripominek (Trh bytu appka)"
 ```
+
+(`-RepetitionDuration ([TimeSpan]::MaxValue)` tady NEJDE — Task Scheduler jeho
+XML hodnotu odmítne jako "mimo rozsah"; 10 let je dost dlouho a je to platná
+hodnota.)
 
 S během po 5 minutách se kliknutí projeví do ~5 minut (ne okamžitě, ale ne
 ani "až zítra"). Po zpracování appka: smaže tlačítka z původní zprávy (ať
