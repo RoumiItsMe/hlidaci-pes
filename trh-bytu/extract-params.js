@@ -24,7 +24,18 @@ const NADZEMNI_PODLAZI_RE = /(\d+)\.\s*nadzemním?\s*podlaží/i;
 // podlaží domu ("dům má 3 patra") — tu appka záměrně nehádá (viz komentář
 // u NADZEMNI_PODLAZI_RE).
 const PATRO_RE = /\bve?\s+(\d+)\.?\s*patř/i;
-const PRIZEMI_RE = /\bv\s+přízemí\b/i;
+
+// Přízemí — na rozdíl od čísla patra appka NEVYŽADUJE předložku před slovem:
+// dům "má" přízemí vždy, takže tu (na rozdíl od "3 patra" u čísel) není
+// riziko splést celkový popis domu s pozicí KONKRÉTNÍHO bytu. Pokrývá i
+// skloňované/odvozené tvary ("přízemní byt", "v přízemním patře") a
+// předřazený přívlastek ("ve zvýšeném přízemí", "snížené přízemí") — appka
+// jen hledá podřetězec "přízem", nerozebírá, jaký přesně tvar/pád to je.
+// `\p{L}` (ne `\b`/`\w`) kvůli diakritice — obyčejné `\b` v JS zná jen
+// ASCII [A-Za-z0-9_], takže za "í" na konci slova vůbec nesepne a předchozí
+// přísnější varianta (`\bv\s+přízemí\b`) kvůli tomu tiše propadala i na
+// přímém "v přízemí domu".
+const PRIZEMI_RE = /(?<!\p{L})přízem/iu;
 
 function parseFloorFromText(text) {
   if (PRIZEMI_RE.test(text || "")) return "Přízemí";
