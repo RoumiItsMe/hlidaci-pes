@@ -1162,7 +1162,13 @@ function serveStatic(res, filePath, contentType) {
     res.end("Not found");
     return;
   }
-  res.writeHead(200, { "Content-Type": contentType });
+  // Bez tohohle prohlížeč klidně nechá starý app.js/style.css ležet v cache
+  // napříč dny (appka se mění průběžně, žádné cache-busting jméno souboru
+  // ani verzování) — reálně zažito: fix skoku nahoru stránky fungoval na
+  // serveru, ale v prohlížeči doběhl jen po tvrdém refreshi, protože si
+  // prohlížeč držel předchozí verzi app.js. `no-cache` (ne `no-store`)
+  // ať se dá ještě validovat přes podmíněný request, místo úplného zákazu.
+  res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "no-cache" });
   createReadStream(filePath).pipe(res);
 }
 
