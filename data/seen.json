@@ -758,6 +758,10 @@
     {
       "id": "224532383",
       "price": 2490000
+    },
+    {
+      "id": "224566496",
+      "price": null
     }
   ],
   "pozemky-glamping:sreality": [
@@ -2506,7 +2510,9 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-zverejneni-navrhu-opatreni-obecne-povahy-ke-stanoveni-mistni-upravy-provozu-na-mistni-komunikacich-v-ulicich-lidicka-lezaku-a-17-listopadu-ve-vysokem-myte/",
     "https://www.vysoke-myto.cz/uredni-deska/smlouva-o-poskytnuti-ind-dotace-mikroregion-vysokomytsko-c-01-zm-2026/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-silnicich-ii-305-a-iii-30521-a-na-pozemnich-komunikacich-v-obci-vinary/",
-    "https://www.vysoke-myto.cz/uredni-deska/dodatek-c-1-ke-smlouve-o-poskytnuti-ind-dotace-06-zm-2025-provoz-a-cinnost-mestske-galerie-a-informacniho-centra-v-r-2026/"
+    "https://www.vysoke-myto.cz/uredni-deska/dodatek-c-1-ke-smlouve-o-poskytnuti-ind-dotace-06-zm-2025-provoz-a-cinnost-mestske-galerie-a-informacniho-centra-v-r-2026/",
+    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-k_uo-vraclav-sedlec-parc-306-knn-ss/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-mistni-komunikaci-v-ulici-komenskeho-ve-vysokem-myt/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2673,16 +2679,16 @@
     "OBAS1000A6K6-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-02T12:01:27.111Z",
-    "board:letohrad": "2026-10-02T12:01:27.111Z",
-    "board:zamberk": "2026-10-02T12:01:27.111Z",
-    "board:ceska-trebova": "2026-10-02T12:01:27.111Z",
-    "board:lanskroun": "2026-10-02T12:01:27.111Z",
-    "board:kraliky": "2026-10-02T12:01:27.111Z",
-    "board:vysoke-myto": "2026-10-02T12:01:27.111Z",
-    "board:lukova": "2026-10-02T12:01:27.111Z",
-    "board:tatenice": "2026-10-02T12:01:27.111Z",
-    "board:anenska-studanka": "2026-10-02T12:01:27.111Z",
+    "board:usti-nad-orlici": "2026-10-02T12:16:07.981Z",
+    "board:letohrad": "2026-10-02T12:16:07.981Z",
+    "board:zamberk": "2026-10-02T12:16:07.981Z",
+    "board:ceska-trebova": "2026-10-02T12:16:07.981Z",
+    "board:lanskroun": "2026-10-02T12:16:07.981Z",
+    "board:kraliky": "2026-10-02T12:16:07.981Z",
+    "board:vysoke-myto": "2026-10-02T12:16:07.981Z",
+    "board:lukova": "2026-10-02T12:16:07.981Z",
+    "board:tatenice": "2026-10-02T12:16:07.981Z",
+    "board:anenska-studanka": "2026-10-02T12:16:07.981Z",
     "board:okres-usti-nad-orlici": "2026-10-02T12:01:27.111Z"
   },
   "board:okres-usti-nad-orlici": [
