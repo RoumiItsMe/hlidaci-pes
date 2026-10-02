@@ -920,7 +920,7 @@ function renderFlipCalculator(rep, inputs, result) {
     <div class="flip-result">
       <div class="flip-result-headline">Maximální nákupní cena pro ${esc(String(inputs.targetMarginPct))} % marži</div>
       <div class="flip-result-value">${fmt(result.maxBuyPrice)}</div>
-      <div class="flip-result-margin">Čistý zisk při této ceně: ${formatSignedCzk(result.profitAtMaxBuy)}</div>
+      <div class="flip-result-margin">Zisk při cílové marži: ${formatSignedCzk(result.profitAtMaxBuy)} (pevné % z prodejní ceny — vyšší náklady se projeví v nižší nákupní ceně výš, ne v tomhle čísle)</div>
     </div>
     ${
       inputs.currentAskingPriceCzk != null && result.marginAtAsking != null
