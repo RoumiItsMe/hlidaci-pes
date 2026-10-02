@@ -648,7 +648,7 @@ function renderComparisonTable(db, filters) {
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
         <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
         <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="address" value="${esc(e.address || e.city)}" placeholder="adresa…" onchange="this.form.requestSubmit()"></form></td>
-        <td>${esc(e.rep.disposition || "—")}</td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="disposition" value="${esc(e.rep.disposition)}" placeholder="—" onchange="this.form.requestSubmit()"></form></td>
         <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="number" name="area_m2" value="${e.rep.area_m2 ?? ""}" step="0.1" placeholder="m²" onchange="this.form.requestSubmit()"></form></td>
         <td>${paramField("floorInfo")}</td>
         <td>${paramField("elevator")}</td>
@@ -1310,13 +1310,14 @@ const server = createServer(async (req, res) => {
       const updates = {};
       if ("notes" in fields) updates.notes = fields.notes || null;
       if ("seller_motivation" in fields) updates.seller_motivation = fields.seller_motivation || null;
-      // Plocha a adresa jsou normálně auto-parsované (viz parse.js/
-      // track.js), ale appka je odjinud nedopočítá vždy — ruční doplnění
-      // se zapisuje přímo do stejných sloupců, na VŠECHNY členy skupiny
-      // (stejně jako ostatní pole tady), aby to viděl každý čtenář dat bez
-      // ohledu na to, kdo je zrovna primaryListing.
+      // Plocha, adresa a dispozice jsou normálně auto-parsované (viz
+      // parse.js/track.js), ale appka je odjinud nedopočítá vždy — ruční
+      // doplnění se zapisuje přímo do stejných sloupců, na VŠECHNY členy
+      // skupiny (stejně jako ostatní pole tady), aby to viděl každý čtenář
+      // dat bez ohledu na to, kdo je zrovna primaryListing.
       if ("area_m2" in fields) updates.area_m2 = fields.area_m2 ? Number(fields.area_m2) : null;
       if ("address" in fields) updates.address = fields.address || null;
+      if ("disposition" in fields) updates.disposition = fields.disposition || null;
       if ("verified_sale_price_czk" in fields) {
         updates.verified_sale_price_czk = fields.verified_sale_price_czk ? Number(fields.verified_sale_price_czk) : null;
       }
