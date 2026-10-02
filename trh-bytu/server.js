@@ -1183,6 +1183,17 @@ function parseBody(req) {
   });
 }
 
+// Appka se mění průběžně (data i kód) a stránky jsou vždy čerstvě
+// vyrenderované z aktuální DB — bez `no-store` by si prohlížeč klidně
+// mohl ponechat včerejší snímek tabulky/statistik v cache a nikdy ho
+// neobnovit, i když DB mezitím dostala nové inzeráty (reálně zažito:
+// nahlášený "chybějící" byt appka evidovala v pořádku, jen ho prohlížeč
+// ukazoval ze staré verze stránky).
+function sendHtml(res, status, html) {
+  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(html);
+}
+
 const db = openDb();
 
 const server = createServer(async (req, res) => {
@@ -1215,8 +1226,7 @@ const server = createServer(async (req, res) => {
       top: url.searchParams.get("top") || null,
       hidden: url.searchParams.get("hidden") || null,
     };
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Trh bytů", renderTable(db, filters)));
+    return sendHtml(res, 200, layout("Trh bytů", renderTable(db, filters)));
   }
 
   if (url.pathname === "/tabulka" && req.method === "GET") {
@@ -1225,13 +1235,11 @@ const server = createServer(async (req, res) => {
       city: url.searchParams.get("city") || null,
       sort: url.searchParams.get("sort") || null,
     };
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
+    return sendHtml(res, 200, layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
   }
 
   if (url.pathname === "/upozorneni" && req.method === "GET") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Upozornění — Trh bytů", renderNotifications(db, url.searchParams.get("typ"))));
+    return sendHtml(res, 200, layout("Upozornění — Trh bytů", renderNotifications(db, url.searchParams.get("typ"))));
   }
 
   if (url.pathname === "/upozorneni/precteno" && req.method === "POST") {
@@ -1241,8 +1249,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (url.pathname === "/stats" && req.method === "GET") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Statistiky — Trh bytů", renderStats(db)));
+    return sendHtml(res, 200, layout("Statistiky — Trh bytů", renderStats(db)));
   }
 
   const detailMatch = url.pathname.match(/^\/byt\/([^/]+)$/);
@@ -1250,11 +1257,9 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(detailMatch[1]);
     const body = renderDetail(db, id);
     if (!body) {
-      res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(layout("Nenalezeno", "<p>Byt nenalezen.</p>"));
+      return sendHtml(res, 404, layout("Nenalezeno", "<p>Byt nenalezen.</p>"));
     }
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Byt — Trh bytů", body));
+    return sendHtml(res, 200, layout("Byt — Trh bytů", body));
   }
 
   const calcMatch = url.pathname.match(/^\/byt\/([^/]+)\/kalkulacka$/);
@@ -1263,14 +1268,12 @@ const server = createServer(async (req, res) => {
     const allListings = db.prepare("SELECT * FROM listings").all();
     const group = findGroupForListing(allListings, id);
     if (!group) {
-      res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(layout("Nenalezeno", "<p>Byt nenalezen.</p>"));
+      return sendHtml(res, 404, layout("Nenalezeno", "<p>Byt nenalezen.</p>"));
     }
     const rep = primaryListing(group.members);
     const inputs = parseFlipQuery(url.searchParams, rep);
     const result = calculateFlip(inputs);
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(layout("Kalkulačka marže — Trh bytů", renderFlipCalculator(rep, inputs, result)));
+    return sendHtml(res, 200, layout("Kalkulačka marže — Trh bytů", renderFlipCalculator(rep, inputs, result)));
   }
 
   // TOP (hvězdička) a Skrýt (křížek) jsou prosté toggly — přečti si
@@ -1376,8 +1379,7 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
 
-  res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(layout("Nenalezeno", "<p>Stránka nenalezena.</p>"));
+  sendHtml(res, 404, layout("Nenalezeno", "<p>Stránka nenalezena.</p>"));
 });
 
 server.listen(PORT, () => {
