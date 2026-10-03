@@ -60,7 +60,10 @@ const SOURCES = [
   // portály (iDNES, RealityMIX, Bezrealitky) ho mají už ve výpisu.
   { name: "sreality", fetchList: fetchSrealityAllPages, fetchDetail: fetchSrealityDetail, reservationFromDetail: true },
   { name: "bezrealitky", fetchList: fetchBezrealitky, fetchDetail: fetchBezrealitkyDetail },
-  { name: "idnes", fetchList: fetchIdnes, fetchDetail: fetchIdnesDetail },
+  // iDNES má štítek "prodáno" jen na detailu, ne ve výpisu — proto se detail
+  // čte i u známých inzerátů (`soldFromDetail`), dokud nejsou označené jako
+  // prodané.
+  { name: "idnes", fetchList: fetchIdnes, fetchDetail: fetchIdnesDetail, soldFromDetail: true },
   { name: "realitymix", fetchList: fetchRealitymix, fetchDetail: fetchRealitymixDetail },
   { name: "bazos", fetchList: fetchBazos, fetchDetail: fetchBazosDetail },
 ];
@@ -110,6 +113,7 @@ async function processSource(db, source, watch) {
   let newCount = 0;
   let priceChangeCount = 0;
   let reservationCount = 0;
+  let soldCount = 0;
   const currentIds = new Set();
   const createdThisRun = []; // kandidáti na "znovu vložený inzerát", viz relist.js
 
@@ -258,6 +262,26 @@ async function processSource(db, source, watch) {
       insertEvent(db, { listing_id: listingId, event_type: "reactivated", occurred_at: now });
     }
 
+    // Prodáno (iDNES, jen z detailu). Prodaný byt je KONEČNÝ stav — kontroluje
+    // se dřív než rezervace, protože štítek "Rezervováno" z karty při
+    // prodeji zmizí a appka by to jinak zapsala jako zrušenou rezervaci.
+    // Poslední cena inzerátu je prodejní cena (viz detail/idnes.js).
+    let soldNow = false;
+    if (source.soldFromDetail && existing.status !== "sold") {
+      soldNow = (await source.fetchDetail(item.url)).sold === true;
+      await sleep(250); // zdvořilost vůči portálu
+    }
+    if (soldNow) {
+      const salePrice = fields.price_czk ?? existing.price_czk;
+      fields.status = "sold";
+      fields.removed_at = now; // okamžik, kdy appka zjistila prodej (konec doby v nabídce)
+      insertEvent(db, { listing_id: listingId, event_type: "sold", new_price_czk: salePrice, occurred_at: now });
+      soldCount++;
+      log(`[${source.name}] prodáno: ${listingId} (cena ${salePrice ?? "neuvedena"} Kč)`);
+      updateListingFields(db, listingId, fields);
+      continue;
+    }
+
     // Rezervace: z výpisu, nebo (Sreality) z detailu. `null`/`undefined` =
     // portál to v tomhle běhu nesdělil → stav se nemění (viz reservation.js).
     let observedReserved = item.reserved;
@@ -291,7 +315,7 @@ async function processSource(db, source, watch) {
   // jiného důvodu — appka to netvrdí jistě, viz README). Rozlišení viz relist.js.
   const { removedCount, relistedCount } = handleDisappeared(db, source.name, currentIds, createdThisRun, log);
 
-  return { newCount, priceChangeCount, removedCount, relistedCount, reservationCount, error: false };
+  return { newCount, priceChangeCount, removedCount, relistedCount, reservationCount, soldCount, error: false };
 }
 
 async function run() {
@@ -305,6 +329,7 @@ async function run() {
   let totalRemoved = 0;
   let totalRelisted = 0;
   let totalReservations = 0;
+  let totalSold = 0;
   let hadError = false;
 
   for (const source of SOURCES) {
@@ -314,11 +339,12 @@ async function run() {
     totalRemoved += result.removedCount;
     totalRelisted += result.relistedCount;
     totalReservations += result.reservationCount;
+    totalSold += result.soldCount ?? 0;
     if (result.error) hadError = true;
   }
 
   log(
-    `Hotovo. ${totalNew} nových bytů zaevidováno, ${totalPriceChanges} změn ceny, ${totalRemoved} zmizelo z nabídky, ${totalRelisted} znovu vloženo, ${totalReservations} změn rezervace.` +
+    `Hotovo. ${totalNew} nových bytů zaevidováno, ${totalPriceChanges} změn ceny, ${totalRemoved} zmizelo z nabídky, ${totalRelisted} znovu vloženo, ${totalReservations} změn rezervace, ${totalSold} prodáno.` +
       (hadError ? " (u některého zdroje selhalo stahování — zkontroluj log výše.)" : "")
   );
 

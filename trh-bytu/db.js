@@ -29,10 +29,10 @@ CREATE TABLE IF NOT EXISTS listings (
   address TEXT,
   description TEXT,
   price_czk INTEGER,
-  status TEXT NOT NULL DEFAULT 'active',   -- active | reserved | removed
+  status TEXT NOT NULL DEFAULT 'active',   -- active | reserved | sold | removed
   first_seen_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
-  removed_at TEXT,
+  removed_at TEXT,                         -- konec doby v nabídce: zmizení (removed) i zjištěný prodej (sold)
   notes TEXT,
   verified_sale_price_czk INTEGER,
   verified_sale_date TEXT,

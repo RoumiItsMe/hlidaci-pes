@@ -372,6 +372,22 @@ detailu Sreality), stav se nemění — chybějící informace rezervaci ani
 nevytvoří, ani nezruší. Datum události je okamžik, kdy ji appka poprvé
 uviděla (ne kdy ji zadala RK).
 
+### Prodáno (iDNES)
+
+iDNES u prodaného bytu dá na **detail** inzerátu štítek "prodáno" a prodejce
+tam nechá skutečnou prodejní cenu (obvykle sníženou). Ve výpisu štítek není —
+karta má jen "Zlevněno" a štítek "Rezervováno" z ní zmizí, takže bez detailu by
+appka prodej vyhodnotila jako zrušenou rezervaci s další slevou. Proto appka u
+iDNES čte detail i u známých inzerátů, dokud nejsou prodané.
+
+Prodej je **konečný stav** "Prodáno" (vlastní filtr a štítek, událost "Prodáno
+— prodejní cena X Kč" v časové ose, datum = kdy ho appka zjistila). Přebíjí
+rezervaci i "v nabídce" (stejně jako rezervace je to fakt o bytu, ne o portálu),
+zmizení z výpisu ho už nepřepíše, a Telegram připomínky "pořád rezervováno?"
+se u něj zastaví. Do statistik "ceny po rekonstrukci" se prodaný byt počítá
+(se stavem "Po rekonstrukci") a jeho cena se bere jako **ověřená** — poslední
+cena inzerátu je tady skutečná prodejní, ne jen inzerovaná.
+
 **Telegram upozornění:** appka na rezervaci pošle i zprávu přes stejného
 Telegram bota jako hlídací pes (`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` v
 `.env.local` v kořeni repa — appka na ně jinak nesahá, jen kvůli týhle jedné

@@ -27,6 +27,7 @@ const SOURCE_LABELS = {
 const STATUS_LABELS = {
   active: { text: "V nabídce", color: "#2563eb" },
   reserved: { text: "Rezervováno", color: "#d97706" },
+  sold: { text: "Prodáno", color: "#16a34a" },
   removed: { text: "Zmizelo z nabídky", color: "#6b7280" },
 };
 const EVENT_LABELS = {
@@ -34,6 +35,7 @@ const EVENT_LABELS = {
   price_change: "Změna ceny",
   reserved: "Označeno jako rezervováno",
   unreserved: "Rezervace zrušena",
+  sold: "Prodáno",
   removed: "Zmizelo z nabídky",
   reactivated: "Znovu v nabídce",
   relisted: "Inzerát znovu vložen pod novým ID",
@@ -69,7 +71,10 @@ function daysWord(n) {
 // jiným koncovým bodem (dnešek, vs. datum zmizení).
 function daysOnMarketLabel(e) {
   const base = `${e.daysOnMarket} ${daysWord(e.daysOnMarket)}`;
-  return e.status === "removed" && e.removedAt ? `${base} (staženo ${formatDateOnly(e.removedAt)})` : base;
+  if (!e.removedAt) return base;
+  if (e.status === "removed") return `${base} (staženo ${formatDateOnly(e.removedAt)})`;
+  if (e.status === "sold") return `${base} (prodáno ${formatDateOnly(e.removedAt)})`;
+  return base;
 }
 
 // "2× (−450 000 Kč)" — kolikrát cena SKUTEČNĚ klesla a o kolik celkem od
@@ -184,6 +189,7 @@ function priceText(price) {
 // detailu i odznak "Poslední změna" v přehledu, ať oba říkají totéž.
 function eventDetail(e) {
   if (e.event_type === "price_change") return `${formatCzk(e.old_price_czk)} → ${formatCzk(e.new_price_czk)}`;
+  if (e.event_type === "sold" && e.new_price_czk != null) return `prodejní cena ${formatCzk(e.new_price_czk)}`;
   if (e.event_type === "relisted" && e.old_price_czk !== e.new_price_czk) {
     return `cena ${priceText(e.old_price_czk)} → ${priceText(e.new_price_czk)}`;
   }
@@ -394,7 +400,7 @@ function computeEntries(db) {
     const discoveredAt = g.members.reduce((min, m) => (m.first_seen_at < min ? m.first_seen_at : min), g.members[0].first_seen_at);
     const price = bestPrice(g.members);
     const status = mergedStatus(g.members);
-    const removedAt = status === "removed" ? latestRemovedAt(g.members) : null;
+    const removedAt = status === "removed" || status === "sold" ? latestRemovedAt(g.members) : null;
     const { dropCount, originalPrice } = priceDropSummary(events);
     // "Doba v nabídce" počítá do DNEŠKA u živých/rezervovaných nabídek,
     // u zmizelých do data zmizení — obojí je "jak dlouho byl byt na trhu",
@@ -482,7 +488,7 @@ function renderTable(db, filters) {
 
   const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView };
 
-  const filterLinks = ["", "active", "reserved", "removed"]
+  const filterLinks = ["", "active", "reserved", "sold", "removed"]
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
       const active = !showHidden && (statusFilter === s || (!statusFilter && !s)) ? "active" : "";
@@ -637,7 +643,7 @@ function renderComparisonTable(db, filters) {
   });
 
   const current = { status: statusFilter, city: cityFilter, sort: sortParam };
-  const filterLinks = ["", "active", "reserved", "removed"]
+  const filterLinks = ["", "active", "reserved", "sold", "removed"]
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
       const active = statusFilter === s || (!statusFilter && !s) ? "active" : "";
@@ -1017,22 +1023,29 @@ function renderNotifications(db, typeFilter) {
 // Byt patří do statistiky "ceny po rekonstrukci", pokud to uživatel vědomě
 // nepřehlasoval (`statsInclude`, viz OWN_FIELDS "Ve statistice") — jinak
 // auto-kritérium: zmizel z nabídky (= pravděpodobně prodáno/rezervováno
-// jinde) A appka/uživatel ho označili jako "Po rekonstrukci". Novostavba se
-// SCHVÁLNĚ nepočítá do stejného koše (jiný cenový segment), kdo ji chce
-// zahrnout, přehlasuje ručně přes "Zahrnout".
+// jinde) nebo ho portál označil jako prodaný, A appka/uživatel ho označili
+// jako "Po rekonstrukci". Novostavba se SCHVÁLNĚ nepočítá do stejného koše
+// (jiný cenový segment), kdo ji chce zahrnout, přehlasuje ručně přes
+// "Zahrnout".
 function isEligibleForRenoStats(e) {
   if (e.statsInclude === "exclude") return false;
   if (e.statsInclude === "include") return true;
-  return e.status === "removed" && e.ownCondition === "renovated";
+  return (e.status === "removed" || e.status === "sold") && e.ownCondition === "renovated";
 }
 
 // Ověřená prodejní cena (uživatel si ji dohledal v katastru) má vždy
 // přednost — je to REÁLNÁ transakce. Bez ní appka bere poslední evidovanou
 // (inzerovanou) cenu těsně před zmizením — návod výslovně upozorňuje, že to
 // NENÍ prodejní cena (typicky o pár % výš), proto se u takových řádků
-// značí "odhad" a počet ověřených/odhadnutých se ukazuje zvlášť.
+// značí "odhad" a počet ověřených/odhadnutých se ukazuje zvlášť. Výjimka:
+// byt, který portál sám označil jako PRODÁNO — tam je poslední cena
+// inzerátu skutečná prodejní cena (viz detail/idnes.js), takže se počítá
+// jako ověřená i bez ruční kontroly v katastru (`isSalePriceKnown`).
 function effectivePriceForStats(e) {
   return e.verifiedSalePrice ?? e.price;
+}
+function isSalePriceKnown(e) {
+  return e.verifiedSalePrice != null || (e.status === "sold" && e.price != null);
 }
 
 // Souhrn "cena/m² u prodaných bytů po rekonstrukci" — PRIMÁRNĚ podle
@@ -1050,7 +1063,7 @@ function renovatedSaleStats(entries) {
       })(),
       disposition: e.rep.disposition || "—",
       city: e.city || "—",
-      verified: e.verifiedSalePrice != null,
+      verified: isSalePriceKnown(e),
       // Pro rozklikávací seznam bytů za průměrem (viz renderCityStatsTable)
       // — appka jinak ukazovala jen holé číslo bez možnosti ověřit, ze
       // kterých konkrétních bytů vzniklo.
@@ -1134,7 +1147,7 @@ function renderStats(db) {
 
   // Počítáno na SKUPINY (skutečné nemovitosti), ne syrové řádky — jinak by
   // stejný byt nalezený na 2 portálech vyšel v součtu jako 2 byty.
-  const counts = { active: 0, reserved: 0, removed: 0 };
+  const counts = { active: 0, reserved: 0, sold: 0, removed: 0 };
   for (const e of entries) counts[e.status]++;
   const countRows = Object.entries(counts)
     .map(([k, n]) => `<li>${esc(STATUS_LABELS[k].text)}: <strong>${n}</strong></li>`)
@@ -1143,7 +1156,12 @@ function renderStats(db) {
 
   const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
   const removedRecentWithData = entries.filter(
-    (e) => e.status === "removed" && e.removedAt && new Date(e.removedAt).getTime() >= cutoff && e.price != null && e.rep.area_m2 != null
+    (e) =>
+      (e.status === "removed" || e.status === "sold") &&
+      e.removedAt &&
+      new Date(e.removedAt).getTime() >= cutoff &&
+      e.price != null &&
+      e.rep.area_m2 != null
   );
   const avgPerM2 = removedRecentWithData.length
     ? Math.round(removedRecentWithData.reduce((sum, e) => sum + e.price / e.rep.area_m2, 0) / removedRecentWithData.length)
@@ -1165,10 +1183,10 @@ function renderStats(db) {
 
     <h2>Ceny po rekonstrukci (prodané byty)</h2>
     <p class="muted">
-      Byty zmizelé z nabídky se stavem „Po rekonstrukci", případně ručně
+      Byty zmizelé z nabídky nebo označené jako prodané, se stavem „Po rekonstrukci", případně ručně
       přehlasované přes sloupec „Ve statistice" v tabulce srovnání. Cena je ověřená prodejní, pokud ji máš dohledanou
-      v katastru, jinak poslední inzerovaná cena před zmizením — u ní počítej s návodovým odečtem cca 5 % pro
-      konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
+      v katastru nebo ji portál uvádí u inzerátu označeného „prodáno", jinak poslední inzerovaná cena před zmizením —
+      u ní počítej s návodovým odečtem cca 5 % pro konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
     </p>
     ${renoStats.cities.length ? renoStats.cities.map(renderCityStatsTable).join("") : `<p class="muted">Zatím žádná data.</p>`}`;
 }

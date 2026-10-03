@@ -295,13 +295,17 @@ export function primaryListing(members) {
 }
 
 /**
- * Rezervováno, pokud je rezervovaný ALESPOŇ na jednom portálu; jinak v
- * nabídce, pokud je aktivní aspoň na jednom; jinak zmizelo všude.
- * Rezervace má přednost před "aktivní", protože je to fakt o bytu, ne o
- * portálu: jiný portál ho může dál nabízet jako volný (Sreality a Bazoš
- * rezervaci ve výpisu neukazují, iDNES ano) a byt to nedělá volným.
+ * Prodáno, pokud je prodaný ALESPOŇ na jednom portálu; jinak rezervováno,
+ * pokud je rezervovaný aspoň na jednom; jinak v nabídce, pokud je aktivní
+ * aspoň na jednom; jinak zmizelo všude.
+ * Prodej i rezervace mají přednost před "aktivní", protože jsou to fakta o
+ * bytu, ne o portálu: jiný portál ho může dál nabízet jako volný (Sreality
+ * a Bazoš rezervaci ani prodej ve výpisu neukazují, iDNES ano) a byt to
+ * nedělá volným. Prodej přebíjí i rezervaci — prodaný byt už rezervovat
+ * nejde.
  */
 export function mergedStatus(members) {
+  if (members.some((m) => m.status === "sold")) return "sold";
   if (members.some((m) => m.status === "reserved")) return "reserved";
   if (members.some((m) => m.status === "active")) return "active";
   return "removed";
@@ -368,7 +372,7 @@ export function priceDropSummary(events) {
 // (přesně důvod, proč to hlídací pes taky nikdy nebral jako signál "nová
 // nabídka", viz sources/sreality.js). Appka věří jen tomu, co sama
 // zaznamenala.
-const CHANGE_EVENT_TYPES = new Set(["price_change", "removed", "reactivated", "reserved", "unreserved", "relisted"]);
+const CHANGE_EVENT_TYPES = new Set(["price_change", "removed", "reactivated", "reserved", "unreserved", "relisted", "sold"]);
 
 /**
  * Poslední skutečná změna napříč danými událostmi (viz CHANGE_EVENT_TYPES
