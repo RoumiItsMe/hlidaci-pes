@@ -304,15 +304,26 @@ function buildQuery(current, overrides) {
 }
 
 // Výchozí řazení ve čtyřech skupinách za sebou:
-//   1. se změnou + TOP  2. se změnou  3. TOP  4. ostatní
-// ("změna" = appka u bytu zaznamenala skutečnou událost, viz group.js
-// latestChange). Uvnitř skupiny podle "aktivity" — novější z (kdy
-// zaevidováno, kdy poslední změna), viz entry.activityAt níž. Tohle
-// pořadí platí jen pro "newest" (výchozí) řazení; u řazení podle ceny by
-// míchání změn/TOP dovnitř popřelo smysl "seřaď čistě podle ceny", který
-// si uživatel explicitně zvolil.
+//   1. novinka + TOP  2. novinka  3. TOP  4. ostatní
+// ("novinka" = appka u bytu zaznamenala skutečnou událost, viz group.js
+// latestChange, NEBO ho teprve nedávno objevila, viz FRESH_LISTING_DAYS).
+// Uvnitř skupiny podle "aktivity" — novější z (kdy appka byt objevila,
+// kdy poslední změna), viz entry.activityAt níž. Tohle pořadí platí jen
+// pro "newest" (výchozí) řazení; u řazení podle ceny by míchání
+// novinek/TOP dovnitř popřelo smysl "seřaď čistě podle ceny", který si
+// uživatel explicitně zvolil.
+//
+// Čerstvě přidaný inzerát má jen událost "created", kterou latestChange
+// záměrně nepočítá (není to změna, je to začátek historie) — bez téhle
+// výjimky by proto spadl do "ostatních" a ležel pod KAŽDÝM bytem, který
+// kdy měl nějakou změnu, třeba před měsícem (reálně zažito: nové nabídky
+// z předchozího dne byly v přehledu na 27.–35. místě ze 66).
+const FRESH_LISTING_DAYS = 7;
+function isFreshListing(e) {
+  return Date.now() - new Date(e.discoveredAt).getTime() < FRESH_LISTING_DAYS * 24 * 60 * 60 * 1000;
+}
 function defaultSortGroup(e) {
-  return (e.change ? 0 : 2) + (e.starred ? 0 : 1);
+  return (e.change || isFreshListing(e) ? 0 : 2) + (e.starred ? 0 : 1);
 }
 const SORTERS = {
   newest: (a, b) => {
@@ -376,6 +387,11 @@ function computeEntries(db) {
     const events = groupEvents(g.members);
     const change = latestChange(events);
     const rep = primaryListing(g.members);
+    // Kdy appka byt (kteroukoli jeho nabídku) poprvé zaevidovala — na rozdíl
+    // od `firstSeenAt` výš (datum zveřejnění podle portálu, může být týdny
+    // staré u bytu, který appka objevila až dnes) je to okamžik, kdy se
+    // byt stal novinkou PRO UŽIVATELE, tedy to, podle čeho řadit "Nejnovější".
+    const discoveredAt = g.members.reduce((min, m) => (m.first_seen_at < min ? m.first_seen_at : min), g.members[0].first_seen_at);
     const price = bestPrice(g.members);
     const status = mergedStatus(g.members);
     const removedAt = status === "removed" ? latestRemovedAt(g.members) : null;
@@ -406,10 +422,11 @@ function computeEntries(db) {
       totalDiscountCzk: originalPrice != null && price != null ? originalPrice - price : null,
       change,
       changeWhere: changeSources(g.members, events, change),
-      // "Aktivita" pro výchozí řazení = novější z (zaevidováno, poslední
-      // skutečná změna) — čerstvě přidaný byt i dávno zaevidovaný byt s
-      // dnešní změnou ceny mají oba vyjít jako "nahoře".
-      activityAt: change && change.occurred_at > firstSeenAt ? change.occurred_at : firstSeenAt,
+      discoveredAt,
+      // "Aktivita" pro výchozí řazení = novější z (kdy appka byt objevila,
+      // poslední skutečná změna) — čerstvě přidaný byt i dávno zaevidovaný
+      // byt s dnešní změnou ceny mají oba vyjít jako "nahoře".
+      activityAt: change && change.occurred_at > discoveredAt ? change.occurred_at : discoveredAt,
       starred: isStarred(g.members),
       hidden: isHidden(g.members),
       thumb: groupThumbnail(g.members),
