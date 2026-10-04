@@ -88,7 +88,7 @@
     "board:vysoke-myto": {
       "failing": true,
       "lastAlertAt": "2026-10-03T22:47:07.457Z",
-      "consecutiveFailures": 31
+      "consecutiveFailures": 32
     },
     "board:lukova": {
       "failing": false,
