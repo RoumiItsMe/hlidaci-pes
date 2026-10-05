@@ -2586,7 +2586,10 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-silnicich-ii-305-a-iii-30521-a-na-pozemnich-komunikacich-v-obci-vinary/",
     "https://www.vysoke-myto.cz/uredni-deska/dodatek-c-1-ke-smlouve-o-poskytnuti-ind-dotace-06-zm-2025-provoz-a-cinnost-mestske-galerie-a-informacniho-centra-v-r-2026/",
     "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-k_uo-vraclav-sedlec-parc-306-knn-ss/",
-    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-mistni-komunikaci-v-ulici-komenskeho-ve-vysokem-myt/"
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-mistni-komunikaci-v-ulici-komenskeho-ve-vysokem-myt/",
+    "https://www.vysoke-myto.cz/uredni-deska/oznameni-o-preruseni-dodavkyy-el-en-c-110061110384/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-parkoviste-v-ulicich-vraclavska-prazska-a-u-plovarny-v-k-u-a-obci-vysoke-myto-z-duvodu-zaboru-parkoviste-pro-parkovani-filmove-techniky/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechode-upravy-provozu-na-silnici-ii-317-a-na-pozemnich-komunikacich-na-pozemcich-p-c-783-11-783-3-253-811-3-250-1-250-14-a-811-1-v-k-u-a-v-obci-bestovice/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2755,17 +2758,17 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-05T14:02:13.400Z",
-    "board:letohrad": "2026-10-05T14:02:13.400Z",
-    "board:zamberk": "2026-10-05T14:02:13.400Z",
-    "board:ceska-trebova": "2026-10-05T14:02:13.400Z",
-    "board:lanskroun": "2026-10-05T14:02:13.400Z",
-    "board:kraliky": "2026-10-05T14:02:13.400Z",
-    "board:vysoke-myto": "2026-10-05T14:02:13.400Z",
-    "board:lukova": "2026-10-05T14:02:13.400Z",
-    "board:tatenice": "2026-10-05T14:02:13.400Z",
-    "board:anenska-studanka": "2026-10-05T14:02:13.400Z",
-    "board:okres-usti-nad-orlici": "2026-10-05T13:02:16.002Z"
+    "board:usti-nad-orlici": "2026-10-05T14:16:31.848Z",
+    "board:letohrad": "2026-10-05T14:16:31.848Z",
+    "board:zamberk": "2026-10-05T14:16:31.848Z",
+    "board:ceska-trebova": "2026-10-05T14:16:31.848Z",
+    "board:lanskroun": "2026-10-05T14:16:31.848Z",
+    "board:kraliky": "2026-10-05T14:16:31.848Z",
+    "board:vysoke-myto": "2026-10-05T14:16:31.848Z",
+    "board:lukova": "2026-10-05T14:16:31.848Z",
+    "board:tatenice": "2026-10-05T14:16:31.848Z",
+    "board:anenska-studanka": "2026-10-05T14:16:31.848Z",
+    "board:okres-usti-nad-orlici": "2026-10-05T14:16:31.848Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
