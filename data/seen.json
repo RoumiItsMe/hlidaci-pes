@@ -72,8 +72,8 @@
     },
     "board:lanskroun": {
       "failing": true,
-      "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "lastAlertAt": "2026-10-06T14:19:09.557Z",
+      "consecutiveFailures": 2
     },
     "board:okres-usti-nad-orlici": {
       "failing": false,
@@ -92,18 +92,18 @@
     },
     "board:lukova": {
       "failing": true,
-      "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "lastAlertAt": "2026-10-06T14:20:52.977Z",
+      "consecutiveFailures": 2
     },
     "board:tatenice": {
       "failing": true,
-      "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "lastAlertAt": "2026-10-06T14:22:27.431Z",
+      "consecutiveFailures": 2
     },
     "board:anenska-studanka": {
       "failing": true,
-      "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "lastAlertAt": "2026-10-06T14:24:01.860Z",
+      "consecutiveFailures": 2
     }
   },
   "byty:sreality": [
@@ -2827,17 +2827,17 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-06T14:01:44.040Z",
-    "board:letohrad": "2026-10-06T14:01:44.040Z",
-    "board:zamberk": "2026-10-06T14:01:44.040Z",
-    "board:ceska-trebova": "2026-10-06T14:01:44.040Z",
+    "board:usti-nad-orlici": "2026-10-06T14:16:41.945Z",
+    "board:letohrad": "2026-10-06T14:16:41.945Z",
+    "board:zamberk": "2026-10-06T14:16:41.945Z",
+    "board:ceska-trebova": "2026-10-06T14:16:41.945Z",
     "board:lanskroun": "2026-10-06T13:46:22.364Z",
-    "board:kraliky": "2026-10-06T14:01:44.040Z",
-    "board:vysoke-myto": "2026-10-06T14:01:44.040Z",
+    "board:kraliky": "2026-10-06T14:16:41.945Z",
+    "board:vysoke-myto": "2026-10-06T14:16:41.945Z",
     "board:lukova": "2026-10-06T13:46:22.364Z",
     "board:tatenice": "2026-10-06T13:46:22.364Z",
     "board:anenska-studanka": "2026-10-06T13:46:22.364Z",
-    "board:okres-usti-nad-orlici": "2026-10-06T13:01:45.776Z"
+    "board:okres-usti-nad-orlici": "2026-10-06T14:16:41.945Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
