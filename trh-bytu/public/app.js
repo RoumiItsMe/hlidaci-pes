@@ -19,6 +19,15 @@ document.addEventListener("submit", async (event) => {
 
   const scrollX = window.scrollX;
   const scrollY = window.scrollY;
+  // Tabulka srovnání se scrolluje UVNITR vlastního obalu (`.compare-wrap`,
+  // omezená výška + sticky hlavička, viz style.css), ne celou stránkou —
+  // `window.scrollY` o ní nic neví. Výměna <main> vyrobí nový obal a ten
+  // začíná na nule, takže u řádků hluboko v tabulce (a u sloupců vpravo)
+  // by to pořád skákalo na začátek; pozici obalu je proto potřeba vrátit
+  // zvlášť.
+  const wrap = document.querySelector(".compare-wrap");
+  const wrapTop = wrap ? wrap.scrollTop : 0;
+  const wrapLeft = wrap ? wrap.scrollLeft : 0;
   const controls = form.querySelectorAll("input, select");
   // Tělo požadavku se musí sestavit PŘED deaktivací polí — `disabled`
   // ovládací prvek se do FormData vůbec nezahrne (stejné pravidlo jako při
@@ -49,5 +58,10 @@ document.addEventListener("submit", async (event) => {
     controls.forEach((el) => (el.disabled = false));
   } finally {
     window.scrollTo(scrollX, scrollY);
+    const liveWrap = document.querySelector(".compare-wrap");
+    if (liveWrap) {
+      liveWrap.scrollTop = wrapTop;
+      liveWrap.scrollLeft = wrapLeft;
+    }
   }
 });
