@@ -1388,6 +1388,10 @@
     {
       "id": "224728363",
       "price": 1349000
+    },
+    {
+      "id": "224765852",
+      "price": 1499000
     }
   ],
   "byty:__fingerprints": [
@@ -2843,16 +2847,16 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-07T06:46:07.462Z",
-    "board:letohrad": "2026-10-07T06:46:07.462Z",
-    "board:zamberk": "2026-10-07T06:46:07.462Z",
-    "board:ceska-trebova": "2026-10-07T06:46:07.462Z",
-    "board:lanskroun": "2026-10-07T06:46:07.462Z",
-    "board:kraliky": "2026-10-07T06:46:07.462Z",
-    "board:vysoke-myto": "2026-10-07T06:46:07.462Z",
-    "board:lukova": "2026-10-07T06:46:07.462Z",
-    "board:tatenice": "2026-10-07T06:46:07.462Z",
-    "board:anenska-studanka": "2026-10-07T06:46:07.462Z",
+    "board:usti-nad-orlici": "2026-10-07T07:01:41.277Z",
+    "board:letohrad": "2026-10-07T07:01:41.277Z",
+    "board:zamberk": "2026-10-07T07:01:41.277Z",
+    "board:ceska-trebova": "2026-10-07T07:01:41.277Z",
+    "board:lanskroun": "2026-10-07T07:01:41.277Z",
+    "board:kraliky": "2026-10-07T07:01:41.277Z",
+    "board:vysoke-myto": "2026-10-07T07:01:41.277Z",
+    "board:lukova": "2026-10-07T07:01:41.277Z",
+    "board:tatenice": "2026-10-07T07:01:41.277Z",
+    "board:anenska-studanka": "2026-10-07T07:01:41.277Z",
     "board:okres-usti-nad-orlici": "2026-10-07T06:31:24.855Z"
   },
   "board:okres-usti-nad-orlici": [
