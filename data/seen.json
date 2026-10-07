@@ -2679,7 +2679,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-silnicich-ii-315-ii-317-ii-357-a-pk-k-u-sruby-a-dvorisko/",
     "https://www.vysoke-myto.cz/uredni-deska/jes-225-cov-pro-objekt-c-p-37-svaty-jiri/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-gen-zavady-v-k-u-a-obci-vysoke-myto-z-duvodu-uzavirky-casti-pk-v-ramci-probihajici-rekonstrukce-skolni-jidelny-domova-mladeze/",
-    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-uo_chocenzamestilidldobijecka-kvnnn/"
+    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-uo_chocenzamestilidldobijecka-kvnnn/",
+    "https://www.vysoke-myto.cz/uredni-deska/vyberove-rizeni-brandys-nad-orlici-hlavni-ucetni/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2849,16 +2850,16 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-07T09:01:52.761Z",
-    "board:letohrad": "2026-10-07T09:01:52.761Z",
-    "board:zamberk": "2026-10-07T09:01:52.761Z",
-    "board:ceska-trebova": "2026-10-07T09:01:52.761Z",
-    "board:lanskroun": "2026-10-07T09:01:52.761Z",
-    "board:kraliky": "2026-10-07T09:01:52.761Z",
-    "board:vysoke-myto": "2026-10-07T09:01:52.761Z",
-    "board:lukova": "2026-10-07T09:01:52.761Z",
-    "board:tatenice": "2026-10-07T09:01:52.761Z",
-    "board:anenska-studanka": "2026-10-07T09:01:52.761Z",
+    "board:usti-nad-orlici": "2026-10-07T09:11:53.779Z",
+    "board:letohrad": "2026-10-07T09:11:53.779Z",
+    "board:zamberk": "2026-10-07T09:11:53.779Z",
+    "board:ceska-trebova": "2026-10-07T09:11:53.779Z",
+    "board:lanskroun": "2026-10-07T09:11:53.779Z",
+    "board:kraliky": "2026-10-07T09:11:53.779Z",
+    "board:vysoke-myto": "2026-10-07T09:11:53.779Z",
+    "board:lukova": "2026-10-07T09:11:53.779Z",
+    "board:tatenice": "2026-10-07T09:11:53.779Z",
+    "board:anenska-studanka": "2026-10-07T09:11:53.779Z",
     "board:okres-usti-nad-orlici": "2026-10-07T08:31:39.858Z"
   },
   "board:okres-usti-nad-orlici": [
