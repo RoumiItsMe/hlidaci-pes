@@ -1945,7 +1945,8 @@
     "f-74984",
     "d-74990",
     "f-74989",
-    "f-74987"
+    "f-74987",
+    "d-74999"
   ],
   "board:zamberk": [
     "d-29682",
@@ -2069,7 +2070,9 @@
     "d-29741",
     "d-29733",
     "d-29724",
-    "f-29754"
+    "f-29754",
+    "d-29757",
+    "f-29761"
   ],
   "board:ceska-trebova": [
     "f-48081",
@@ -2137,7 +2140,14 @@
     "f-48112",
     "f-48105",
     "f-48128",
-    "f-48119"
+    "f-48119",
+    "f-48163",
+    "f-48161",
+    "f-48159",
+    "d-48155",
+    "f-48150",
+    "d-48142",
+    "d-48139"
   ],
   "board:lanskroun": [
     "MULA1003JSA6-0",
@@ -2526,7 +2536,8 @@
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335041",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335068",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335070",
-    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335080"
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335080",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335304"
   ],
   "board:vysoke-myto": [
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-a-iii-tr-v-pusobnosti-orp-vysoke-myto-v-ramci-poradani-cyklistickeho-zavodu-letape-czech-republic-by-tour-de-france-pardubice/",
@@ -2875,17 +2886,17 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-07T17:46:35.227Z",
-    "board:letohrad": "2026-10-07T17:46:35.227Z",
-    "board:zamberk": "2026-10-07T17:46:35.227Z",
-    "board:ceska-trebova": "2026-10-07T17:46:35.227Z",
-    "board:lanskroun": "2026-10-07T17:46:35.227Z",
-    "board:kraliky": "2026-10-07T17:46:35.227Z",
-    "board:vysoke-myto": "2026-10-07T17:46:35.227Z",
-    "board:lukova": "2026-10-07T17:46:35.227Z",
-    "board:tatenice": "2026-10-07T17:46:35.227Z",
-    "board:anenska-studanka": "2026-10-07T17:46:35.227Z",
-    "board:okres-usti-nad-orlici": "2026-10-07T16:46:50.614Z"
+    "board:usti-nad-orlici": "2026-10-07T18:02:15.498Z",
+    "board:letohrad": "2026-10-07T18:02:15.498Z",
+    "board:zamberk": "2026-10-07T18:02:15.498Z",
+    "board:ceska-trebova": "2026-10-07T18:02:15.498Z",
+    "board:lanskroun": "2026-10-07T18:02:15.498Z",
+    "board:kraliky": "2026-10-07T18:02:15.498Z",
+    "board:vysoke-myto": "2026-10-07T18:02:15.498Z",
+    "board:lukova": "2026-10-07T18:02:15.498Z",
+    "board:tatenice": "2026-10-07T18:02:15.498Z",
+    "board:anenska-studanka": "2026-10-07T18:02:15.498Z",
+    "board:okres-usti-nad-orlici": "2026-10-07T18:02:15.498Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
