@@ -1816,7 +1816,8 @@
     "12187",
     "12189",
     "12190",
-    "12192"
+    "12192",
+    "12194"
   ],
   "board:letohrad": [
     "d-74944",
@@ -2677,7 +2678,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/jednotne-environmentalni-stanovisko-rekonstrukce-bd-a-novostavba-rd-vladislavova-32/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-silnicich-ii-315-ii-317-ii-357-a-pk-k-u-sruby-a-dvorisko/",
     "https://www.vysoke-myto.cz/uredni-deska/jes-225-cov-pro-objekt-c-p-37-svaty-jiri/",
-    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-gen-zavady-v-k-u-a-obci-vysoke-myto-z-duvodu-uzavirky-casti-pk-v-ramci-probihajici-rekonstrukce-skolni-jidelny-domova-mladeze/"
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-gen-zavady-v-k-u-a-obci-vysoke-myto-z-duvodu-uzavirky-casti-pk-v-ramci-probihajici-rekonstrukce-skolni-jidelny-domova-mladeze/",
+    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-uo_chocenzamestilidldobijecka-kvnnn/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2847,16 +2849,16 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-07T07:01:41.277Z",
-    "board:letohrad": "2026-10-07T07:01:41.277Z",
-    "board:zamberk": "2026-10-07T07:01:41.277Z",
-    "board:ceska-trebova": "2026-10-07T07:01:41.277Z",
-    "board:lanskroun": "2026-10-07T07:01:41.277Z",
-    "board:kraliky": "2026-10-07T07:01:41.277Z",
-    "board:vysoke-myto": "2026-10-07T07:01:41.277Z",
-    "board:lukova": "2026-10-07T07:01:41.277Z",
-    "board:tatenice": "2026-10-07T07:01:41.277Z",
-    "board:anenska-studanka": "2026-10-07T07:01:41.277Z",
+    "board:usti-nad-orlici": "2026-10-07T07:16:14.535Z",
+    "board:letohrad": "2026-10-07T07:16:14.535Z",
+    "board:zamberk": "2026-10-07T07:16:14.535Z",
+    "board:ceska-trebova": "2026-10-07T07:16:14.535Z",
+    "board:lanskroun": "2026-10-07T07:16:14.535Z",
+    "board:kraliky": "2026-10-07T07:16:14.535Z",
+    "board:vysoke-myto": "2026-10-07T07:16:14.535Z",
+    "board:lukova": "2026-10-07T07:16:14.535Z",
+    "board:tatenice": "2026-10-07T07:16:14.535Z",
+    "board:anenska-studanka": "2026-10-07T07:16:14.535Z",
     "board:okres-usti-nad-orlici": "2026-10-07T06:31:24.855Z"
   },
   "board:okres-usti-nad-orlici": [
