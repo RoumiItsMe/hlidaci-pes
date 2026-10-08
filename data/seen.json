@@ -73,7 +73,7 @@
     "board:lanskroun": {
       "failing": true,
       "lastAlertAt": "2026-10-08T09:04:12.394Z",
-      "consecutiveFailures": 2
+      "consecutiveFailures": 3
     },
     "board:okres-usti-nad-orlici": {
       "failing": false,
@@ -92,18 +92,18 @@
     },
     "board:lukova": {
       "failing": true,
+      "lastAlertAt": "2026-10-08T09:20:26.550Z",
+      "consecutiveFailures": 2
+    },
+    "board:tatenice": {
+      "failing": true,
       "lastAlertAt": null,
       "consecutiveFailures": 1
     },
-    "board:tatenice": {
-      "failing": false,
-      "lastAlertAt": null,
-      "consecutiveFailures": 0
-    },
     "board:anenska-studanka": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     }
   },
   "byty:sreality": [
@@ -2728,7 +2728,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/jednotne-enviromentalni-stanovisko-navyseni-kapacity-vodojemu-ujezd-u-chocne/",
     "https://www.vysoke-myto.cz/uredni-deska/jednotne-enviromentalni-stanovisko-rekontrukce-zarubni-zdi-v-trati-ceska-trebova-praha/",
     "https://www.vysoke-myto.cz/uredni-deska/zamer-smenit-pozemky-v-knirove-k-u-lhuta-u-vysokeho-myta/",
-    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-uo-strihanov-c-parc-70-1-knn-sr-ss-iv-12-2030703/"
+    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-uo-strihanov-c-parc-70-1-knn-sr-ss-iv-12-2030703/",
+    "https://www.vysoke-myto.cz/uredni-deska/jednotne-enviromentalni-stanovisko-parkoviste-za-radnici-chocen/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2898,13 +2899,13 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-08T09:01:42.915Z",
-    "board:letohrad": "2026-10-08T09:01:42.915Z",
-    "board:zamberk": "2026-10-08T09:01:42.915Z",
-    "board:ceska-trebova": "2026-10-08T09:01:42.915Z",
+    "board:usti-nad-orlici": "2026-10-08T09:16:13.841Z",
+    "board:letohrad": "2026-10-08T09:16:13.841Z",
+    "board:zamberk": "2026-10-08T09:16:13.841Z",
+    "board:ceska-trebova": "2026-10-08T09:16:13.841Z",
     "board:lanskroun": "2026-10-08T08:31:50.503Z",
-    "board:kraliky": "2026-10-08T09:01:42.915Z",
-    "board:vysoke-myto": "2026-10-08T09:01:42.915Z",
+    "board:kraliky": "2026-10-08T09:16:13.841Z",
+    "board:vysoke-myto": "2026-10-08T09:16:13.841Z",
     "board:lukova": "2026-10-08T08:46:34.071Z",
     "board:tatenice": "2026-10-08T09:01:42.915Z",
     "board:anenska-studanka": "2026-10-08T09:01:42.915Z",
