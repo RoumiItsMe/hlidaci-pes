@@ -2081,7 +2081,8 @@
     "d-29724",
     "f-29754",
     "d-29757",
-    "f-29761"
+    "f-29761",
+    "d-29768"
   ],
   "board:ceska-trebova": [
     "f-48081",
@@ -2546,7 +2547,8 @@
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335068",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335070",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335080",
-    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335304"
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335304",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335329"
   ],
   "board:vysoke-myto": [
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-a-iii-tr-v-pusobnosti-orp-vysoke-myto-v-ramci-poradani-cyklistickeho-zavodu-letape-czech-republic-by-tour-de-france-pardubice/",
@@ -2896,16 +2898,16 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-08T07:16:13.554Z",
-    "board:letohrad": "2026-10-08T07:16:13.554Z",
-    "board:zamberk": "2026-10-08T07:16:13.554Z",
-    "board:ceska-trebova": "2026-10-08T07:16:13.554Z",
-    "board:lanskroun": "2026-10-08T07:16:13.554Z",
-    "board:kraliky": "2026-10-08T07:16:13.554Z",
-    "board:vysoke-myto": "2026-10-08T07:16:13.554Z",
-    "board:lukova": "2026-10-08T07:16:13.554Z",
-    "board:tatenice": "2026-10-08T07:16:13.554Z",
-    "board:anenska-studanka": "2026-10-08T07:16:13.554Z",
+    "board:usti-nad-orlici": "2026-10-08T07:31:27.265Z",
+    "board:letohrad": "2026-10-08T07:31:27.265Z",
+    "board:zamberk": "2026-10-08T07:31:27.265Z",
+    "board:ceska-trebova": "2026-10-08T07:31:27.265Z",
+    "board:lanskroun": "2026-10-08T07:31:27.265Z",
+    "board:kraliky": "2026-10-08T07:31:27.265Z",
+    "board:vysoke-myto": "2026-10-08T07:31:27.265Z",
+    "board:lukova": "2026-10-08T07:31:27.265Z",
+    "board:tatenice": "2026-10-08T07:31:27.265Z",
+    "board:anenska-studanka": "2026-10-08T07:31:27.265Z",
     "board:okres-usti-nad-orlici": "2026-10-08T06:46:14.925Z"
   },
   "board:okres-usti-nad-orlici": [
