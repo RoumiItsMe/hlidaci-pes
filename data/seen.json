@@ -2724,7 +2724,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/oznameni-o-planovanem-preruseni-dodavky-elektricke-energie-c-110061118091-28-10/",
     "https://www.vysoke-myto.cz/uredni-deska/jednotne-enviromentalni-stanovisko-navyseni-kapacity-vodojemu-ujezd-u-chocne/",
     "https://www.vysoke-myto.cz/uredni-deska/jednotne-enviromentalni-stanovisko-rekontrukce-zarubni-zdi-v-trati-ceska-trebova-praha/",
-    "https://www.vysoke-myto.cz/uredni-deska/zamer-smenit-pozemky-v-knirove-k-u-lhuta-u-vysokeho-myta/"
+    "https://www.vysoke-myto.cz/uredni-deska/zamer-smenit-pozemky-v-knirove-k-u-lhuta-u-vysokeho-myta/",
+    "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-zrychlene-rizeni-uo-strihanov-c-parc-70-1-knn-sr-ss-iv-12-2030703/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -2894,16 +2895,16 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-08T05:01:26.567Z",
-    "board:letohrad": "2026-10-08T05:01:26.567Z",
-    "board:zamberk": "2026-10-08T05:01:26.567Z",
-    "board:ceska-trebova": "2026-10-08T05:01:26.567Z",
-    "board:lanskroun": "2026-10-08T05:01:26.567Z",
-    "board:kraliky": "2026-10-08T05:01:26.567Z",
-    "board:vysoke-myto": "2026-10-08T05:01:26.567Z",
-    "board:lukova": "2026-10-08T05:01:26.567Z",
-    "board:tatenice": "2026-10-08T05:01:26.567Z",
-    "board:anenska-studanka": "2026-10-08T05:01:26.567Z",
+    "board:usti-nad-orlici": "2026-10-08T05:15:56.532Z",
+    "board:letohrad": "2026-10-08T05:15:56.532Z",
+    "board:zamberk": "2026-10-08T05:15:56.532Z",
+    "board:ceska-trebova": "2026-10-08T05:15:56.532Z",
+    "board:lanskroun": "2026-10-08T05:15:56.532Z",
+    "board:kraliky": "2026-10-08T05:15:56.532Z",
+    "board:vysoke-myto": "2026-10-08T05:15:56.532Z",
+    "board:lukova": "2026-10-08T05:15:56.532Z",
+    "board:tatenice": "2026-10-08T05:15:56.532Z",
+    "board:anenska-studanka": "2026-10-08T05:15:56.532Z",
     "board:okres-usti-nad-orlici": "2026-10-08T04:31:39.688Z"
   },
   "board:okres-usti-nad-orlici": [
