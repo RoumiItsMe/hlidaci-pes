@@ -109,7 +109,7 @@
   "byty:sreality": [
     {
       "id": "4059480140",
-      "price": 4400000
+      "price": 4250000
     },
     {
       "id": "657010764",
@@ -1012,6 +1012,10 @@
     {
       "id": "1623248972",
       "price": 995
+    },
+    {
+      "id": "631014220",
+      "price": 1190
     }
   ],
   "pozemky-glamping:bezrealitky": [
@@ -1618,6 +1622,10 @@
     {
       "fingerprint": "3490000_88",
       "source": "Reality.iDNES.cz"
+    },
+    {
+      "fingerprint": "4250000_76",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -1755,6 +1763,10 @@
     },
     {
       "fingerprint": "995_1712",
+      "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "1190_3114",
       "source": "Sreality.cz"
     }
   ],
@@ -2951,17 +2963,17 @@
     "OBAS1000A6R7-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-09T08:46:12.172Z",
-    "board:letohrad": "2026-10-09T08:46:12.172Z",
-    "board:zamberk": "2026-10-09T08:46:12.172Z",
-    "board:ceska-trebova": "2026-10-09T08:46:12.172Z",
-    "board:lanskroun": "2026-10-09T08:46:12.172Z",
-    "board:kraliky": "2026-10-09T08:46:12.172Z",
-    "board:vysoke-myto": "2026-10-09T08:46:12.172Z",
-    "board:lukova": "2026-10-09T08:46:12.172Z",
-    "board:tatenice": "2026-10-09T08:46:12.172Z",
-    "board:anenska-studanka": "2026-10-09T08:46:12.172Z",
-    "board:okres-usti-nad-orlici": "2026-10-09T07:46:33.525Z"
+    "board:usti-nad-orlici": "2026-10-09T09:02:03.779Z",
+    "board:letohrad": "2026-10-09T09:02:03.779Z",
+    "board:zamberk": "2026-10-09T09:02:03.779Z",
+    "board:ceska-trebova": "2026-10-09T09:02:03.779Z",
+    "board:lanskroun": "2026-10-09T09:02:03.779Z",
+    "board:kraliky": "2026-10-09T09:02:03.779Z",
+    "board:vysoke-myto": "2026-10-09T09:02:03.779Z",
+    "board:lukova": "2026-10-09T09:02:03.779Z",
+    "board:tatenice": "2026-10-09T09:02:03.779Z",
+    "board:anenska-studanka": "2026-10-09T09:02:03.779Z",
+    "board:okres-usti-nad-orlici": "2026-10-09T09:02:03.779Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
