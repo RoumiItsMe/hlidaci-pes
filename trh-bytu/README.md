@@ -278,6 +278,26 @@ to dřív brala jako jistotu a mýlila se ve třech případech:
   **dvou po sobě jdoucích bězích** (`missed_since` v DB). Mezitím zůstává v
   nabídce; potvrzené zmizení se datuje od prvního nenalezení.
 
+## Přesná adresa bytu (a jednotka) — zapsat, dokud je inzerát online
+
+Adresa v appce je jen **přibližná** (odhad z inzerátu, často jen „Česká
+Třebová"). Až inzerát zmizí, jde byt v katastru dohledat mnohem hůř než dokud
+je online, proto si u každé nabídky zapiš přesnou adresu hned, jak ji zjistíš:
+
+- **Detail bytu → 📍 Přesná adresa:** pole *Adresa* (ulice, č.p./č.o., obec) a
+  *Jednotka* (číslo jednotky nebo bytu). *Uložit adresu* uloží obojí (prázdné
+  uložení vymaže), *Adresa neznámá* znamená „nabídku jsem prošel a adresu se
+  zjistit nepodařilo" — to je jiný stav než „ještě jsem se nekoukal".
+- **Přehled:** u každého bytu ve stavu V nabídce/Rezervováno je štítek
+  **📍 doplnit adresu**, u vyplněného rovnou adresa, u neznámé „adresa
+  neznámá". Filtr **📍 Bez adresy (N)** ukáže jen nabídky, které ještě
+  nemáš prošlé (řazené od nejnovějších, takže nové jsou nahoře).
+- **Kontrola v katastru** (níž) bere do řádku „Do katastru" tuhle adresu
+  s jednotkou; bez ní jen přibližné místo a upozornění.
+- Zapisuje se na byt jako celek (všechny portály, kde je). Je to samostatné
+  pole vedle „Adresa / lokalita" z tabulky srovnání — to zůstává přibližným
+  místem z inzerátu, které appka sama dohledává.
+
 ## Kontrola v katastru — jestli se zmizelý byt prodal (`/kontrola`)
 
 Po zmizení inzerátu portál o prodeji nic neřekne (Sreality vrací 404, RealityMIX

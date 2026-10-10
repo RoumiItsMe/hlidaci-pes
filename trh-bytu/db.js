@@ -126,6 +126,16 @@ const COLUMN_MIGRATIONS = [
   // kontrolované byly, dolů. Zapisuje se na VŠECHNY členy skupiny.
   { table: "listings", column: "sale_verdict", ddl: "TEXT" },
   { table: "listings", column: "kn_checked_at", ddl: "TEXT" },
+  // Přesná adresa bytu zapsaná RUČNĚ (viz server.js /byt/:id/adresa) — na
+  // rozdíl od `address` (přibližné místo odhadnuté z inzerátu) je to to, z
+  // čeho se byt dá dohledat v katastru, a uživatel ji potřebuje mít zapsanou
+  // dřív, než inzerát zmizí. `exact_address`: ulice, č.p./č.o., obec;
+  // `unit_number`: číslo jednotky / bytu; `address_unknown` = 1: uživatel
+  // nabídku prošel a adresu se zjistit nepodařilo (odlišné od "ještě nikdo
+  // nekoukal", NULL). Zapisuje se na VŠECHNY členy skupiny.
+  { table: "listings", column: "exact_address", ddl: "TEXT" },
+  { table: "listings", column: "unit_number", ddl: "TEXT" },
+  { table: "listings", column: "address_unknown", ddl: "INTEGER" },
 ];
 
 function runMigrations(db) {

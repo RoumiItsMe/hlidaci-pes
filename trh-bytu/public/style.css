@@ -418,3 +418,16 @@ table.stats-table thead th { color: var(--muted); font-weight: 600; text-align: 
 .kn-done summary { cursor: pointer; color: var(--accent); }
 .kn-done li { margin: 0.35rem 0; }
 .kn-done .kn-form { display: inline-flex; margin: 0 0 0 0.4rem; }
+
+/* Přesná adresa bytu (detail + štítek v přehledu) */
+.address-form { max-width: 520px; }
+.address-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.btn-secondary { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
+.addr-chip {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+.addr-chip--missing { color: #b45309; font-weight: 600; }
+.addr-chip--unknown { color: var(--muted); }

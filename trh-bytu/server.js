@@ -31,6 +31,18 @@ const STATUS_LABELS = {
   sold: { text: "Prodáno", color: "#16a34a" },
   removed: { text: "Zmizelo z nabídky", color: "#6b7280" },
 };
+// Stav ručně zapsané přesné adresy bytu (viz db.js exact_address): `known`
+// = vyplněná adresa nebo jednotka, `unknown` = uživatel nabídku prošel a
+// adresu nezjistil, `missing` = ještě nikdo nekoukal (ty se hlídají filtrem
+// "Bez adresy"). Čte se přes celou skupinu — adresa zapsaná na jednom
+// portálu platí pro byt.
+function addressInfo(members) {
+  const exact = pickOwnValue(members, "exact_address");
+  const unit = pickOwnValue(members, "unit_number");
+  const unknown = members.some((m) => m.address_unknown);
+  return { exact, unit, state: exact || unit ? "known" : unknown ? "unknown" : "missing" };
+}
+
 // Štítek stavu bytu. Zmizelý byt, u kterého uživatel v katastru ověřil, že
 // se neprodal, se nesmí tvářit jako obyčejně "zmizelo" (to je pořád ta
 // nezodpovězená otázka, kvůli které fronta existuje).
@@ -443,6 +455,7 @@ function computeEntries(db) {
       // Výsledek ruční kontroly v katastru (viz saleVerdict v group.js) a
       // odhad, jak pravděpodobně se zmizelý byt prodal (jen pro řazení
       // fronty /kontrola, viz sale-triage.js).
+      addressInfo: addressInfo(g.members),
       saleVerdict: verdict,
       knCheckedAt: g.members.reduce((max, m) => (m.kn_checked_at && m.kn_checked_at > max ? m.kn_checked_at : max), "") || null,
       triage: status === "removed" ? assessSale(g.members, events) : null,
@@ -471,7 +484,7 @@ function computeEntries(db) {
 }
 
 function renderTable(db, filters) {
-  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView } = filters;
+  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter } = filters;
   const showHidden = hiddenView === "show";
   const entries = computeEntries(db);
   const allGroups = entries.map((e) => e.g);
@@ -501,9 +514,14 @@ function renderTable(db, filters) {
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
   if (ownershipFilter) filtered = filtered.filter((e) => e.params.ownership === ownershipFilter);
   if (topFilter) filtered = filtered.filter((e) => e.starred);
+  // "Bez adresy" = nabídky, které ještě mají šanci (v nabídce / rezervované)
+  // a u kterých uživatel přesnou adresu nezapsal ani neoznačil za neznámou.
+  const needsAddress = (e) => e.addressInfo.state === "missing" && (e.status === "active" || e.status === "reserved");
+  const needsAddressCount = entries.filter((e) => !e.hidden && needsAddress(e)).length;
+  if (addressFilter) filtered = filtered.filter(needsAddress);
   filtered = [...filtered].sort(SORTERS[sort] || SORTERS.newest);
 
-  const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView };
+  const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter };
 
   const filterLinks = ["", "active", "reserved", "sold", "removed"]
     .map((s) => {
@@ -517,6 +535,7 @@ function renderTable(db, filters) {
 
   const topLink = `<a class="filter ${topFilter ? "active" : ""}" href="${buildQuery(current, { top: topFilter ? null : "1" })}">⭐ TOP</a>`;
   const hiddenLink = `<a class="filter ${showHidden ? "active" : ""}" href="${buildQuery(current, { hidden: showHidden ? null : "show", status: null })}">🚫 Skryté (${hiddenCount})</a>`;
+  const addressLink = `<a class="filter ${addressFilter ? "active" : ""}" href="${buildQuery(current, { adresa: addressFilter ? null : "chybi" })}">📍 Bez adresy (${needsAddressCount})</a>`;
 
   const sortLinks = SORT_LABELS.map(
     ([key, label]) => `<a class="filter ${sort === key ? "active" : ""}" href="${buildQuery(current, { sort: key })}">${esc(label)}</a>`
@@ -530,7 +549,19 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
+    .map(({ g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, addressInfo: ai, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
+      // Přesná adresa (viz addressInfo): zapsaná se ukáže, nevyplněná u
+      // nabídky, která ještě má šanci, upozorní, "neznámá" jen připomene,
+      // že se na ni už koukalo. U zmizelých bytů bez adresy se nic neukazuje —
+      // doplnit už ji nejde (řeší fronta /kontrola).
+      const addressChip =
+        ai.state === "known"
+          ? `<span class="addr-chip">📍 ${esc([ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", "))}</span>`
+          : ai.state === "unknown"
+          ? `<span class="addr-chip addr-chip--unknown">📍 adresa neznámá</span>`
+          : status === "active" || status === "reserved"
+          ? `<span class="addr-chip addr-chip--missing">📍 doplnit adresu</span>`
+          : "";
       const st = statusLabelFor(status, verdict);
       const { live, gone, reserved } = sourcesByAvailability(g.members);
       // Když byt někde zmizel a jinde je, ukáže se to hned v řádku — "zmizelo
@@ -565,6 +596,7 @@ function renderTable(db, filters) {
             <div class="row-meta">
               <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
               <span class="muted">${esc(sourceLabel)}${linkBadge}${reservedNote}${goneNote}${hiddenNote}</span>
+              ${addressChip}
             </div>
           </div>
         </a>
@@ -574,7 +606,7 @@ function renderTable(db, filters) {
 
   return `
     <h1>Byty (${filtered.length})</h1>
-    <div class="filters">${filterLinks}${topLink}${hiddenLink}</div>
+    <div class="filters">${filterLinks}${topLink}${addressLink}${hiddenLink}</div>
     <div class="toolbar">
       <div class="filters">${sortLinks}</div>
       <form method="get" action="/" class="select-filters">
@@ -582,6 +614,7 @@ function renderTable(db, filters) {
         <input type="hidden" name="sort" value="${esc(sort)}">
         <input type="hidden" name="top" value="${esc(topFilter || "")}">
         <input type="hidden" name="hidden" value="${esc(hiddenView || "")}">
+        <input type="hidden" name="adresa" value="${esc(addressFilter || "")}">
         <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
         <select name="ownership" onchange="this.form.submit()">${ownershipOptionsHtml}</select>
       </form>
@@ -810,6 +843,8 @@ function renderDetail(db, id) {
     .join("");
 
   const address = bestAddress(members) || "";
+  const ai = addressInfo(members);
+  const addressStatusText = ai.state === "known" ? "✓ Vyplněno" : ai.state === "unknown" ? "Označeno jako neznámá." : "⚠ Zatím nevyplněno.";
   const latest = latestChange(events);
   const updates = updatesChips(earliestListedAt(members), latest, changeSources(members, events, latest));
 
@@ -827,6 +862,19 @@ function renderDetail(db, id) {
     <p><a href="/byt/${encodeURIComponent(rep.id)}/kalkulacka">🧮 Kalkulačka marže re-flipu</a></p>
     <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${esc(priceLabel(members))}</p>
     <p>${esc(address)}</p>
+    <h2>📍 Přesná adresa</h2>
+    <p class="muted">
+      Adresa výš je jen přibližná, odhadnutá z inzerátu. Tady si zapiš přesnou adresu a ideálně i jednotku — až inzerát
+      zmizí, bude se podle toho byt hledat v katastru. <strong>${esc(addressStatusText)}</strong>
+    </p>
+    <form class="ajax-form address-form" method="post" action="/byt/${encodeURIComponent(rep.id)}/adresa">
+      <label>Adresa (ulice, č.p. / č.o., obec)<input type="text" name="exact_address" value="${esc(ai.exact)}" placeholder="např. Lukesova 1234, Ústí nad Orlicí" maxlength="200"></label>
+      <label>Jednotka (číslo jednotky nebo bytu)<input type="text" name="unit_number" value="${esc(ai.unit)}" placeholder="např. 1234/12" maxlength="60"></label>
+      <div class="address-actions">
+        <button type="submit" name="mode" value="save">Uložit adresu</button>
+        <button type="submit" name="mode" value="unknown" class="btn-secondary">Adresa neznámá</button>
+      </div>
+    </form>
     <div class="row-updates">${updates}</div>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
     ${paramRows ? `<h2>Parametry</h2><table class="params">${paramRows}</table>` : ""}
@@ -1247,7 +1295,15 @@ function renderKnQueue(db) {
     .map((e) => {
       const encId = encodeURIComponent(e.rep.id);
       const specs = [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null, e.params.floorInfo].filter(Boolean).join(" · ");
-      const lookup = [e.address || e.city, specs].filter(Boolean).join(" — ");
+      // Přesná adresa zapsaná uživatelem (vč. jednotky) má přednost před
+      // přibližným místem z inzerátu; bez ní appka řekne, že hledat bude
+      // muset jen podle odhadu.
+      const ai = e.addressInfo;
+      const place =
+        ai.state === "known"
+          ? [ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", ")
+          : `${e.address || e.city || ""} (${ai.state === "unknown" ? "přesná adresa neznámá" : "jen přibližně — přesná adresa nebyla zapsána"})`;
+      const lookup = [place, specs].filter(Boolean).join(" — ");
       const t = e.triage;
       const checked = e.knCheckedAt ? ` · naposledy zkontrolováno ${esc(formatDateOnly(e.knCheckedAt))}` : "";
       return `<div class="kn-item${checkedRecently(e) ? " kn-item--checked" : ""}">
@@ -1356,6 +1412,7 @@ const server = createServer(async (req, res) => {
       ownership: url.searchParams.get("ownership") || null,
       top: url.searchParams.get("top") || null,
       hidden: url.searchParams.get("hidden") || null,
+      adresa: url.searchParams.get("adresa") || null,
     };
     return sendHtml(res, 200, layout("Trh bytů", renderTable(db, filters)));
   }
@@ -1381,6 +1438,30 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/kontrola" && req.method === "GET") {
     return sendHtml(res, 200, layout("Kontrola v katastru — Trh bytů", renderKnQueue(db)));
+  }
+
+  // Přesná adresa bytu (viz db.js exact_address, detail bytu). `save` zapíše
+  // adresu a jednotku (prázdné obojí = vymazat i příznak "neznámá"),
+  // `unknown` označí, že uživatel nabídku prošel a adresu nezjistil —
+  // vymaže případný rozepsaný text, ať stav "neznámá" nemůže být s adresou
+  // současně. Zapisuje se na VŠECHNY členy skupiny (stejná úvaha jako u
+  // /notes).
+  const adresaMatch = url.pathname.match(/^\/byt\/([^/]+)\/adresa$/);
+  if (adresaMatch && req.method === "POST") {
+    const id = decodeURIComponent(adresaMatch[1]);
+    const fields = await parseBody(req);
+    const mode = fields.mode;
+    const group = mode === "save" || mode === "unknown" ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
+    if (group) {
+      const clean = (v, max) => (v || "").replace(/\s+/g, " ").trim().slice(0, max) || null;
+      const updates =
+        mode === "unknown"
+          ? { exact_address: null, unit_number: null, address_unknown: 1 }
+          : { exact_address: clean(fields.exact_address, 200), unit_number: clean(fields.unit_number, 60), address_unknown: 0 };
+      for (const m of group.members) updateListingFields(db, m.id, updates);
+    }
+    res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
+    return res.end();
   }
 
   // Výsledek ruční kontroly bytu v katastru (viz renderKnQueue). `sold` /
