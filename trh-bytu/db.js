@@ -118,6 +118,14 @@ const COLUMN_MIGRATIONS = [
   // datum dohledané v katastru), jen rychlé "ano, potvrzuju" z telefonu.
   { table: "listings", column: "reservation_followup_due", ddl: "TEXT" },
   { table: "listings", column: "reservation_sold_at", ddl: "TEXT" },
+  // Fronta "Kontrola v katastru" (viz server.js /kontrola) — výsledek ruční
+  // kontroly zmizelého bytu. `sale_verdict`: 'sold' (v katastru prodáno) |
+  // 'withdrawn' (zkontrolováno, neprodáno — stažené/jiný důvod) | NULL (bez
+  // verdiktu). `kn_checked_at`: kdy se naposledy kontrolovalo, i bez
+  // verdiktu ("zatím nic") — fronta podle toho řadí byty, které už dnes
+  // kontrolované byly, dolů. Zapisuje se na VŠECHNY členy skupiny.
+  { table: "listings", column: "sale_verdict", ddl: "TEXT" },
+  { table: "listings", column: "kn_checked_at", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {

@@ -305,10 +305,30 @@ export function primaryListing(members) {
  * nejde.
  */
 export function mergedStatus(members) {
-  if (members.some((m) => m.status === "sold")) return "sold";
+  if (members.some((m) => m.status === "sold") || saleVerdict(members) === "sold") return "sold";
   if (members.some((m) => m.status === "reserved")) return "reserved";
   if (members.some((m) => m.status === "active")) return "active";
   return "removed";
+}
+
+/**
+ * Výsledek ruční kontroly bytu v katastru (viz fronta /kontrola):
+ * 'sold' | 'withdrawn' | null. Za "prodáno" se bere i tlačítko "Prodáno" z
+ * Telegram připomínky (`reservation_sold_at`) — je to totéž rozhodnutí
+ * uživatele po kontrole v katastru, jen jinou cestou.
+ *
+ * "Neprodáno" (withdrawn) platí jen do doby, než se stav bytu změní: byt,
+ * který se po kontrole vrátil do nabídky a pak znovu zmizel, má NOVÉ
+ * zmizení a verdikt z doby před ním už o něm nic neříká — bez toho by se
+ * z fronty ztratil napořád.
+ */
+export function saleVerdict(members) {
+  if (members.some((m) => m.sale_verdict === "sold" || m.reservation_sold_at)) return "sold";
+  const withdrawn = members.filter((m) => m.sale_verdict === "withdrawn");
+  if (withdrawn.length === 0) return null;
+  const checkedAt = withdrawn.reduce((max, m) => (m.kn_checked_at && m.kn_checked_at > max ? m.kn_checked_at : max), "");
+  const lastRemoved = members.reduce((max, m) => (m.removed_at && m.removed_at > max ? m.removed_at : max), "");
+  return checkedAt && lastRemoved && lastRemoved > checkedAt ? null : "withdrawn";
 }
 
 // Nejstarší ZNÁMÉ datum, kdy byl byt v nabídce — přednost má portálovo

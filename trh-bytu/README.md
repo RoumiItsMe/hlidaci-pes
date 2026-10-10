@@ -278,6 +278,32 @@ to dřív brala jako jistotu a mýlila se ve třech případech:
   **dvou po sobě jdoucích bězích** (`missed_since` v DB). Mezitím zůstává v
   nabídce; potvrzené zmizení se datuje od prvního nenalezení.
 
+## Kontrola v katastru — jestli se zmizelý byt prodal (`/kontrola`)
+
+Po zmizení inzerátu portál o prodeji nic neřekne (Sreality vrací 404, RealityMIX
+a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není aktivní" a
+štítek „prodáno" zmizí spolu s ní), takže jediná jistota je katastr. Stránka
+**🏛️ Katastr** ho nenahrazuje, jen práci kolem něj zkrátí:
+
+- **Fronta** = zmizelé byty bez verdiktu. U každého je řádek „Do katastru:"
+  (adresa, dispozice, plocha, podlaží — z toho se byt v katastru dohledá) a
+  datum zmizení.
+- **Odhad pravděpodobnosti prodeje** řadí frontu, nic netvrdí
+  (`sale-triage.js`, každý bod má viditelný důvod): byl rezervovaný (+3),
+  zmizel z víc portálů najednou (+1), před zmizením zlevnil (+1); proti mluví,
+  že se po zmizení už jednou vrátil (−2) nebo visel jen pár dní (−1).
+- **Tlačítka:** *Prodáno* (volitelně s kupní cenou z katastru → uloží se jako
+  „Ověřená cena" a započítá do statistik), *Neprodáno* (byt je „Staženo
+  (neprodáno)" a ze statistik cen prodejů se vyřadí) a *Zatím nic* (byt se na
+  týden odsune dolů, třeba proto, že převod v katastru ještě neproběhl).
+  Vyřízené jdou vrátit do fronty. Výsledek se zapisuje na všechny portály,
+  kde byt je.
+- „Neprodáno" platí jen do dalšího zmizení: když se byt po kontrole vrátí do
+  nabídky a znovu zmizí, spadne do fronty znovu.
+- „Prodáno" z Telegram připomínky se bere jako stejný verdikt (byt je pak
+  „Prodáno"). Prodej označený z katastru nemá cenu, dokud ji nezadáš — na
+  rozdíl od iDNES „prodáno", kde je poslední cena inzerátu prodejní.
+
 ## Vlastní poznámky u bytu
 
 V detailu bytu (`/byt/<id>`) jde doplnit **ověřenou prodejní cenu, datum

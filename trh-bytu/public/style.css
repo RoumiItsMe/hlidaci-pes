@@ -359,3 +359,62 @@ table.stats-table thead th { color: var(--muted); font-weight: 600; text-align: 
 .flip-result--secondary.margin-mid .flip-result-value { color: #a16207; }
 .flip-result--secondary.margin-low { border-color: #ea580c; }
 .flip-result--secondary.margin-low .flip-result-value { color: #ea580c; }
+
+/* Fronta "Kontrola v katastru" (/kontrola) */
+.kn-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.kn-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+}
+.kn-item--checked { opacity: 0.6; }
+.kn-head { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; font-weight: 600; }
+.kn-head a { color: var(--text); text-decoration: none; }
+.kn-head a:hover { text-decoration: underline; }
+.kn-lookup { margin: 0.35rem 0 0.2rem; font-size: 0.9rem; }
+.kn-level {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  color: #fff;
+  white-space: nowrap;
+}
+.kn-level--likely { background: #16a34a; }
+.kn-level--possible { background: #d97706; }
+.kn-level--unclear { background: #6b7280; }
+.kn-level--unlikely { background: #9ca3af; }
+/* Přebíjí obecné `form { ... }` (sloupec, rámeček, pozadí, max-width). */
+.kn-form {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.5rem;
+  max-width: none;
+  padding: 0;
+  background: none;
+  border: none;
+}
+.kn-form button { align-self: auto; }
+.kn-form input[type="number"] { width: 15rem; max-width: 100%; }
+.kn-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  cursor: pointer;
+}
+.kn-btn:hover { border-color: var(--accent); }
+.kn-btn:disabled { opacity: 0.5; cursor: default; }
+.kn-btn--sold { background: #16a34a; border-color: #16a34a; color: #fff; }
+.kn-btn--sold:hover { border-color: #15803d; background: #15803d; }
+.kn-btn--later { color: var(--muted); }
+.kn-done { margin-top: 1.2rem; }
+.kn-done summary { cursor: pointer; color: var(--accent); }
+.kn-done li { margin: 0.35rem 0; }
+.kn-done .kn-form { display: inline-flex; margin: 0 0 0 0.4rem; }

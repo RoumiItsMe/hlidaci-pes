@@ -14,7 +14,7 @@
 // by appka skok nahoru dál neodchytila.
 document.addEventListener("submit", async (event) => {
   const form = event.target;
-  if (!(form instanceof HTMLFormElement) || !form.matches(".cell-form")) return;
+  if (!(form instanceof HTMLFormElement) || !form.matches(".cell-form, .ajax-form")) return;
   event.preventDefault();
 
   const scrollX = window.scrollX;
@@ -28,7 +28,7 @@ document.addEventListener("submit", async (event) => {
   const wrap = document.querySelector(".compare-wrap");
   const wrapTop = wrap ? wrap.scrollTop : 0;
   const wrapLeft = wrap ? wrap.scrollLeft : 0;
-  const controls = form.querySelectorAll("input, select");
+  const controls = form.querySelectorAll("input, select, button");
   // Tělo požadavku se musí sestavit PŘED deaktivací polí — `disabled`
   // ovládací prvek se do FormData vůbec nezahrne (stejné pravidlo jako při
   // normálním odeslání formuláře), takže opačné pořadí by potichu odeslalo
@@ -40,11 +40,18 @@ document.addEventListener("submit", async (event) => {
   // MDN form.submit()). URLSearchParams(FormData) tělo zakóduje stejně jako
   // normální odeslání formuláře, takže se k serveru dostane ve tvaru, který
   // umí přečíst.
-  const body = new URLSearchParams(new FormData(form));
+  // `event.submitter` = tlačítko, kterým se odeslalo — bez něj by se do těla
+  // nedostala jeho dvojice name/value a formuláře s víc tlačítky (fronta
+  // "Kontrola v katastru": Prodáno / Neprodáno / Zatím nic) by neposlaly,
+  // které z nich uživatel stiskl.
+  const body = new URLSearchParams(new FormData(form, event.submitter));
   controls.forEach((el) => (el.disabled = true));
 
   try {
-    const res = await fetch(form.action, { method: "POST", body });
+    // `getAttribute`, ne `form.action`: ovládací prvek jménem "action"
+    // (tlačítka ve frontě /kontrola) by vlastnost `form.action` přebil a
+    // `fetch` by dostal prvek místo adresy.
+    const res = await fetch(form.getAttribute("action"), { method: "POST", body });
     const html = await res.text();
     const next = new DOMParser().parseFromString(html, "text/html");
     const nextMain = next.querySelector("main");
