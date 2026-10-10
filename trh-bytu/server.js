@@ -311,25 +311,27 @@ function buildQuery(current, overrides) {
 
 // Výchozí řazení ve čtyřech skupinách za sebou:
 //   1. novinka + TOP  2. novinka  3. TOP  4. ostatní
-// ("novinka" = appka u bytu zaznamenala skutečnou událost, viz group.js
-// latestChange, NEBO ho teprve nedávno objevila, viz FRESH_LISTING_DAYS).
-// Uvnitř skupiny podle "aktivity" — novější z (kdy appka byt objevila,
-// kdy poslední změna), viz entry.activityAt níž. Tohle pořadí platí jen
+// "Novinka" = byt, u kterého se v posledních FRESH_LISTING_DAYS dnech něco
+// stalo: appka ho objevila, nebo u něj zaznamenala skutečnou změnu (viz
+// group.js latestChange) — obojí shrnuje entry.activityAt (novější z obou).
+// Uvnitř skupiny se řadí právě podle `activityAt`. Tohle pořadí platí jen
 // pro "newest" (výchozí) řazení; u řazení podle ceny by míchání
 // novinek/TOP dovnitř popřelo smysl "seřaď čistě podle ceny", který si
 // uživatel explicitně zvolil.
 //
-// Čerstvě přidaný inzerát má jen událost "created", kterou latestChange
-// záměrně nepočítá (není to změna, je to začátek historie) — bez téhle
-// výjimky by proto spadl do "ostatních" a ležel pod KAŽDÝM bytem, který
-// kdy měl nějakou změnu, třeba před měsícem (reálně zažito: nové nabídky
-// z předchozího dne byly v přehledu na 27.–35. místě ze 66).
+// Stáří MUSÍ rozhodovat i u změny. Dřív stačilo, že byt KDYKOLIV měl nějakou
+// změnu, a TOP byty s třeba tři týdny starou změnou tak zůstávaly napořád
+// nahoře, zatímco čerstvě objevené byty ležely pod nimi (reálně zažito: nový
+// byt z dnešního rána až na 9. místě pod sedmi staršími TOP byty).
+// Čerstvě přidaný inzerát má navíc jen událost "created", kterou
+// latestChange záměrně nepočítá (není to změna, je to začátek historie),
+// proto se bere i čas objevení.
 const FRESH_LISTING_DAYS = 7;
-function isFreshListing(e) {
-  return Date.now() - new Date(e.discoveredAt).getTime() < FRESH_LISTING_DAYS * 24 * 60 * 60 * 1000;
+function hasRecentNews(e) {
+  return Date.now() - new Date(e.activityAt).getTime() < FRESH_LISTING_DAYS * 24 * 60 * 60 * 1000;
 }
 function defaultSortGroup(e) {
-  return (e.change || isFreshListing(e) ? 0 : 2) + (e.starred ? 0 : 1);
+  return (hasRecentNews(e) ? 0 : 2) + (e.starred ? 0 : 1);
 }
 const SORTERS = {
   newest: (a, b) => {
