@@ -11,6 +11,7 @@ import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRe
 import { assessSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
+import { FOLLOWUP_INTERVAL_DAYS as SALE_CANDIDATE_AFTER_DAYS } from "./reservation-reminders.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
@@ -51,6 +52,23 @@ function addressInfo(members) {
     // Uživatel automatickou adresu smazal — automat ji znovu nedoplňuje.
     autoOff: members.some((m) => m.address_auto === -1),
   };
+}
+
+// Od kdy je byt rezervovaný: nejstarší ještě platná rezervace mezi členy
+// skupiny (poslední událost "reserved" u každého rezervovaného člena).
+// `null`, když byt rezervovaný není.
+function reservedSinceOf(members, events) {
+  let since = null;
+  for (const m of members) {
+    if (m.status !== "reserved") continue;
+    const last = events
+      .filter((e) => e.listing_id === m.id && e.event_type === "reserved")
+      .map((e) => e.occurred_at)
+      .sort()
+      .pop();
+    if (last && (!since || last < since)) since = last;
+  }
+  return since;
 }
 
 // Štítek stavu bytu. Zmizelý byt, u kterého uživatel v katastru ověřil, že
@@ -435,6 +453,7 @@ function computeEntries(db) {
     const removedAt = status === "removed" || status === "sold" ? latestRemovedAt(g.members) : null;
     const { dropCount, originalPrice } = priceDropSummary(events);
     const verdict = saleVerdict(g.members);
+    const reservedSince = status === "reserved" ? reservedSinceOf(g.members, events) : null;
     // "Doba v nabídce" počítá do DNEŠKA u živých/rezervovaných nabídek,
     // u zmizelých do data zmizení — obojí je "jak dlouho byl byt na trhu",
     // jen s jiným koncovým bodem. `removedAt` je `null` u živých/
@@ -466,6 +485,12 @@ function computeEntries(db) {
       // odhad, jak pravděpodobně se zmizelý byt prodal (jen pro řazení
       // fronty /kontrola, viz sale-triage.js).
       addressInfo: addressInfo(g.members),
+      reservedSince,
+      // Kandidát prodeje: rezervovaný aspoň SALE_CANDIDATE_AFTER_DAYS dní a
+      // zatím bez verdiktu — u takového bytu už typicky běží nebo skončilo
+      // řízení o vkladu v katastru a dá se dohledat cena.
+      saleCandidate:
+        Boolean(reservedSince) && !verdict && Date.now() - new Date(reservedSince).getTime() >= SALE_CANDIDATE_AFTER_DAYS * 24 * 60 * 60 * 1000,
       saleVerdict: verdict,
       knCheckedAt: g.members.reduce((max, m) => (m.kn_checked_at && m.kn_checked_at > max ? m.kn_checked_at : max), "") || null,
       triage: status === "removed" ? assessSale(g.members, events) : null,
@@ -559,7 +584,7 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, addressInfo: ai, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
+    .map(({ g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, addressInfo: ai, saleCandidate, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
       // Přesná adresa (viz addressInfo): zapsaná se ukáže, nevyplněná u
       // nabídky, která ještě má šanci, upozorní, "neznámá" jen připomene,
       // že se na ni už koukalo. U zmizelých bytů bez adresy se nic neukazuje —
@@ -572,6 +597,9 @@ function renderTable(db, filters) {
           : status === "active" || status === "reserved"
           ? `<span class="addr-chip addr-chip--missing">📍 doplnit adresu</span>`
           : "";
+      // Rezervovaný byt s adresou, u kterého už je čas dohledat prodej v katastru.
+      const candidateChip =
+        saleCandidate && ai.state === "known" ? `<span class="addr-chip addr-chip--candidate" title="Rezervováno už delší dobu — zkus v katastru dohledat řízení a kupní cenu (záložka Katastr)">🔎 kandidát prodeje</span>` : "";
       const st = statusLabelFor(status, verdict);
       const { live, gone, reserved } = sourcesByAvailability(g.members);
       // Když byt někde zmizel a jinde je, ukáže se to hned v řádku — "zmizelo
@@ -606,7 +634,7 @@ function renderTable(db, filters) {
             <div class="row-meta">
               <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
               <span class="muted">${esc(sourceLabel)}${linkBadge}${reservedNote}${goneNote}${hiddenNote}</span>
-              ${addressChip}
+              ${addressChip}${candidateChip}
             </div>
           </div>
         </a>
@@ -1349,26 +1377,70 @@ function renderKnQueue(db) {
   const actionForm = (encId, inner) => `<form class="ajax-form kn-form" method="post" action="/byt/${encId}/kn">${inner}</form>`;
   const btn = (action, label, cls) => `<button type="submit" name="action" value="${action}" class="kn-btn ${cls}">${label}</button>`;
 
+  // Údaje, podle kterých se byt v katastru hledá: přesná adresa zapsaná
+  // uživatelem (vč. jednotky) má přednost před přibližným místem z inzerátu;
+  // bez ní appka řekne, že hledat bude muset jen podle odhadu. K tomu
+  // katastrální území (a údaje o domě) z RÚIAN — v katastru se byt hledá
+  // podle k.ú. + čísla popisného, ne podle názvu města.
+  const lookupFor = (e) => {
+    const specs = [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null, e.params.floorInfo].filter(Boolean).join(" · ");
+    const ai = e.addressInfo;
+    const place =
+      ai.state === "known"
+        ? [ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", ")
+        : `${e.address || e.city || ""} (${ai.state === "unknown" ? "přesná adresa neznámá" : "jen přibližně — přesná adresa nebyla zapsána"})`;
+    const ag = knActx.groups.find((g) => g.members.some((m) => m.id === e.rep.id));
+    const kn = ag ? knInfoForGroup(knActx, ag, resolveForGroup(knActx, ag)) : null;
+    const lookup = [place, kn ? `k.ú. ${kn.ku.nazev} [${kn.ku.kod}]` : null, specs].filter(Boolean).join(" — ");
+    const houseFacts = kn?.building
+      ? ` <span class="muted">(dům: č.p. ${esc(kn.building.cp.join(", "))}${kn.building.floors ? `, ${kn.building.floors} podlaží` : ""}${kn.building.flats ? `, ${kn.building.flats} bytů` : ""})</span>`
+      : "";
+    return { lookup, houseFacts };
+  };
+
+  // Kandidáti prodeje: rezervované byty (aspoň SALE_CANDIDATE_AFTER_DAYS dní).
+  // S adresou se dají hledat v katastru hned; bez adresy je appka jen
+  // připomene, ať se adresa doplní, dokud je inzerát online.
+  const daysSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 60 * 60 * 1000));
+  const candidates = entries.filter((e) => e.saleCandidate);
+  const readyCandidates = candidates
+    .filter((e) => e.addressInfo.state === "known")
+    .sort((a, b) => (checkedRecently(a) ? 1 : 0) - (checkedRecently(b) ? 1 : 0) || a.reservedSince.localeCompare(b.reservedSince));
+  const candidatesNoAddress = candidates
+    .filter((e) => e.addressInfo.state === "missing")
+    .sort((a, b) => a.reservedSince.localeCompare(b.reservedSince));
+
+  const candidateItems = readyCandidates
+    .map((e) => {
+      const encId = encodeURIComponent(e.rep.id);
+      const { lookup, houseFacts } = lookupFor(e);
+      const checked = e.knCheckedAt ? ` · naposledy zkontrolováno ${esc(formatDateOnly(e.knCheckedAt))}` : "";
+      return `<div class="kn-item${checkedRecently(e) ? " kn-item--checked" : ""}">
+        <div class="kn-head">
+          <a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a>
+          <span class="kn-level kn-level--possible">rezervováno ${daysSince(e.reservedSince)} dní</span>
+        </div>
+        <div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}${houseFacts}</div>
+        <div class="muted">Rezervováno od ${esc(formatDateOnly(e.reservedSince))}${checked}</div>
+        ${actionForm(
+          encId,
+          `<input type="number" name="verified_sale_price_czk" min="0" step="1" placeholder="kupní cena v Kč (nepovinné)">${btn("sold", "Prodáno", "kn-btn--sold")}${btn("check", "Zatím nic", "kn-btn--later")}`
+        )}
+      </div>`;
+    })
+    .join("");
+
+  const noAddressRows = candidatesNoAddress
+    .map(
+      (e) =>
+        `<li><a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— rezervováno ${daysSince(e.reservedSince)} dní, doplň přesnou adresu</span></li>`
+    )
+    .join("");
+
   const items = open
     .map((e) => {
       const encId = encodeURIComponent(e.rep.id);
-      const specs = [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null, e.params.floorInfo].filter(Boolean).join(" · ");
-      // Přesná adresa zapsaná uživatelem (vč. jednotky) má přednost před
-      // přibližným místem z inzerátu; bez ní appka řekne, že hledat bude
-      // muset jen podle odhadu.
-      const ai = e.addressInfo;
-      const place =
-        ai.state === "known"
-          ? [ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", ")
-          : `${e.address || e.city || ""} (${ai.state === "unknown" ? "přesná adresa neznámá" : "jen přibližně — přesná adresa nebyla zapsána"})`;
-      // Katastrální území (a údaje o domě) z RÚIAN — v katastru se byt hledá
-      // podle k.ú. + čísla popisného, ne podle názvu města.
-      const ag = knActx.groups.find((g) => g.members.some((m) => m.id === e.rep.id));
-      const kn = ag ? knInfoForGroup(knActx, ag, resolveForGroup(knActx, ag)) : null;
-      const lookup = [place, kn ? `k.ú. ${kn.ku.nazev} [${kn.ku.kod}]` : null, specs].filter(Boolean).join(" — ");
-      const houseFacts = kn?.building
-        ? ` <span class="muted">(dům: č.p. ${esc(kn.building.cp.join(", "))}${kn.building.floors ? `, ${kn.building.floors} podlaží` : ""}${kn.building.flats ? `, ${kn.building.flats} bytů` : ""})</span>`
-        : "";
+      const { lookup, houseFacts } = lookupFor(e);
       const t = e.triage;
       const checked = e.knCheckedAt ? ` · naposledy zkontrolováno ${esc(formatDateOnly(e.knCheckedAt))}` : "";
       return `<div class="kn-item${checkedRecently(e) ? " kn-item--checked" : ""}">
@@ -1397,12 +1469,26 @@ function renderKnQueue(db) {
     .join("");
 
   return `
-    <h1>Kontrola v katastru (${open.length})</h1>
+    <h1>Kontrola v katastru</h1>
+    <h2 id="kandidati">Kandidáti prodeje (${readyCandidates.length})</h2>
+    <p class="muted">
+      Rezervované byty s přesnou adresou, které jsou rezervované aspoň ${SALE_CANDIDATE_AFTER_DAYS} dní — typicky už běží
+      (nebo skončilo) řízení o vkladu v <a href="${KN_URL}" target="_blank" rel="noopener">katastru nemovitostí</a>. Zkus
+      ho dohledat a hlavně <strong>kupní cenu</strong> (kupní smlouva); s cenou ji zapiš k tlačítku „Prodáno“, propíše se
+      do ověřené ceny a statistik. „Zatím nic“ byt na týden odsune dolů.
+    </p>
+    <div class="kn-list">${candidateItems || `<p class="empty">Žádný rezervovaný byt s adresou ještě nepřekročil ${SALE_CANDIDATE_AFTER_DAYS} dní.</p>`}</div>
+    ${
+      noAddressRows
+        ? `<details class="kn-done" open><summary>Rezervované byty bez přesné adresy (${candidatesNoAddress.length})</summary><p class="muted">Bez adresy je v katastru nejde dohledat — doplň ji, dokud je inzerát online.</p><ul>${noAddressRows}</ul></details>`
+        : ""
+    }
+
+    <h2>Zmizelé byty (${open.length})</h2>
     <p class="muted">
       Byty, které zmizely z nabídky a nevíme, jestli se prodaly — portály to po zmizení inzerátu neříkají, jistota je jen
-      <a href="${KN_URL}" target="_blank" rel="noopener">katastr nemovitostí</a>. Nahoře jsou ty, u kterých je prodej
-      nejpravděpodobnější (odhad podle historie bytu, ne jistota). Výsledek zapiš tlačítkem; „Zatím nic“ byt na týden
-      odsune dolů.
+      katastr. Nahoře jsou ty, u kterých je prodej nejpravděpodobnější (odhad podle historie bytu, ne jistota). Výsledek
+      zapiš tlačítkem; „Zatím nic“ byt na týden odsune dolů.
     </p>
     <div class="kn-list">${items || `<p class="empty">Nic ke kontrole.</p>`}</div>
     ${doneRows ? `<details class="kn-done"><summary>Vyřízené (${done.length})</summary><ul>${doneRows}</ul></details>` : ""}`;

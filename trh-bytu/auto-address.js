@@ -60,6 +60,27 @@ export function knInfoForGroup(actx, group, resolution) {
   };
 }
 
+/**
+ * Řádky o adrese bytu do upozornění (Telegram): zapsaná adresa + jednotka a
+ * katastrální údaje, nebo upozornění, že adresa chybí. Rezervace je
+ * poslední rozumná chvíle ji doplnit, dokud inzerát ještě běží.
+ */
+export function addressNoticeLines(db, listingId) {
+  const listings = db.prepare("SELECT * FROM listings").all();
+  const actx = buildAddressContext(db, listings);
+  const group = actx.groups.find((g) => g.members.some((m) => m.id === listingId));
+  if (!group) return [];
+  const exact = pickOwnValue(group.members, "exact_address");
+  const unit = pickOwnValue(group.members, "unit_number");
+  if (!exact && !unit) {
+    return [group.members.some((m) => m.address_unknown) ? "📍 Přesná adresa: neznámá" : "⚠️ Přesná adresa není zapsaná — doplň ji, dokud je byt v nabídce."];
+  }
+  const lines = [`📍 ${[exact, unit ? `jednotka ${unit}` : null].filter(Boolean).join(", ")}`];
+  const kn = knInfoForGroup(actx, group, resolveForGroup(actx, group));
+  if (kn) lines.push(`🏛️ ${describeKn(kn)}`);
+  return lines;
+}
+
 /** "k.ú. Česká Třebová [621757] · dům: č.p. 1736, 1737 · 4 podlaží · 12 bytů" */
 export function describeKn(kn) {
   if (!kn) return "";

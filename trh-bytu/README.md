@@ -357,7 +357,16 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
 štítek „prodáno" zmizí spolu s ní), takže jediná jistota je katastr. Stránka
 **🏛️ Katastr** ho nenahrazuje, jen práci kolem něj zkrátí:
 
-- **Fronta** = zmizelé byty bez verdiktu. U každého je řádek „Do katastru:"
+- **Kandidáti prodeje** (nahoře na stránce, štítek **🔎 kandidát prodeje** v
+  přehledu): rezervovaný byt s přesnou adresou, který je rezervovaný aspoň
+  **21 dní** (stejný práh jako Telegram připomínka „pořád rezervováno?" — objeví
+  se naráz). V té době typicky už běží řízení o vkladu v katastru a dá se
+  dohledat **kupní cena**. Karta má řádek „Do katastru" (adresa, k.ú., dům), pole
+  pro cenu a tlačítka *Prodáno* (s cenou → ověřená cena + statistiky) a *Zatím
+  nic* (na týden dolů). Rezervované byty **bez adresy** jsou pod tím zvlášť
+  jako připomínka „doplň adresu, dokud je inzerát online". Telegram připomínka
+  teď nese i adresu s jednotkou a k.ú. (nebo upozornění, že adresa chybí).
+- **Fronta zmizelých** = zmizelé byty bez verdiktu. U každého je řádek „Do katastru:"
   (adresa, dispozice, plocha, podlaží — z toho se byt v katastru dohledá) a
   datum zmizení.
 - **Odhad pravděpodobnosti prodeje** řadí frontu, nic netvrdí

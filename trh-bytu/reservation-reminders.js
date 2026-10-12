@@ -25,8 +25,12 @@
 import { nowIso, updateListingFields } from "./db.js";
 import { groupListings, mergedStatus, primaryListing, findGroupForListing } from "./group.js";
 import { sendTelegramMessage, getTelegramUpdates, answerTelegramCallback, editTelegramMessageReplyMarkup } from "../lib/telegram.js";
+import { addressNoticeLines } from "./auto-address.js";
 
-const FOLLOWUP_INTERVAL_DAYS = 21;
+// Zároveň práh, od kdy je rezervovaný byt s adresou "kandidát prodeje" v
+// appce (viz server.js /kontrola) — připomínka a seznam se tak objeví
+// současně.
+export const FOLLOWUP_INTERVAL_DAYS = 21;
 const OFFSET_KEY = "telegram_update_offset";
 
 function addDaysIso(days) {
@@ -64,6 +68,23 @@ function specsText(rep) {
 }
 
 /**
+ * Text připomínky "pořád rezervováno?" — vedle odkazu i přesná adresa a
+ * katastrální údaje (nebo upozornění, že adresa chybí), ať jde rovnou
+ * hledat v katastru.
+ */
+export function buildFollowupText(db, rep) {
+  const { specs, price } = specsText(rep);
+  return [
+    `⏰ Pořád rezervováno: ${specs}${rep.address ? `, ${rep.address}` : ""}`,
+    price,
+    ...addressNoticeLines(db, rep.id),
+    rep.url,
+    "",
+    "Zkontroloval jsi převod v katastru nemovitostí?",
+  ].join("\n");
+}
+
+/**
  * Pošle připomínku pro každou REZERVOVANOU skupinu, které uplynula lhůta
  * (`reservation_followup_due`), s inline tlačítky. Hned po odeslání
  * naplánuje další kolo (+21 dní) — tím appka "samo-ozdravuje" i úplné
@@ -81,8 +102,7 @@ export async function sendDueFollowups(db, log) {
     const rep = primaryListing(group.members);
     if (!rep.reservation_followup_due || rep.reservation_followup_due > now) continue;
 
-    const { specs, price } = specsText(rep);
-    const text = `⏰ Pořád rezervováno: ${specs}${rep.address ? `, ${rep.address}` : ""}\n${price}\n${rep.url}\n\nZkontroloval jsi převod v katastru nemovitostí?`;
+    const text = buildFollowupText(db, rep);
     const replyMarkup = {
       inline_keyboard: [
         [
