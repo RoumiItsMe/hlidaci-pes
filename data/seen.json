@@ -11,9 +11,9 @@
       "consecutiveFailures": 0
     },
     "byty:idnes": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0
+      "consecutiveFailures": 1
     },
     "byty:realitymix": {
       "failing": false,
@@ -258,6 +258,10 @@
     {
       "id": "3444314188",
       "price": 3250000
+    },
+    {
+      "id": "2683506764",
+      "price": 19200
     }
   ],
   "byty:bezrealitky": [
@@ -580,6 +584,10 @@
     {
       "id": "6536873",
       "price": 3600000
+    },
+    {
+      "id": "8721671",
+      "price": 19200
     }
   ],
   "byty:bazos": [
@@ -1718,6 +1726,10 @@
     {
       "fingerprint": "3590000_72",
       "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "19200_62",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -3192,16 +3204,16 @@
     "OBAS1000A918-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-12T14:02:25.150Z",
-    "board:letohrad": "2026-10-12T14:02:25.150Z",
-    "board:zamberk": "2026-10-12T14:02:25.150Z",
-    "board:ceska-trebova": "2026-10-12T14:02:25.150Z",
-    "board:lanskroun": "2026-10-12T14:02:25.150Z",
-    "board:kraliky": "2026-10-12T14:02:25.150Z",
-    "board:vysoke-myto": "2026-10-12T14:02:25.150Z",
-    "board:lukova": "2026-10-12T14:02:25.150Z",
-    "board:tatenice": "2026-10-12T14:02:25.150Z",
-    "board:anenska-studanka": "2026-10-12T14:02:25.150Z",
+    "board:usti-nad-orlici": "2026-10-12T14:17:35.127Z",
+    "board:letohrad": "2026-10-12T14:17:35.127Z",
+    "board:zamberk": "2026-10-12T14:17:35.127Z",
+    "board:ceska-trebova": "2026-10-12T14:17:35.127Z",
+    "board:lanskroun": "2026-10-12T14:17:35.127Z",
+    "board:kraliky": "2026-10-12T14:17:35.127Z",
+    "board:vysoke-myto": "2026-10-12T14:17:35.127Z",
+    "board:lukova": "2026-10-12T14:17:35.127Z",
+    "board:tatenice": "2026-10-12T14:17:35.127Z",
+    "board:anenska-studanka": "2026-10-12T14:17:35.127Z",
     "board:okres-usti-nad-orlici": "2026-10-12T13:34:51.356Z"
   },
   "board:okres-usti-nad-orlici": [
