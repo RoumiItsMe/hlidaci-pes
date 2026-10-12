@@ -400,6 +400,9 @@ table.stats-table thead th { color: var(--muted); font-weight: 600; text-align: 
 }
 .kn-form button { align-self: auto; }
 .kn-form input[type="number"] { width: 15rem; max-width: 100%; }
+/* `form label` (výš) skládá popisek nad pole — tady má být v jedné řadě. */
+.kn-form .kn-date { flex-direction: row; align-items: center; gap: 0.35rem; }
+.kn-form .kn-date input { width: auto; }
 .kn-btn {
   border: 1px solid var(--border);
   background: var(--card);

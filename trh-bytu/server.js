@@ -32,6 +32,8 @@ const STATUS_LABELS = {
   active: { text: "V nabídce", color: "#2563eb" },
   reserved: { text: "Rezervováno", color: "#d97706" },
   sold: { text: "Prodáno", color: "#16a34a" },
+  // Odvozený štítek (ne stav v DB) — zmizelo po rezervaci, viz isPossibleSale.
+  possible: { text: "Možný prodej", color: "#0f766e" },
   removed: { text: "Zmizelo z nabídky", color: "#6b7280" },
 };
 // Stav ručně zapsané přesné adresy bytu (viz db.js exact_address): `known`
@@ -71,11 +73,32 @@ function reservedSinceOf(members, events) {
   return since;
 }
 
+// Zmizelý byt, který byl před zmizením rezervovaný, a nikdo zatím nezjistil,
+// jak to dopadlo: po rezervaci se nabídka typicky stahuje, takže je to
+// "možný prodej" (a ne jen "zmizelo"). Když se nabídka vrátí, byt přestane
+// být zmizelý a štítek zmizí sám. Pro filtr "Možný prodej" i štítek.
+function isPossibleSale(e) {
+  return e.status === "removed" && !e.saleVerdict && Boolean(e.triage?.wasReserved);
+}
+
+// Pořadí a hodnoty stavových filtrů v přehledu i v srovnávací tabulce.
+const STATUS_FILTERS = ["", "active", "reserved", "possible", "sold", "removed"];
+
+// "Možný prodej" není stav v DB, ale podmnožina zmizelých — "Zmizelo z
+// nabídky" proto zůstává filtrem všech zmizelých (i těch možných prodejů),
+// jinak by byt po rezervaci z přehledu úplně zmizel.
+function matchesStatusFilter(e, filter) {
+  return filter === "possible" ? isPossibleSale(e) : e.status === filter;
+}
+
 // Štítek stavu bytu. Zmizelý byt, u kterého uživatel v katastru ověřil, že
 // se neprodal, se nesmí tvářit jako obyčejně "zmizelo" (to je pořád ta
-// nezodpovězená otázka, kvůli které fronta existuje).
-function statusLabelFor(status, verdict) {
+// nezodpovězená otázka, kvůli které fronta existuje) — a zmizelý po
+// rezervaci je "možný prodej", viz isPossibleSale. `triage` je odhad z
+// sale-triage.js (jen u zmizelých).
+function statusLabelFor(status, verdict, triage) {
   if (status === "removed" && verdict === "withdrawn") return { text: "Staženo (neprodáno)", color: STATUS_LABELS.removed.color };
+  if (status === "removed" && !verdict && triage?.wasReserved) return STATUS_LABELS.possible;
   return STATUS_LABELS[status] || { text: status, color: "#000" };
 }
 const EVENT_LABELS = {
@@ -544,7 +567,7 @@ function renderTable(db, filters) {
     filtered = filtered.filter((e) => e.hidden);
   } else {
     filtered = filtered.filter((e) => !e.hidden || (statusFilter === "reserved" && e.status === "reserved"));
-    if (statusFilter) filtered = filtered.filter((e) => e.status === statusFilter);
+    if (statusFilter) filtered = filtered.filter((e) => matchesStatusFilter(e, statusFilter));
   }
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
   if (ownershipFilter) filtered = filtered.filter((e) => e.params.ownership === ownershipFilter);
@@ -558,7 +581,7 @@ function renderTable(db, filters) {
 
   const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter };
 
-  const filterLinks = ["", "active", "reserved", "sold", "removed"]
+  const filterLinks = STATUS_FILTERS
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
       const active = !showHidden && (statusFilter === s || (!statusFilter && !s)) ? "active" : "";
@@ -584,7 +607,7 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, addressInfo: ai, saleCandidate, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
+    .map(({ g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, triage, addressInfo: ai, saleCandidate, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
       // Přesná adresa (viz addressInfo): zapsaná se ukáže, nevyplněná u
       // nabídky, která ještě má šanci, upozorní, "neznámá" jen připomene,
       // že se na ni už koukalo. U zmizelých bytů bez adresy se nic neukazuje —
@@ -600,7 +623,7 @@ function renderTable(db, filters) {
       // Rezervovaný byt s adresou, u kterého už je čas dohledat prodej v katastru.
       const candidateChip =
         saleCandidate && ai.state === "known" ? `<span class="addr-chip addr-chip--candidate" title="Rezervováno už delší dobu — zkus v katastru dohledat řízení a kupní cenu (záložka Katastr)">🔎 kandidát prodeje</span>` : "";
-      const st = statusLabelFor(status, verdict);
+      const st = statusLabelFor(status, verdict, triage);
       const { live, gone, reserved } = sourcesByAvailability(g.members);
       // Když byt někde zmizel a jinde je, ukáže se to hned v řádku — "zmizelo
       // z nabídky" na jednom portálu není zmizení z trhu. Stejně tak kde je
@@ -714,7 +737,7 @@ function renderComparisonTable(db, filters) {
   // Skryté (křížkem vyřazené) se z tabulky srovnání vylučují stejně jako z
   // hlavního přehledu — je to uživatelovo "tohle mě nezajímá".
   let filtered = entries.filter((e) => !e.hidden);
-  if (statusFilter) filtered = filtered.filter((e) => e.status === statusFilter);
+  if (statusFilter) filtered = filtered.filter((e) => matchesStatusFilter(e, statusFilter));
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
 
   const [sortKey, sortDir] = (sortParam || "added_dir_desc").split("_dir_");
@@ -731,7 +754,7 @@ function renderComparisonTable(db, filters) {
   });
 
   const current = { status: statusFilter, city: cityFilter, sort: sortParam };
-  const filterLinks = ["", "active", "reserved", "sold", "removed"]
+  const filterLinks = STATUS_FILTERS
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
       const active = statusFilter === s || (!statusFilter && !s) ? "active" : "";
@@ -745,7 +768,7 @@ function renderComparisonTable(db, filters) {
   const rows = filtered
     .map((e) => {
       const encId = encodeURIComponent(e.rep.id);
-      const st = statusLabelFor(e.status, e.saleVerdict);
+      const st = statusLabelFor(e.status, e.saleVerdict, e.triage);
       // column = sloupec v DB ("own_condition"...), value = odpovídající
       // předpočítaná hodnota entry (e.ownCondition...) — přímé mapování, ne
       // odvozování jednoho jména z druhého.
@@ -829,7 +852,6 @@ function renderDetail(db, id) {
   const members = group.members;
   const rep = primaryListing(members); // nese notes/verified_sale_* — jeden sdílený záznam za skupinu
   const status = mergedStatus(members);
-  const st = statusLabelFor(status, saleVerdict(members));
   const starred = isStarred(members);
   const hidden = isHidden(members);
   const sourceById = Object.fromEntries(members.map((m) => [m.id, m.source]));
@@ -838,6 +860,10 @@ function renderDetail(db, id) {
   const placeholders = memberIds.map(() => "?").join(",");
   const photos = db.prepare(`SELECT * FROM photos WHERE listing_id IN (${placeholders}) ORDER BY listing_id, id`).all(...memberIds);
   const events = db.prepare(`SELECT * FROM events WHERE listing_id IN (${placeholders}) ORDER BY occurred_at ASC`).all(...memberIds);
+  // Štítek stavu (u zmizelého bytu po rezervaci "Možný prodej") — odhad
+  // z historie se počítá jen pro zmizelé, stejně jako v computeEntries.
+  const verdict = saleVerdict(members);
+  const st = statusLabelFor(status, verdict, status === "removed" ? assessSale(members, events) : null);
 
   // Fotky se sčítají napříč VŠEMI členy skupiny — když je jeden zdroj
   // (typicky Sreality, jejíž CDN fotky odmítá stahovat, viz photos.js)
@@ -1376,6 +1402,9 @@ function renderKnQueue(db) {
 
   const actionForm = (encId, inner) => `<form class="ajax-form kn-form" method="post" action="/byt/${encId}/kn">${inner}</form>`;
   const btn = (action, label, cls) => `<button type="submit" name="action" value="${action}" class="kn-btn ${cls}">${label}</button>`;
+  // Co chceme z katastru zjistit: za kolik a kdy se byt prodal. Obojí
+  // nepovinné — i samotné "Prodáno" je užitečné (viz POST /byt/:id/kn).
+  const saleFields = `<input type="number" name="verified_sale_price_czk" min="0" step="1" placeholder="kupní cena v Kč (nepovinné)"><label class="kn-date">datum prodeje <input type="date" name="verified_sale_date" title="Datum podpisu smlouvy nebo vkladu do katastru (nepovinné)"></label>`;
 
   // Údaje, podle kterých se byt v katastru hledá: přesná adresa zapsaná
   // uživatelem (vč. jednotky) má přednost před přibližným místem z inzerátu;
@@ -1424,7 +1453,7 @@ function renderKnQueue(db) {
         <div class="muted">Rezervováno od ${esc(formatDateOnly(e.reservedSince))}${checked}</div>
         ${actionForm(
           encId,
-          `<input type="number" name="verified_sale_price_czk" min="0" step="1" placeholder="kupní cena v Kč (nepovinné)">${btn("sold", "Prodáno", "kn-btn--sold")}${btn("check", "Zatím nic", "kn-btn--later")}`
+          `${saleFields}${btn("sold", "Prodáno", "kn-btn--sold")}${btn("check", "Zatím nic", "kn-btn--later")}`
         )}
       </div>`;
     })
@@ -1449,10 +1478,12 @@ function renderKnQueue(db) {
           <span class="kn-level kn-level--${t.level}">${esc(SALE_LEVEL_LABELS[t.level])}</span>
         </div>
         <div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}${houseFacts}</div>
-        <div class="muted">Zmizel ${esc(formatDateOnly(e.removedAt))} · ${esc(t.reasons.join(" · ") || "bez zvláštního signálu")}${checked}</div>
+        <div class="muted">${
+          t.wasReserved ? `Rezervováno od ${esc(formatDateOnly(t.reservedAt))} → zmizelo ${esc(formatDateOnly(e.removedAt))}` : `Zmizel ${esc(formatDateOnly(e.removedAt))}`
+        } · ${esc(t.reasons.join(" · ") || "bez zvláštního signálu")}${checked}</div>
         ${actionForm(
           encId,
-          `<input type="number" name="verified_sale_price_czk" min="0" step="1" placeholder="kupní cena v Kč (nepovinné)">${btn("sold", "Prodáno", "kn-btn--sold")}${btn("withdrawn", "Neprodáno", "")}${btn("check", "Zatím nic", "kn-btn--later")}`
+          `${saleFields}${btn("sold", "Prodáno", "kn-btn--sold")}${btn("withdrawn", "Neprodáno", "")}${btn("check", "Zatím nic", "kn-btn--later")}`
         )}
       </div>`;
     })
@@ -1661,6 +1692,10 @@ const server = createServer(async (req, res) => {
       if (action === "sold") {
         const price = Number(fields.verified_sale_price_czk);
         if (fields.verified_sale_price_czk && Number.isFinite(price) && price > 0) updates.verified_sale_price_czk = Math.round(price);
+        // Datum prodeje stejně: jen platné YYYY-MM-DD, prázdné pole nic nemaže.
+        if (/^\d{4}-\d{2}-\d{2}$/.test(fields.verified_sale_date || "") && !Number.isNaN(Date.parse(fields.verified_sale_date))) {
+          updates.verified_sale_date = fields.verified_sale_date;
+        }
       }
       for (const m of group.members) updateListingFields(db, m.id, updates);
     }

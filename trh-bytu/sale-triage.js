@@ -30,10 +30,19 @@ export function assessSale(members, events) {
   // Rezervace těsně před zmizením — nejsilnější signál: kupec byl, byt
   // zmizel. "Těsně před" = poslední rezervační událost je "reserved", ne
   // později zrušená.
-  const wasReserved = members.some((m) => {
+  // `reservedAt` = od kdy ta rezervace trvala (nejstarší z členů, u kterých
+  // byla poslední rezervační událost "reserved") — uživateli to zúží, kdy
+  // v katastru hledat.
+  let reservedAt = null;
+  for (const m of members) {
     const own = events.filter((e) => e.listing_id === m.id && (e.event_type === "reserved" || e.event_type === "unreserved")).sort(byTime);
-    return own.length > 0 && own[own.length - 1].event_type === "reserved";
-  });
+    const last = own[own.length - 1];
+    if (last && last.event_type === "reserved") {
+      const since = own.filter((e) => e.event_type === "reserved").pop().occurred_at;
+      if (!reservedAt || since < reservedAt) reservedAt = since;
+    }
+  }
+  const wasReserved = reservedAt != null;
   if (wasReserved) {
     score += 3;
     reasons.push("byl rezervovaný");
@@ -84,7 +93,7 @@ export function assessSale(members, events) {
   }
 
   const level = score >= 3 ? "likely" : score >= 1 ? "possible" : score === 0 ? "unclear" : "unlikely";
-  return { score, level, reasons };
+  return { score, level, reasons, wasReserved, reservedAt };
 }
 
 export const SALE_LEVEL_LABELS = {
