@@ -23,9 +23,10 @@
 // skupiny změnilo (přibyl/zmizel portál).
 
 import { nowIso, updateListingFields } from "./db.js";
-import { groupListings, mergedStatus, primaryListing, findGroupForListing } from "./group.js";
+import { groupListings, mergedStatus, primaryListing, findGroupForListing, saleVerdict, pickOwnValue } from "./group.js";
 import { sendTelegramMessage, getTelegramUpdates, answerTelegramCallback, editTelegramMessageReplyMarkup } from "../lib/telegram.js";
 import { addressNoticeLines } from "./auto-address.js";
+import { assessSale } from "./sale-triage.js";
 
 // Zároveň práh, od kdy je rezervovaný byt s adresou "kandidát prodeje" v
 // appce (viz server.js /kontrola) — připomínka a seznam se tak objeví
@@ -122,6 +123,76 @@ export async function sendDueFollowups(db, log) {
     const nextDue = addDaysIso(FOLLOWUP_INTERVAL_DAYS);
     for (const m of group.members) updateListingFields(db, m.id, { reservation_followup_due: nextDue });
     log(`Telegram následná připomínka odeslána: ${rep.id} (další za ${FOLLOWUP_INTERVAL_DAYS} dní)`);
+  }
+}
+
+function formatDay(iso) {
+  return new Date(iso).toLocaleDateString("cs-CZ");
+}
+
+/**
+ * Text upozornění "rezervovaný byt zmizel z nabídky". Inzerát je pryč, takže
+ * rady jako "doplň adresu, dokud je online" už neplatí — uživatel potřebuje
+ * vědět, jestli má adresu pro katastr, a kdy byt rezervovaný byl.
+ */
+export function buildPossibleSaleText(db, group, triage) {
+  const rep = primaryListing(group.members);
+  const { specs, price } = specsText(rep);
+  const exact = pickOwnValue(group.members, "exact_address");
+  const unit = pickOwnValue(group.members, "unit_number");
+  const addressLines =
+    exact || unit
+      ? addressNoticeLines(db, rep.id)
+      : [group.members.some((m) => m.address_unknown) ? "📍 Přesná adresa: neznámá" : "📍 Přesná adresa nebyla zapsaná — v katastru půjde byt hledat jen podle přibližného místa."];
+  return [
+    `🔎 Zmizel z nabídky po rezervaci — možný prodej: ${specs}${rep.address ? `, ${rep.address}` : ""}`,
+    price,
+    `Rezervováno od ${formatDay(triage.reservedAt)} → zmizelo ${formatDay(triage.removedAt)}`,
+    ...addressLines,
+    "",
+    "Zkus v katastru dohledat kupní cenu a datum prodeje a zapiš je v appce (Katastr → Zmizelé byty).",
+  ].join("\n");
+}
+
+/**
+ * Pošle upozornění na každý byt, který zmizel z nabídky po rezervaci
+ * ("možný prodej" — po rezervaci se inzerát stahuje) a ještě nemá verdikt z
+ * katastru. Jednou na zmizení: `possible_sale_notified_at` se píše na všechny
+ * členy skupiny (viz migrace v db.js — starší zmizení jsou vyřízená) a maže
+ * se, když je byt zase v nabídce, takže další zmizení upozorní znovu.
+ * Selhání odeslání marker nezapíše — zkusí se příští běh.
+ */
+export async function notifyPossibleSales(db, log) {
+  const groups = groupListings(db.prepare("SELECT * FROM listings").all());
+
+  for (const group of groups) {
+    const members = group.members;
+    const status = mergedStatus(members);
+
+    if (status === "active" || status === "reserved") {
+      // Zpátky v nabídce — příští zmizení je nová událost.
+      if (members.some((m) => m.possible_sale_notified_at)) {
+        for (const m of members) updateListingFields(db, m.id, { possible_sale_notified_at: null });
+      }
+      continue;
+    }
+    if (status !== "removed" || saleVerdict(members)) continue;
+    if (members.every((m) => m.possible_sale_notified_at)) continue;
+
+    const placeholders = members.map(() => "?").join(",");
+    const events = db.prepare(`SELECT * FROM events WHERE listing_id IN (${placeholders})`).all(...members.map((m) => m.id));
+    const triage = assessSale(members, events);
+    if (!triage.wasReserved) continue;
+
+    try {
+      await sendTelegramMessage(buildPossibleSaleText(db, group, triage));
+    } catch (err) {
+      log(`Telegram upozornění na možný prodej selhalo (${members[0].id}): ${err.message}`);
+      continue;
+    }
+    const stamp = nowIso();
+    for (const m of members) updateListingFields(db, m.id, { possible_sale_notified_at: stamp });
+    log(`Telegram upozornění na možný prodej odesláno: ${members[0].id}`);
   }
 }
 

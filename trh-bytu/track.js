@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { watches } from "../config.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
-import { scheduleFollowup, sendDueFollowups, processTelegramActions } from "./reservation-reminders.js";
+import { scheduleFollowup, sendDueFollowups, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
 import { fetchSrealityAllPages } from "../sources/sreality.js";
 import { fetchBezrealitky } from "../sources/bezrealitky.js";
 import { fetchIdnes } from "../sources/idnes.js";
@@ -374,6 +374,13 @@ async function run() {
   // výsledku sběru výš (fail-soft, viz reservation-reminders.js).
   await processTelegramActions(db, log);
   await sendDueFollowups(db, log);
+  // Rezervované byty, které při tomhle běhu zmizely z nabídky — "možný
+  // prodej", teď je nejlepší chvíle začít hledat v katastru.
+  try {
+    await notifyPossibleSales(db, log);
+  } catch (err) {
+    log(`Upozornění na možný prodej selhalo: ${err.message}`);
+  }
 
   // Geokódování nových bodů a automatické doplnění adres (viz geo.js,
   // auto-address.js). Fail-soft — výpadek geokodéru sběr dat nesmí shodit.

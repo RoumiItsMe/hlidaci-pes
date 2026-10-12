@@ -373,6 +373,17 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   inzerát do nabídky, byt je zase „V nabídce" a štítek zmizí sám; zadáš-li
   výsledek z katastru, štítek nahradí „Prodáno" / „Staženo (neprodáno)". Filtr
   „Zmizelo z nabídky" dál ukazuje všechny zmizelé včetně možných prodejů.
+  Když se byt **30 dní** (`PROBABLE_SALE_AFTER_DAYS` v `sale-triage.js`) nevrátil,
+  štítek se změní na **Pravděpodobně prodáno** (filtr „Možný prodej" ukazuje obojí).
+  Verdikt dál dává jen katastr.
+- **Telegram upozornění na zmizení:** když rezervovaný byt zmizí ze **všech**
+  portálů, ve stejném běhu přijde zpráva „Zmizel z nabídky po rezervaci — možný
+  prodej" s adresou (nebo upozorněním, že chybí), k.ú. a obdobím „rezervováno od
+  → zmizelo" — to je nejlepší chvíle začít hledat v katastru. Jednou na zmizení
+  (`possible_sale_notified_at`); vrátí-li se byt do nabídky a znovu zmizí, přijde
+  nové upozornění. Byty, které zmizely před zavedením upozornění, se
+  neupozorňují zpětně, a byt s verdiktem z katastru taky ne. Neodešle-li se
+  zpráva (výpadek Telegramu), zkusí se další běh.
 - **Fronta zmizelých** = zmizelé byty bez verdiktu. U každého je řádek „Do katastru:"
   (adresa, dispozice, plocha, podlaží — z toho se byt v katastru dohledá) a
   „Rezervováno od … → zmizelo …" (nebo jen datum zmizení), ať je jasné, v jakém

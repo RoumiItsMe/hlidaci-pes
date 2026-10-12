@@ -165,13 +165,27 @@ const COLUMN_MIGRATIONS = [
   // auto-address.js. Ruční uložení v detailu to vždy vynuluje; automat
   // přepisuje/maže jen adresy, které sám zapsal.
   { table: "listings", column: "address_auto", ddl: "INTEGER" },
+  // Telegram upozornění "rezervovaný byt zmizel z nabídky — možný prodej"
+  // (viz reservation-reminders.js notifyPossibleSales): kdy už se o zmizení
+  // upozornilo, ať se neposílá při každém běhu. Zapisuje se na všechny členy
+  // skupiny, při návratu bytu do nabídky se maže (další zmizení = nové
+  // upozornění). `backfill` proběhne jen při založení sloupce: už zmizelé
+  // inzeráty se berou za vyřízené, aby první běh nezaplavil Telegram
+  // starými zmizeními.
+  {
+    table: "listings",
+    column: "possible_sale_notified_at",
+    ddl: "TEXT",
+    backfill: "UPDATE listings SET possible_sale_notified_at = COALESCE(removed_at, first_seen_at) WHERE status = 'removed'",
+  },
 ];
 
 function runMigrations(db) {
-  for (const { table, column, ddl } of COLUMN_MIGRATIONS) {
+  for (const { table, column, ddl, backfill } of COLUMN_MIGRATIONS) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all();
     if (!cols.some((c) => c.name === column)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      if (backfill) db.exec(backfill);
     }
   }
 }

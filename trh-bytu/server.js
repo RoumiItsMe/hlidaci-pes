@@ -8,7 +8,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
-import { assessSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
+import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { FOLLOWUP_INTERVAL_DAYS as SALE_CANDIDATE_AFTER_DAYS } from "./reservation-reminders.js";
@@ -34,6 +34,8 @@ const STATUS_LABELS = {
   sold: { text: "Prodáno", color: "#16a34a" },
   // Odvozený štítek (ne stav v DB) — zmizelo po rezervaci, viz isPossibleSale.
   possible: { text: "Možný prodej", color: "#0f766e" },
+  // Totéž po PROBABLE_SALE_AFTER_DAYS dnech bez návratu (sale-triage.js).
+  probable: { text: "Pravděpodobně prodáno", color: "#15803d" },
   removed: { text: "Zmizelo z nabídky", color: "#6b7280" },
 };
 // Stav ručně zapsané přesné adresy bytu (viz db.js exact_address): `known`
@@ -98,7 +100,7 @@ function matchesStatusFilter(e, filter) {
 // sale-triage.js (jen u zmizelých).
 function statusLabelFor(status, verdict, triage) {
   if (status === "removed" && verdict === "withdrawn") return { text: "Staženo (neprodáno)", color: STATUS_LABELS.removed.color };
-  if (status === "removed" && !verdict && triage?.wasReserved) return STATUS_LABELS.possible;
+  if (status === "removed" && !verdict && triage?.wasReserved) return isProbableSale(triage) ? STATUS_LABELS.probable : STATUS_LABELS.possible;
   return STATUS_LABELS[status] || { text: status, color: "#000" };
 }
 const EVENT_LABELS = {

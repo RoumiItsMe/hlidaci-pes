@@ -93,11 +93,27 @@ export function assessSale(members, events) {
   }
 
   const level = score >= 3 ? "likely" : score >= 1 ? "possible" : score === 0 ? "unclear" : "unlikely";
-  return { score, level, reasons, wasReserved, reservedAt };
+  const removedAt = lastRemoved != null ? new Date(lastRemoved).toISOString() : null;
+  return { score, level, reasons, wasReserved, reservedAt, removedAt };
 }
 
+// Kolik dní po zmizení bez návratu se "možný prodej" (zmizel po rezervaci)
+// bere jako "pravděpodobně prodáno" — po rezervaci se inzerát stahuje, a
+// když se do měsíce nevrátil, kupní smlouva se s velkou pravděpodobností
+// podepsala. Jen štítek v přehledu, verdikt dál dává katastr.
+export const PROBABLE_SALE_AFTER_DAYS = 30;
+
+/** Zmizel po rezervaci a nevrátil se aspoň PROBABLE_SALE_AFTER_DAYS dní? */
+export function isProbableSale(triage, now = Date.now()) {
+  if (!triage?.wasReserved || !triage.removedAt) return false;
+  return now - new Date(triage.removedAt).getTime() >= PROBABLE_SALE_AFTER_DAYS * DAY_MS;
+}
+
+// Popisky úrovní řadí FRONTU ke kontrole v katastru (jak moc stojí za
+// zkoušku), nejsou to stavy bytu — proto "Velká šance na prodej" a ne
+// "Pravděpodobně prodáno", což je štítek stavu (viz isProbableSale).
 export const SALE_LEVEL_LABELS = {
-  likely: "Pravděpodobně prodáno",
+  likely: "Velká šance na prodej",
   possible: "Možná prodáno",
   unclear: "Nejasné",
   unlikely: "Spíš staženo",
