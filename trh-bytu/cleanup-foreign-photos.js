@@ -72,7 +72,12 @@ async function idnesNonGallery(url) {
     const src = $(el).attr("src") || $(el).attr("data-src");
     if (src?.includes(IDNES_THUMBS) && !gallery.has(src)) other.add(src);
   });
-  return { gallery: [...gallery].filter(Boolean), other };
+  // Vlastní fotky bytu v plné velikosti jsou v odkazech galerie (viz detail/idnes.js).
+  const full = $(".b-gallery a[data-fancybox]")
+    .toArray()
+    .map((a) => (a.attribs.href || "").replace(/\?.*$/, ""))
+    .filter(Boolean);
+  return { gallery: full.length ? full : [...gallery].filter(Boolean), other };
 }
 
 function deletePhoto(p) {

@@ -52,15 +52,24 @@ export async function fetchIdnesDetail(url) {
     // Jen galerie bytu (`.b-gallery`). Stejné CDN cesty mají i fotka a logo
     // makléře (`.b-author`, `.b-sticky`) a karusel podobných nabídek
     // (`.grid-similar-offers`) — ty se dřív nastahovaly jako fotky bytu.
+    //
+    // Fotky v PLNÉ velikosti (cca 1333×1000, stovky kB) jsou v odkazech
+    // galerie pro lightbox (`a[data-fancybox]`) — `<img>` v galerii jsou jen
+    // miniatury (pár kB) a lazy načítané velké náhledy. Adresa se bere bez
+    // `?gt=r` (stejný soubor, stabilnější identita). Bez odkazů (změna
+    // stránky) se spadne na `<img>`, ať appka nezůstane úplně bez fotek.
+    const THUMBS = "sta-reality2.1gr.cz/sta/compile/thumbs/";
     const photoUrls = [];
     const seen = new Set();
-    $(".b-gallery img").each((_, el) => {
-      const src = $(el).attr("src") || $(el).attr("data-src");
-      if (!src || !src.includes("sta-reality2.1gr.cz/sta/compile/thumbs/")) return;
-      if (seen.has(src)) return;
+    const add = (src) => {
+      if (!src || !src.includes(THUMBS) || seen.has(src)) return;
       seen.add(src);
       photoUrls.push(src);
-    });
+    };
+    $(".b-gallery a[data-fancybox]").each((_, el) => add(($(el).attr("href") || "").replace(/\?.*$/, "")));
+    if (photoUrls.length === 0) {
+      $(".b-gallery img").each((_, el) => add($(el).attr("src") || $(el).attr("data-src")));
+    }
 
     return { description, photoUrls, reserved: false, sold, params: {}, geo: extractGeo(html) };
   } catch (err) {

@@ -244,6 +244,12 @@ upravit.
   `detail/` berou jen galerii bytu (RealityMIX podle ID nabídky v cestě, iDNES
   jen `.b-gallery`, Bazoš podle ID inzerátu). Starší záznamy s cizími fotkami
   vyčistil `node trh-bytu/cleanup-foreign-photos.js` (bez `--apply` jen vypíše).
+  **iDNES fotky jsou v plné velikosti** (cca 1333×1000, stovky kB): berou se z
+  odkazů galerie pro lightbox, ne z miniatur (pár kB), a je jich víc než dřív
+  (galerie má i fotky, které miniatury neukazovaly). Miniatury u inzerátů, které
+  byly ještě v nabídce, nahradil `node trh-bytu/upgrade-idnes-photos.js` (maže
+  miniatury až po úspěšném stažení všech plných fotek); u zmizelých inzerátů už
+  plné adresy nejdou získat, zůstávají miniatury.
 - `data/track.log` — log každého sběrného běhu.
 
 Nic z `data/` se necommituje do gitu (viz `.gitignore`) — je to čistě
