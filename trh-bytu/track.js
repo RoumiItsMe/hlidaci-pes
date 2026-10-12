@@ -31,6 +31,8 @@ import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDes
 import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
 import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
 import { downloadPhotos } from "./photos.js";
+import { geoFields, geocodePending } from "./geo.js";
+import { applyAutoAddresses } from "./auto-address.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
 import { fetchIdnesDetail } from "./detail/idnes.js";
@@ -99,6 +101,13 @@ async function notifyReservation(listing) {
   } catch (err) {
     log(`Telegram upozornění na rezervaci selhalo: ${err.message}`);
   }
+}
+
+// Zapíše do `fields` polohu z právě staženého detailu, pokud ji známý
+// inzerát ještě nemá (starší záznamy vznikly před sběrem polohy).
+function captureGeoIfMissing(existing, fields, detail) {
+  if (existing.lat != null || existing.geo_json != null) return;
+  Object.assign(fields, geoFields(detail.geo));
 }
 
 async function processSource(db, source, watch) {
@@ -217,6 +226,9 @@ async function processSource(db, source, watch) {
           ownFields.listed_at = detail.listedAt;
         }
       }
+      // Poloha od portálu (souřadnice, strukturovaná adresa) — musí se zachytit
+      // hned, ze stránky zmizelého inzerátu odejde, viz geo.js.
+      Object.assign(ownFields, geoFields(detail.geo));
       if (Object.keys(ownFields).length > 0) updateListingFields(db, listingId, ownFields);
       insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: priceCzk, occurred_at: now });
       createdThisRun.push({ id: listingId, disposition, area_m2: areaM2, description: detail.description, price_czk: priceCzk });
@@ -266,9 +278,14 @@ async function processSource(db, source, watch) {
     // se dřív než rezervace, protože štítek "Rezervováno" z karty při
     // prodeji zmizí a appka by to jinak zapsala jako zrušenou rezervaci.
     // Poslední cena inzerátu je prodejní cena (viz detail/idnes.js).
+    // Detail se u známých inzerátů čte (iDNES kvůli "prodáno", Sreality kvůli
+    // rezervaci) tak jako tak — když u nich ještě chybí poloha, doplní se z
+    // téhož stažení (viz captureGeoIfMissing).
     let soldNow = false;
     if (source.soldFromDetail && existing.status !== "sold") {
-      soldNow = (await source.fetchDetail(item.url)).sold === true;
+      const detail = await source.fetchDetail(item.url);
+      soldNow = detail.sold === true;
+      captureGeoIfMissing(existing, fields, detail);
       await sleep(250); // zdvořilost vůči portálu
     }
     if (soldNow) {
@@ -286,7 +303,9 @@ async function processSource(db, source, watch) {
     // portál to v tomhle běhu nesdělil → stav se nemění (viz reservation.js).
     let observedReserved = item.reserved;
     if (source.reservationFromDetail) {
-      observedReserved = (await source.fetchDetail(item.url)).reserved;
+      const detail = await source.fetchDetail(item.url);
+      observedReserved = detail.reserved;
+      captureGeoIfMissing(existing, fields, detail);
       await sleep(250); // zdvořilost vůči portálu
     }
     const reservation = reservationChange(fields.status ?? existing.status, observedReserved);
@@ -354,6 +373,16 @@ async function run() {
   // výsledku sběru výš (fail-soft, viz reservation-reminders.js).
   await processTelegramActions(db, log);
   await sendDueFollowups(db, log);
+
+  // Geokódování nových bodů a automatické doplnění adres (viz geo.js,
+  // auto-address.js). Fail-soft — výpadek geokodéru sběr dat nesmí shodit.
+  try {
+    await geocodePending(db, log);
+    const { assigned, revoked } = applyAutoAddresses(db, log);
+    if (assigned || revoked) log(`[geo] adresy: ${assigned} doplněno automaticky, ${revoked} odvoláno.`);
+  } catch (err) {
+    log(`[geo] zpracování polohy selhalo: ${err.message}`);
+  }
 
   db.close();
 }

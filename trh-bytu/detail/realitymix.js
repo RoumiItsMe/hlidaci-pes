@@ -14,6 +14,21 @@
 import * as cheerio from "cheerio";
 import { fetchText } from "../../lib/http.js";
 
+// Poloha (viz db.js lat/lon/geo_json): bod z atributů `lat`/`lon` na stránce
+// (nemají ho všechny inzeráty). Popis TADY JE (`.advert-description__text-
+// inner-inner`, JS ho jen přesouvá) — starší komentář výš tvrdí opak. Do
+// sloupce `description` se přesto NEUKLÁDÁ: ten rozhoduje o slučování bytů
+// napříč portály (group.js descriptionsMatch) a přidání RealityMIX textu by
+// mohlo rozbít seskupení, které dnes funguje. Text slouží jen k hledání
+// čísla domu (`geo.text`, viz geo-suggest.js).
+function extractGeo(html, $) {
+  const lat = html.match(/\blat="(\d+\.\d+)"/);
+  const lon = html.match(/\blon="(\d+\.\d+)"/);
+  const text = $(".advert-description__text-inner-inner").first().text().replace(/\s+/g, " ").trim().slice(0, 4000) || null;
+  if (!lat || !lon) return text ? { lat: null, lon: null, precision: null, street: null, houseNumber: null, text } : null;
+  return { lat: Number(lat[1]), lon: Number(lon[1]), precision: null, street: null, houseNumber: null, text };
+}
+
 export async function fetchRealitymixDetail(url) {
   try {
     const html = await fetchText(url);
@@ -30,9 +45,9 @@ export async function fetchRealitymixDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description: null, photoUrls, reserved: false, params: {} };
+    return { description: null, photoUrls, reserved: false, params: {}, geo: extractGeo(html, $) };
   } catch (err) {
     console.warn(`[detail/realitymix] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false, params: {} };
+    return { description: null, photoUrls: [], reserved: false, params: {}, geo: null };
   }
 }

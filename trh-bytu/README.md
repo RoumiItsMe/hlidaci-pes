@@ -298,6 +298,42 @@ je online, proto si u každé nabídky zapiš přesnou adresu hned, jak ji zjist
   pole vedle „Adresa / lokalita" z tabulky srovnání — to zůstává přibližným
   místem z inzerátu, které appka sama dohledává.
 
+### Automatické určení adresy z polohy
+
+Appka adresu zkouší určit sama, hned při prvním spatření inzerátu — ze stránky
+zmizelého inzerátu souřadnice i adresa zmizí (ověřeno), takže pozdější
+dohledání je mnohem těžší. Sbírá tři druhy důkazů (`geo-suggest.js`):
+
+| Důkaz | Odkud | Důvěra |
+|---|---|---|
+| **Adresa od portálu** | Sreality: ulice + číslo popisné, **jen když prodejce zadal adresu** (`entityType: address`; „jen ulice / část obce / obec" Sreality řekne taky a číslo pak není). Bezrealitky: ulice, číslo jen občas | silný |
+| **Text inzerátu** | „ulice Kubelkova 1759", „v ulici Dukelská 323" (jen s klíčovým slovem před ulicí, číslo před m²/Kč se nebere) | střední — sám nestačí |
+| **Bod** | souřadnice z iDNES, RealityMIX, Bezrealitky, Sreality → nejbližší dům z OpenStreetMap | silný jen při splnění všech pojistek níž |
+
+**Pojistky u bodu** (prodejce někdy zadá jen ulici — bod pak leží na silnici a
+sdílí ho víc bytů): bod se bere, jen když (1) leží **uvnitř obrysu budovy**
+s číslem domu, (2) **žádný jiný byt nemá bod do 8 m** (sdílený bod = ulice, nebo
+stejný dům, což z bodu nepoznáme — radši nic), (3) ulice z bodu se **objevuje v
+inzerátu**. Když si zdroje odporují (jiné číslo domu), nepřiřadí se nic.
+
+- **Vysoká jistota** → adresa se doplní sama a v přehledu je u ní „(auto)", v
+  detailu je vidět **důvod** (které zdroje se shodly). Střední jistota je jen
+  **návrh** s tlačítkem „Použít návrh". Když se nepřiřadilo nic, detail řekne
+  proč („bod sdílí další byt", „prodejce označil jen ulici"…).
+- **Jednotku appka nikdy nedoplňuje** — není v inzerátech ani v registrech.
+- Co zapsal uživatel (adresa, „neznámá"), automat nikdy nepřepíše. Adresu, kterou
+  doplnil sám, při každém běhu přepočítává a když přestane být jistá (např.
+  bod začal sdílet další byt), **odvolá**. Smazáš-li automatickou adresu,
+  nevrátí se; tlačítko **🔄 Zkusit znovu automaticky** automat znovu zapne.
+- Dva byty ve stejném domě (stejné číslo popisné od Sreality) dostanou oba tu
+  adresu — to je správně. Pojistka „sdílený bod" se týká jen adresy odvozené z
+  bodu.
+- Geokodér je veřejná služba OpenStreetMap: max. 1 dotaz/s, výsledek se ukládá
+  (`geocode_cache`), posílají se jen souřadnice veřejných inzerátů. Starší
+  nabídky, které jsou ještě online, doplní `node trh-bytu/backfill-geo.js`
+  (vypíše přehled — co se přiřadilo, co ne a proč). U **už zmizelých** inzerátů
+  souřadnice nejsou a doplnit se nedají.
+
 ## Kontrola v katastru — jestli se zmizelý byt prodal (`/kontrola`)
 
 Po zmizení inzerátu portál o prodeji nic neřekne (Sreality vrací 404, RealityMIX

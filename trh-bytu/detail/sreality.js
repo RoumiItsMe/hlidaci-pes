@@ -41,6 +41,34 @@ function extractListedAt(html) {
   return m ? parseCzechDateToIso(m[1]) : null;
 }
 
+// Poloha bytu (viz db.js lat/lon/geo_json). `locality` nese bod i
+// strukturovanou adresu a hlavně UDÁVÁ PŘESNOST: `entityType` je "address"
+// (adresní bod, `houseNumber` = číslo popisné), "street" (RK označila jen
+// ulici — bod je někde na ulici), "ward"/"municipality" (jen část obce/obec,
+// bod je střed). Zjištěno naostro na 40 inzerátech.
+function cleanText(v) {
+  if (v == null) return null;
+  const t = String(v).trim();
+  return t === "" || t === "-" ? null : t;
+}
+
+function extractGeo(est) {
+  const l = est.locality;
+  if (!l || typeof l.latitude !== "number" || typeof l.longitude !== "number") return null;
+  return {
+    lat: l.latitude,
+    lon: l.longitude,
+    precision: cleanText(l.entityType),
+    street: cleanText(l.street),
+    houseNumber: cleanText(l.houseNumber),
+    streetNumber: cleanText(l.streetNumber),
+    zip: cleanText(l.zip),
+    city: cleanText(l.city),
+    cityPart: cleanText(l.cityPart),
+    inaccuracyType: cleanText(l.inaccuracyType),
+  };
+}
+
 function extractNextData(html) {
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
   if (!m) return null;
@@ -105,17 +133,17 @@ export async function fetchSrealityDetail(url) {
     const dh = data?.props?.pageProps?.dehydratedState;
     const q = dh?.queries?.find((q) => q.queryKey?.[0] === "estate");
     const est = q?.state?.data;
-    if (!est) return { description: null, photoUrls: [], reserved: null, params: {}, listedAt: null };
+    if (!est) return { description: null, photoUrls: [], reserved: null, params: {}, listedAt: null, geo: null };
 
     const photoUrls = (est.images || [])
       .map((img) => (img.url?.startsWith("//") ? `https:${img.url}` : img.url))
       .filter(Boolean);
 
-    return { description: est.description || null, photoUrls, reserved: isReserved(est), params: extractParams(est), listedAt: extractListedAt(html) };
+    return { description: est.description || null, photoUrls, reserved: isReserved(est), params: extractParams(est), listedAt: extractListedAt(html), geo: extractGeo(est) };
   } catch (err) {
     console.warn(`[detail/sreality] ${url}: ${err.message}`);
     // `reserved: null` = "nevíme" (ne "není rezervováno") — chyba stažení
     // nesmí rezervaci u známého inzerátu zrušit, viz track.js.
-    return { description: null, photoUrls: [], reserved: null, params: {}, listedAt: null };
+    return { description: null, photoUrls: [], reserved: null, params: {}, listedAt: null, geo: null };
   }
 }

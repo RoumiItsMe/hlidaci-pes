@@ -22,6 +22,17 @@
 import * as cheerio from "cheerio";
 import { fetchText } from "../../lib/http.js";
 
+// Poloha bytu (viz db.js lat/lon/geo_json): iDNES dává jen bod
+// (`listing_lat`/`listing_lon` v datové vrstvě stránky), žádnou adresu —
+// a o přesnosti bodu nic neříká (RK může zadat jen ulici), proto se bod
+// u iDNES nikdy nebere naslepo, viz geo-suggest.js.
+function extractGeo(html) {
+  const lat = html.match(/"listing_lat"\s*:\s*(\d+\.\d+)/);
+  const lon = html.match(/"listing_lon"\s*:\s*(\d+\.\d+)/);
+  if (!lat || !lon) return null;
+  return { lat: Number(lat[1]), lon: Number(lon[1]), precision: null, street: null, houseNumber: null };
+}
+
 export async function fetchIdnesDetail(url) {
   try {
     const html = await fetchText(url);
@@ -48,11 +59,11 @@ export async function fetchIdnesDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description, photoUrls, reserved: false, sold, params: {} };
+    return { description, photoUrls, reserved: false, sold, params: {}, geo: extractGeo(html) };
   } catch (err) {
     console.warn(`[detail/idnes] ${url}: ${err.message}`);
     // `sold: null` = nezjištěno (selhalo stažení) — stav se nemění, stejná
     // zásada jako u `reserved`, viz reservation.js.
-    return { description: null, photoUrls: [], reserved: false, sold: null, params: {} };
+    return { description: null, photoUrls: [], reserved: false, sold: null, params: {}, geo: null };
   }
 }

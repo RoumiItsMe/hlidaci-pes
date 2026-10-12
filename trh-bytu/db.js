@@ -58,6 +58,14 @@ CREATE TABLE IF NOT EXISTS photos (
 );
 CREATE INDEX IF NOT EXISTS idx_photos_listing ON photos(listing_id);
 
+-- Mezipaměť zpětného geokódování (souřadnice -> nejbližší adresa, viz
+-- geo.js) — jeden dotaz na jeden bod, výsledek se nikdy nestahuje znovu.
+CREATE TABLE IF NOT EXISTS geocode_cache (
+  key TEXT PRIMARY KEY,          -- "lat,lon" na 6 desetinných míst
+  result_json TEXT,              -- odpověď geokodéru; NULL = dotaz proběhl, nic nenašel
+  fetched_at TEXT NOT NULL
+);
+
 -- Drobný stav appky (zatím: kdy uživatel naposledy přečetl upozornění)
 CREATE TABLE IF NOT EXISTS app_state (
   key TEXT PRIMARY KEY,
@@ -136,6 +144,19 @@ const COLUMN_MIGRATIONS = [
   { table: "listings", column: "exact_address", ddl: "TEXT" },
   { table: "listings", column: "unit_number", ddl: "TEXT" },
   { table: "listings", column: "address_unknown", ddl: "INTEGER" },
+  // Poloha z portálu — appka ji musí zachytit, dokud je inzerát online:
+  // souřadnice (a strukturovaná adresa u Sreality/Bezrealitky) ze stránky
+  // zmizelého inzerátu zmizí spolu s ním. `lat`/`lon`: bod bytu od portálu
+  // (u části inzerátů jen střed ulice/obce, viz geo-suggest.js); `geo_json`:
+  // co portál o poloze říká strukturovaně ({ precision, street, houseNumber,
+  // streetNumber, zip, ... }). Per inzerát (každý portál má vlastní).
+  { table: "listings", column: "lat", ddl: "REAL" },
+  { table: "listings", column: "lon", ddl: "REAL" },
+  { table: "listings", column: "geo_json", ddl: "TEXT" },
+  // 1 = `exact_address` doplnila appka sama z polohy (ne uživatel) — viz
+  // auto-address.js. Ruční uložení v detailu to vždy vynuluje; automat
+  // přepisuje/maže jen adresy, které sám zapsal.
+  { table: "listings", column: "address_auto", ddl: "INTEGER" },
 ];
 
 function runMigrations(db) {

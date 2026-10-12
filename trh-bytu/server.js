@@ -9,6 +9,7 @@ import path from "node:path";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
+import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses } from "./auto-address.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
@@ -40,7 +41,15 @@ function addressInfo(members) {
   const exact = pickOwnValue(members, "exact_address");
   const unit = pickOwnValue(members, "unit_number");
   const unknown = members.some((m) => m.address_unknown);
-  return { exact, unit, state: exact || unit ? "known" : unknown ? "unknown" : "missing" };
+  return {
+    exact,
+    unit,
+    state: exact || unit ? "known" : unknown ? "unknown" : "missing",
+    // Adresu doplnila appka sama z polohy (viz auto-address.js), ne uživatel.
+    auto: Boolean(exact) && members.some((m) => m.address_auto === 1),
+    // Uživatel automatickou adresu smazal — automat ji znovu nedoplňuje.
+    autoOff: members.some((m) => m.address_auto === -1),
+  };
 }
 
 // Štítek stavu bytu. Zmizelý byt, u kterého uživatel v katastru ověřil, že
@@ -556,7 +565,7 @@ function renderTable(db, filters) {
       // doplnit už ji nejde (řeší fronta /kontrola).
       const addressChip =
         ai.state === "known"
-          ? `<span class="addr-chip">📍 ${esc([ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", "))}</span>`
+          ? `<span class="addr-chip${ai.auto ? " addr-chip--auto" : ""}" ${ai.auto ? 'title="Adresu doplnila appka sama z polohy v inzerátu — ověř ji a doplň jednotku"' : ""}>📍 ${esc([ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", "))}${ai.auto ? " (auto)" : ""}</span>`
           : ai.state === "unknown"
           ? `<span class="addr-chip addr-chip--unknown">📍 adresa neznámá</span>`
           : status === "active" || status === "reserved"
@@ -844,7 +853,42 @@ function renderDetail(db, id) {
 
   const address = bestAddress(members) || "";
   const ai = addressInfo(members);
-  const addressStatusText = ai.state === "known" ? "✓ Vyplněno" : ai.state === "unknown" ? "Označeno jako neznámá." : "⚠ Zatím nevyplněno.";
+  // Vyhodnocení polohy (viz geo-suggest.js) — ukazuje se vždy, aby bylo
+  // vidět, odkud se automatická adresa vzala, nebo proč se nepřiřadila.
+  const actx = buildAddressContext(db, allListings);
+  const resolution = resolveForGroup(actx, actx.groups.find((g) => g.members.some((m) => m.id === id)));
+  const addressStatusText =
+    ai.state === "known"
+      ? ai.auto
+        ? "✓ Doplněno automaticky — zkontroluj to a doplň jednotku."
+        : "✓ Vyplněno."
+      : ai.state === "unknown"
+      ? "Označeno jako neznámá."
+      : "⚠ Zatím nevyplněno.";
+  // Odkazy na bod z portálu na mapě — k ručnímu ověření (okno, fasáda…).
+  const mapLinks = members
+    .filter((m) => typeof m.lat === "number" && typeof m.lon === "number")
+    .map((m) => `<a href="https://mapy.cz/zakladni?x=${m.lon}&y=${m.lat}&z=19" target="_blank" rel="noopener">${esc(SOURCE_LABELS[m.source] || m.source)} ↗</a>`)
+    .join(" · ");
+  const encId = encodeURIComponent(rep.id);
+  const suggestionHtml =
+    ai.state === "missing" && resolution.level === "medium"
+      ? `<div class="address-hint"><strong>Návrh:</strong> ${esc(resolution.text)} <span class="muted">(${esc(describeEvidence(resolution))} — nedostatečně jisté, aby se doplnilo samo)</span>
+          <form class="ajax-form address-suggest" method="post" action="/byt/${encId}/adresa">
+            <input type="hidden" name="exact_address" value="${esc(resolution.text)}"><input type="hidden" name="unit_number" value="${esc(ai.unit || "")}">
+            <button type="submit" name="mode" value="save">Použít návrh</button>
+          </form></div>`
+      : "";
+  const evidenceHtml =
+    ai.auto && resolution.level === "high"
+      ? `<p class="muted">Důvod: ${esc(describeEvidence(resolution))}.</p>`
+      : ai.state === "missing" && resolution.reasons.length
+      ? `<p class="muted">Automaticky nepřiřazeno: ${resolution.reasons.map(esc).join(" ")}</p>`
+      : "";
+  const retryHtml =
+    ai.state === "unknown" || ai.autoOff
+      ? `<form class="ajax-form address-retry" method="post" action="/byt/${encId}/adresa"><button type="submit" name="mode" value="auto" class="btn-secondary">🔄 Zkusit znovu automaticky</button></form>`
+      : "";
   const latest = latestChange(events);
   const updates = updatesChips(earliestListedAt(members), latest, changeSources(members, events, latest));
 
@@ -875,6 +919,10 @@ function renderDetail(db, id) {
         <button type="submit" name="mode" value="unknown" class="btn-secondary">Adresa neznámá</button>
       </div>
     </form>
+    ${suggestionHtml}
+    ${evidenceHtml}
+    ${retryHtml}
+    ${mapLinks ? `<p class="muted">Bod z portálu na mapě: ${mapLinks}</p>` : ""}
     <div class="row-updates">${updates}</div>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
     ${paramRows ? `<h2>Parametry</h2><table class="params">${paramRows}</table>` : ""}
@@ -1451,14 +1499,27 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(adresaMatch[1]);
     const fields = await parseBody(req);
     const mode = fields.mode;
-    const group = mode === "save" || mode === "unknown" ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
+    const group = mode === "save" || mode === "unknown" || mode === "auto" ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
     if (group) {
       const clean = (v, max) => (v || "").replace(/\s+/g, " ").trim().slice(0, max) || null;
-      const updates =
-        mode === "unknown"
-          ? { exact_address: null, unit_number: null, address_unknown: 1 }
-          : { exact_address: clean(fields.exact_address, 200), unit_number: clean(fields.unit_number, 60), address_unknown: 0 };
+      const wasAuto = group.members.some((m) => m.address_auto === 1);
+      let updates;
+      if (mode === "unknown") {
+        updates = { exact_address: null, unit_number: null, address_unknown: 1, address_auto: 0 };
+      } else if (mode === "auto") {
+        // "Zkusit znovu automaticky" — zruší ruční stav (neznámá / smazáno) a
+        // nechá automat adresu znovu vyhodnotit.
+        updates = { exact_address: null, address_unknown: null, address_auto: null };
+      } else {
+        const exact = clean(fields.exact_address, 200);
+        const unit = clean(fields.unit_number, 60);
+        // Ruční uložení vždy bere adresu z rukou automatu (address_auto = 0).
+        // Smazání adresy, kterou doplnil automat, ho navíc vypne (-1) —
+        // jinak by ji při příštím běhu doplnil znovu.
+        updates = { exact_address: exact, unit_number: unit, address_unknown: 0, address_auto: !exact && !unit && wasAuto ? -1 : 0 };
+      }
       for (const m of group.members) updateListingFields(db, m.id, updates);
+      if (mode === "auto") applyAutoAddresses(db, () => {});
     }
     res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
     return res.end();

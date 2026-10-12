@@ -87,17 +87,37 @@ function extractParams(adv) {
   };
 }
 
+// Poloha (viz db.js lat/lon/geo_json): `gps` (bod) + ulice, PSČ a `ruianId`.
+// Číslo domu (`houseNumber`) Bezrealitky u většiny inzerátů schovávají
+// (`null`), takže je ulice + bod; číslo, když je, se bere.
+function extractGeo(adv) {
+  const g = adv.gps;
+  if (!g || typeof g.lat !== "number" || typeof g.lng !== "number") return null;
+  const clean = (v) => (v == null || String(v).trim() === "" ? null : String(v).trim());
+  return {
+    lat: g.lat,
+    lon: g.lng,
+    precision: null,
+    street: clean(adv.street),
+    houseNumber: clean(adv.houseNumber),
+    streetNumber: null,
+    zip: clean(adv.zip),
+    city: clean(adv.city),
+    ruianId: clean(adv.ruianId),
+  };
+}
+
 export async function fetchBezrealitkyDetail(url) {
   try {
     const html = await fetchText(url);
     const data = extractNextData(html);
     const adv = data?.props?.pageProps?.origAdvert;
-    if (!adv) return { description: null, photoUrls: [], reserved: false, params: {} };
+    if (!adv) return { description: null, photoUrls: [], reserved: false, params: {}, geo: null };
 
     const photoUrls = (adv.publicImages || []).map((img) => img.url).filter(Boolean);
-    return { description: adv.description || null, photoUrls, reserved: adv.reserved === true, params: extractParams(adv) };
+    return { description: adv.description || null, photoUrls, reserved: adv.reserved === true, params: extractParams(adv), geo: extractGeo(adv) };
   } catch (err) {
     console.warn(`[detail/bezrealitky] ${url}: ${err.message}`);
-    return { description: null, photoUrls: [], reserved: false, params: {} };
+    return { description: null, photoUrls: [], reserved: false, params: {}, geo: null };
   }
 }
