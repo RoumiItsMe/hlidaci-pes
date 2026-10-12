@@ -11,9 +11,9 @@
       "consecutiveFailures": 0
     },
     "byty:idnes": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "byty:realitymix": {
       "failing": false,
@@ -458,6 +458,10 @@
     {
       "id": "6ac92e144079bebefc018f5d",
       "price": 2350000
+    },
+    {
+      "id": "6acce8f62e0a226c2b041877",
+      "price": 19200
     }
   ],
   "byty:realitymix": [
@@ -2782,7 +2786,8 @@
     "MULA1003U3N9-0",
     "MULA1003V7TA-0",
     "MULA1003VDL8-0",
-    "MULA1003VYUW-0"
+    "MULA1003VYUW-0",
+    "MULA1003WEKT-0"
   ],
   "board:kraliky": [
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=318505",
@@ -3204,16 +3209,16 @@
     "OBAS1000A918-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-12T14:17:35.127Z",
-    "board:letohrad": "2026-10-12T14:17:35.127Z",
-    "board:zamberk": "2026-10-12T14:17:35.127Z",
-    "board:ceska-trebova": "2026-10-12T14:17:35.127Z",
-    "board:lanskroun": "2026-10-12T14:17:35.127Z",
-    "board:kraliky": "2026-10-12T14:17:35.127Z",
-    "board:vysoke-myto": "2026-10-12T14:17:35.127Z",
-    "board:lukova": "2026-10-12T14:17:35.127Z",
-    "board:tatenice": "2026-10-12T14:17:35.127Z",
-    "board:anenska-studanka": "2026-10-12T14:17:35.127Z",
+    "board:usti-nad-orlici": "2026-10-12T14:32:53.033Z",
+    "board:letohrad": "2026-10-12T14:32:53.033Z",
+    "board:zamberk": "2026-10-12T14:32:53.033Z",
+    "board:ceska-trebova": "2026-10-12T14:32:53.033Z",
+    "board:lanskroun": "2026-10-12T14:32:53.033Z",
+    "board:kraliky": "2026-10-12T14:32:53.033Z",
+    "board:vysoke-myto": "2026-10-12T14:32:53.033Z",
+    "board:lukova": "2026-10-12T14:32:53.033Z",
+    "board:tatenice": "2026-10-12T14:32:53.033Z",
+    "board:anenska-studanka": "2026-10-12T14:32:53.033Z",
     "board:okres-usti-nad-orlici": "2026-10-12T13:34:51.356Z"
   },
   "board:okres-usti-nad-orlici": [
