@@ -238,7 +238,12 @@ upravit.
 ## Kde jsou data
 
 - `data/trh-bytu.sqlite` — databáze (inzeráty, časová osa událostí, fotky).
-- `data/photos/<zdroj>_<id>/` — stažené fotky, max. 10 na inzerát.
+- `data/photos/<zdroj>_<id>/` — stažené fotky, max. 10 na inzerát. Jen fotky
+  samotného bytu: detail RealityMIX, iDNES i Bazoše má vedle galerie i fotku
+  makléře, logo realitky a „podobné nabídky" (jiné byty), takže parsery v
+  `detail/` berou jen galerii bytu (RealityMIX podle ID nabídky v cestě, iDNES
+  jen `.b-gallery`, Bazoš podle ID inzerátu). Starší záznamy s cizími fotkami
+  vyčistil `node trh-bytu/cleanup-foreign-photos.js` (bez `--apply` jen vypíše).
 - `data/track.log` — log každého sběrného běhu.
 
 Nic z `data/` se necommituje do gitu (viz `.gitignore`) — je to čistě
@@ -249,8 +254,11 @@ lokální evidence.
 Appka nikdy nic nemaže. Když byt zmizí z nabídky (pravděpodobně prodáno/
 rezervováno/staženo), zapíše se jen `status = "removed"` + datum — popis,
 fotky, parametry a celá časová osa zůstávají v databázi navždy, přesně tak,
-jak byly naposledy zaznamenané. V celém kódu appky (`track.js`, `server.js`,
-`db.js`) není jediný `DELETE` nad tabulkami `listings`/`photos`/`events`.
+jak byly naposledy zaznamenané. V běžném kódu appky (`track.js`, `server.js`,
+`db.js`) není jediný `DELETE` nad tabulkami `listings`/`photos`/`events`;
+jedinou výjimkou je jednorázový úklid cizích fotek (`cleanup-foreign-photos.js`,
+viz „Kde jsou data"), který maže jen fotky, o kterých je jisté, že nejsou z
+galerie bytu.
 
 ## Kdy appka řekne „zmizelo z nabídky"
 

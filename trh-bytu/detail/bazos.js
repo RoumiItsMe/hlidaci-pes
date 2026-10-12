@@ -34,15 +34,28 @@ export async function fetchBazosDetail(url) {
     // inzeráty).
     const listedAt = parseCzechDateToIso($(".inzeratydetnadpis .velikost10").first().text());
 
-    const photoUrls = [];
-    const seen = new Set();
-    $("img").each((_, el) => {
-      const src = $(el).attr("src");
-      if (!src || !/bazos\.cz\/img\/\d+t\//.test(src)) return;
-      if (seen.has(src)) return;
-      seen.add(src);
-      photoUrls.push(src);
-    });
+    // Fotky inzerátu mají v cestě jeho ID (`/img/<n>t/<xxx>/<id inzerátu>.jpg`);
+    // blok "podobné inzeráty" na stejné stránce má stejný tvar cesty, ale
+    // jiné ID — bez téhle kontroly se u inzerátu s pár fotkami dostahovaly
+    // fotky cizích bytů. Miniatury (`<n>t`) jsou jen u inzerátu s víc
+    // fotkami; inzerát s jedinou fotkou má na stránce jen velkou hlavní
+    // (`/img/1/…`), která se v tom případě bere (dřív by neměl žádnou vlastní).
+    const adId = url.match(/\/inzerat\/(\d+)\//)?.[1];
+    const collect = (pattern) => {
+      const urls = [];
+      const seen = new Set();
+      $("img").each((_, el) => {
+        const src = $(el).attr("src");
+        if (!src || !pattern.test(src)) return;
+        if (adId && !src.includes(`/${adId}.jpg`)) return;
+        if (seen.has(src)) return;
+        seen.add(src);
+        urls.push(src);
+      });
+      return urls;
+    };
+    let photoUrls = collect(/bazos\.cz\/img\/\d+t\//);
+    if (photoUrls.length === 0) photoUrls = collect(/bazos\.cz\/img\/\d+\//);
 
     return { description, photoUrls, reserved: false, params: {}, zip, listedAt };
   } catch (err) {

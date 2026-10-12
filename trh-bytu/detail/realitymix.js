@@ -34,11 +34,18 @@ export async function fetchRealitymixDetail(url) {
     const html = await fetchText(url);
     const $ = cheerio.load(html);
 
+    // Na stránce je i fotka makléře, logo realitky a karusel "podobné
+    // nabídky" (fotky ÚPLNĚ JINÝCH bytů, i od jiných realitek) — bez
+    // filtrování se to nastahovalo jako fotky tohohle bytu. Vlastní fotky
+    // nabídky mají v cestě její ID a `nab_` (`/i/<firma>/<id nabídky>/nab_*`);
+    // makléř je `/makleri/`, logo `/logo/`, cizí nabídka má jiné ID.
+    const offerId = url.match(/-(\d+)\.html/)?.[1];
+    const ownPhoto = offerId ? new RegExp(`st\\.realitymix\\.cz/i/\\d+/${offerId}/nab_`) : null;
     const photoUrls = [];
     const seen = new Set();
     $("img").each((_, el) => {
       const src = $(el).attr("src") || $(el).attr("data-src");
-      if (!src || !src.includes("st.realitymix.cz/i/")) return;
+      if (!src || !ownPhoto?.test(src)) return;
       if (src.includes("_nahled")) return;
       if (seen.has(src)) return;
       seen.add(src);

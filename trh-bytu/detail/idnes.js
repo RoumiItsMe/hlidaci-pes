@@ -49,9 +49,12 @@ export async function fetchIdnesDetail(url) {
       description = description.slice(title.length).trim();
     }
 
+    // Jen galerie bytu (`.b-gallery`). Stejné CDN cesty mají i fotka a logo
+    // makléře (`.b-author`, `.b-sticky`) a karusel podobných nabídek
+    // (`.grid-similar-offers`) — ty se dřív nastahovaly jako fotky bytu.
     const photoUrls = [];
     const seen = new Set();
-    $("img").each((_, el) => {
+    $(".b-gallery img").each((_, el) => {
       const src = $(el).attr("src") || $(el).attr("data-src");
       if (!src || !src.includes("sta-reality2.1gr.cz/sta/compile/thumbs/")) return;
       if (seen.has(src)) return;
