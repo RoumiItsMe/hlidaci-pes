@@ -9,7 +9,8 @@ import path from "node:path";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
-import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses } from "./auto-address.js";
+import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
+import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
@@ -856,7 +857,14 @@ function renderDetail(db, id) {
   // Vyhodnocení polohy (viz geo-suggest.js) — ukazuje se vždy, aby bylo
   // vidět, odkud se automatická adresa vzala, nebo proč se nepřiřadila.
   const actx = buildAddressContext(db, allListings);
-  const resolution = resolveForGroup(actx, actx.groups.find((g) => g.members.some((m) => m.id === id)));
+  const agroup = actx.groups.find((g) => g.members.some((m) => m.id === id));
+  const resolution = resolveForGroup(actx, agroup);
+  // Katastrální údaje z RÚIAN (k.ú. + dům) — to, co je v katastru potřeba
+  // vedle čísla popisného.
+  const kn = knInfoForGroup(actx, agroup, resolution);
+  const knHtml = kn
+    ? `<p class="muted"><strong>Katastr:</strong> ${esc(describeKn(kn))}${kn.via === "bod" && ai.state !== "known" ? " <span>(podle bodu z inzerátu, adresa není potvrzená)</span>" : ""}</p>`
+    : "";
   const addressStatusText =
     ai.state === "known"
       ? ai.auto
@@ -921,6 +929,7 @@ function renderDetail(db, id) {
     </form>
     ${suggestionHtml}
     ${evidenceHtml}
+    ${knHtml}
     ${retryHtml}
     ${mapLinks ? `<p class="muted">Bod z portálu na mapě: ${mapLinks}</p>` : ""}
     <div class="row-updates">${updates}</div>
@@ -1321,6 +1330,7 @@ const KN_RECHECK_DAYS = 7;
 
 function renderKnQueue(db) {
   const entries = computeEntries(db).filter((e) => !e.hidden);
+  const knActx = buildAddressContext(db, db.prepare("SELECT * FROM listings").all());
   const checkedRecently = (e) => e.knCheckedAt && Date.now() - new Date(e.knCheckedAt).getTime() < KN_RECHECK_DAYS * 24 * 60 * 60 * 1000;
   const open = entries
     .filter((e) => e.status === "removed" && !e.saleVerdict)
@@ -1351,7 +1361,14 @@ function renderKnQueue(db) {
         ai.state === "known"
           ? [ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", ")
           : `${e.address || e.city || ""} (${ai.state === "unknown" ? "přesná adresa neznámá" : "jen přibližně — přesná adresa nebyla zapsána"})`;
-      const lookup = [place, specs].filter(Boolean).join(" — ");
+      // Katastrální území (a údaje o domě) z RÚIAN — v katastru se byt hledá
+      // podle k.ú. + čísla popisného, ne podle názvu města.
+      const ag = knActx.groups.find((g) => g.members.some((m) => m.id === e.rep.id));
+      const kn = ag ? knInfoForGroup(knActx, ag, resolveForGroup(knActx, ag)) : null;
+      const lookup = [place, kn ? `k.ú. ${kn.ku.nazev} [${kn.ku.kod}]` : null, specs].filter(Boolean).join(" — ");
+      const houseFacts = kn?.building
+        ? ` <span class="muted">(dům: č.p. ${esc(kn.building.cp.join(", "))}${kn.building.floors ? `, ${kn.building.floors} podlaží` : ""}${kn.building.flats ? `, ${kn.building.flats} bytů` : ""})</span>`
+        : "";
       const t = e.triage;
       const checked = e.knCheckedAt ? ` · naposledy zkontrolováno ${esc(formatDateOnly(e.knCheckedAt))}` : "";
       return `<div class="kn-item${checkedRecently(e) ? " kn-item--checked" : ""}">
@@ -1359,7 +1376,7 @@ function renderKnQueue(db) {
           <a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a>
           <span class="kn-level kn-level--${t.level}">${esc(SALE_LEVEL_LABELS[t.level])}</span>
         </div>
-        <div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}</div>
+        <div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}${houseFacts}</div>
         <div class="muted">Zmizel ${esc(formatDateOnly(e.removedAt))} · ${esc(t.reasons.join(" · ") || "bez zvláštního signálu")}${checked}</div>
         ${actionForm(
           encId,
@@ -1520,6 +1537,21 @@ const server = createServer(async (req, res) => {
       }
       for (const m of group.members) updateListingFields(db, m.id, updates);
       if (mode === "auto") applyAutoAddresses(db, () => {});
+      // Právě zapsanou adresu hned ověřit v RÚIAN (k.ú. + dům), ať se údaje
+      // v detailu ukážou ihned; při výpadku služby je doplní příští sběr.
+      if (mode === "save" && updates.exact_address) {
+        const parsed = parseExactAddress(updates.exact_address);
+        if (parsed) {
+          const key = addressKey(parsed.street, parsed.number, parsed.city);
+          if (!db.prepare("SELECT 1 FROM ruian_cache WHERE key = ?").get(key)) {
+            try {
+              saveRuian(db, key, await ruianLookupAddress(parsed.street, parsed.number, parsed.city));
+            } catch {
+              // Služba nedostupná — doplní se při příštím sběru (ruianPending).
+            }
+          }
+        }
+      }
     }
     res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
     return res.end();

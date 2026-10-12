@@ -32,6 +32,7 @@ import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from 
 import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
 import { downloadPhotos } from "./photos.js";
 import { geoFields, geocodePending } from "./geo.js";
+import { ruianPending } from "./ruian.js";
 import { applyAutoAddresses } from "./auto-address.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
@@ -378,6 +379,7 @@ async function run() {
   // auto-address.js). Fail-soft — výpadek geokodéru sběr dat nesmí shodit.
   try {
     await geocodePending(db, log);
+    await ruianPending(db, log); // oficiální ověření budovy + katastrální území, viz ruian.js
     const { assigned, revoked } = applyAutoAddresses(db, log);
     if (assigned || revoked) log(`[geo] adresy: ${assigned} doplněno automaticky, ${revoked} odvoláno.`);
   } catch (err) {

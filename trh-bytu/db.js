@@ -66,6 +66,14 @@ CREATE TABLE IF NOT EXISTS geocode_cache (
   fetched_at TEXT NOT NULL
 );
 
+-- Mezipaměť dotazů do RÚIAN (viz ruian.js) — katastrální území, budova a
+-- adresní místa k bodu nebo k adrese. Klíč "pt:lat,lon" nebo "adr:ulice|číslo|obec".
+CREATE TABLE IF NOT EXISTS ruian_cache (
+  key TEXT PRIMARY KEY,
+  result_json TEXT,              -- NULL = dotaz proběhl a nic nenašel
+  fetched_at TEXT NOT NULL
+);
+
 -- Drobný stav appky (zatím: kdy uživatel naposledy přečetl upozornění)
 CREATE TABLE IF NOT EXISTS app_state (
   key TEXT PRIMARY KEY,

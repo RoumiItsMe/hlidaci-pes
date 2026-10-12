@@ -308,13 +308,29 @@ dohledání je mnohem těžší. Sbírá tři druhy důkazů (`geo-suggest.js`):
 |---|---|---|
 | **Adresa od portálu** | Sreality: ulice + číslo popisné, **jen když prodejce zadal adresu** (`entityType: address`; „jen ulice / část obce / obec" Sreality řekne taky a číslo pak není). Bezrealitky: ulice, číslo jen občas | silný |
 | **Text inzerátu** | „ulice Kubelkova 1759", „v ulici Dukelská 323" (jen s klíčovým slovem před ulicí, číslo před m²/Kč se nebere) | střední — sám nestačí |
-| **Bod** | souřadnice z iDNES, RealityMIX, Bezrealitky, Sreality → nejbližší dům z OpenStreetMap | silný jen při splnění všech pojistek níž |
+| **Bod** | souřadnice z iDNES, RealityMIX, Bezrealitky, Sreality → nejbližší dům z OpenStreetMap, ověřený v RÚIAN | silný jen při splnění všech pojistek níž |
 
 **Pojistky u bodu** (prodejce někdy zadá jen ulici — bod pak leží na silnici a
-sdílí ho víc bytů): bod se bere, jen když (1) leží **uvnitř obrysu budovy**
-s číslem domu, (2) **žádný jiný byt nemá bod do 8 m** (sdílený bod = ulice, nebo
-stejný dům, což z bodu nepoznáme — radši nic), (3) ulice z bodu se **objevuje v
-inzerátu**. Když si zdroje odporují (jiné číslo domu), nepřiřadí se nic.
+sdílí ho víc bytů): bod se bere, jen když (1) leží **uvnitř obrysu budovy podle
+RÚIAN** (oficiální registr ČÚZK, `ruian.js`), (2) **žádný jiný byt nemá bod do 8 m**
+(sdílený bod = ulice, nebo stejný dům, což z bodu nepoznáme — radši nic), (3)
+ulice z bodu se **objevuje v inzerátu**, (4) číslo domu z mapy se **shoduje s
+čísly popisnými té budovy v RÚIAN** a (5) dům **nemá víc čísel popisných**.
+Poslední bod je důležitý: panelový blok má často víc vchodů s vlastním číslem
+(např. Jilemnického 295–299 je jeden dům) a bod ukáže dům, ne vchod — takový
+byt z bodu dostane jen **návrh**, adresu doplní až další důkaz (číslo od
+Sreality, text inzerátu). Když si zdroje odporují (jiné číslo domu, číslo od
+Sreality neodpovídá budově v bodě), nepřiřadí se nic.
+
+### Katastrální území a údaje o domě (RÚIAN)
+
+V katastru se byt nehledá podle města, ale podle **katastrálního území (k.ú.) +
+čísla popisného** — a k.ú. se od města často liší (U Stadionu v České Třebové
+leží v k.ú. *Parník*, Dukelská v Ústí v k.ú. *Hylváty*). Appka ho proto k
+bytu dohledá v RÚIAN (kód i název) spolu s údaji o domě: všechna čísla
+popisná, počet podlaží a bytů. Bere se z adresy bytu, jinak z bodu v inzerátu.
+Ukazuje se v detailu pod adresou a ve frontě **🏛️ Katastr** v řádku „Do
+katastru". Adresu zapsanou ručně appka ověří v RÚIAN hned po uložení.
 
 - **Vysoká jistota** → adresa se doplní sama a v přehledu je u ní „(auto)", v
   detailu je vidět **důvod** (které zdroje se shodly). Střední jistota je jen

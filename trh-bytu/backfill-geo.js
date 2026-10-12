@@ -12,7 +12,8 @@
 
 import { openDb } from "./db.js";
 import { geoFields, geocodePending } from "./geo.js";
-import { applyAutoAddresses, buildAddressContext, resolveForGroup, describeEvidence } from "./auto-address.js";
+import { ruianPending } from "./ruian.js";
+import { applyAutoAddresses, buildAddressContext, resolveForGroup, describeEvidence, knInfoForGroup, describeKn } from "./auto-address.js";
 import { groupListings } from "./group.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
@@ -53,6 +54,10 @@ console.log(`Poloha z detailů: zkoumáno ${rows.length} nabídek, zachycena u $
 const geo = await geocodePending(db, log, { limit: 300 });
 console.log(`Geokódování: ${geo.done} nových bodů, ${geo.pending} zbývá.`);
 
+// --- 2b) oficiální ověření v RÚIAN (budova v bodě, katastrální území) ---
+const ru = await ruianPending(db, log, { limit: 400 });
+console.log(`RÚIAN: ${ru.done} nových dotazů, ${ru.pending} zbývá.`);
+
 // --- 3) automatické doplnění ---
 const applied = applyAutoAddresses(db, log);
 console.log(`Adresy: ${applied.assigned} doplněno automaticky, ${applied.revoked} odvoláno.`);
@@ -69,7 +74,8 @@ for (const g of groups) {
   counts[res.level] = (counts[res.level] || 0) + 1;
   const rep = g.members[0];
   const head = `${res.level.padEnd(8)} ${(rep.address || "").slice(0, 30).padEnd(30)}`;
-  lines.push(`${head} ${res.text ? "→ " + res.text + "  [" + describeEvidence(res) + "]" : res.reasons.slice(0, 2).join(" | ")}`);
+  const kn = knInfoForGroup(actx, g, res);
+  lines.push(`${head} ${res.text ? "→ " + res.text + "  [" + describeEvidence(res) + "]" : res.reasons.slice(0, 2).join(" | ")}${kn ? "\n         " + describeKn(kn) : ""}`);
 }
 console.log(`\nVýsledek u ${groups.length} bytů, které jsou ještě online:`, counts);
 console.log(lines.sort().join("\n"));

@@ -12,10 +12,11 @@
 //    v registrech není.
 
 import { watches } from "../config.js";
-import { groupListings, bestAddress } from "./group.js";
+import { groupListings, bestAddress, pickOwnValue } from "./group.js";
 import { extractCity } from "./parse.js";
 import { updateListingFields } from "./db.js";
 import { geoKey, loadGeocodeCache } from "./geo.js";
+import { loadRuianCache, pointKey, addressKey, parseExactAddress } from "./ruian.js";
 import { resolveAddress, distanceMeters } from "./geo-suggest.js";
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
@@ -28,7 +29,49 @@ export function buildAddressContext(db, listings, groups = groupListings(listing
   const pins = listings
     .filter((m) => typeof m.lat === "number" && typeof m.lon === "number")
     .map((m) => ({ gid: groupIndex.get(m.id), lat: m.lat, lon: m.lon }));
-  return { groups, pins, cache: loadGeocodeCache(db) };
+  return { groups, pins, cache: loadGeocodeCache(db), ruianCache: loadRuianCache(db) };
+}
+
+/**
+ * Katastrální údaje bytu z RÚIAN (viz ruian.js): katastrální území (kód +
+ * název — potřeba v katastru vedle čísla popisného) a údaje o domě (všechna
+ * čísla popisná, počet bytů a podlaží). Bere se z adresy bytu (zapsané nebo
+ * vyhodnocené), jinak z bodu v inzerátu. `null`, když zatím nic nevíme.
+ */
+export function knInfoForGroup(actx, group, resolution) {
+  const found = [];
+  const parsed = parseExactAddress(pickOwnValue(group.members, "exact_address") || resolution?.text);
+  if (parsed) {
+    const r = actx.ruianCache.get(addressKey(parsed.street, parsed.number, parsed.city));
+    if (r?.ku) found.push({ via: "adresa", r });
+  }
+  for (const m of group.members) {
+    if (typeof m.lat !== "number" || typeof m.lon !== "number") continue;
+    const r = actx.ruianCache.get(pointKey(m.lat, m.lon));
+    if (r?.ku) found.push({ via: "bod", r });
+  }
+  const best = found.find((f) => f.r.building && !f.r.ambiguous) || found[0];
+  if (!best) return null;
+  const b = best.r.building;
+  return {
+    ku: best.r.ku,
+    via: best.via,
+    building: b ? { cp: b.cp, flats: b.flats, floors: b.floors, completed: b.completed } : null,
+  };
+}
+
+/** "k.ú. Česká Třebová [621757] · dům: č.p. 1736, 1737 · 4 podlaží · 12 bytů" */
+export function describeKn(kn) {
+  if (!kn) return "";
+  const parts = [`k.ú. ${kn.ku.nazev} [${kn.ku.kod}]`];
+  if (kn.building) {
+    parts.push(`dům: č.p. ${kn.building.cp.join(", ")}`);
+    if (kn.building.floors) parts.push(`${kn.building.floors} podlaží`);
+    if (kn.building.flats) parts.push(`${kn.building.flats} bytů`);
+  } else {
+    parts.push("budova v bodě nenalezena");
+  }
+  return parts.join(" · ");
 }
 
 export function resolveForGroup(actx, group) {
@@ -49,6 +92,10 @@ export function resolveForGroup(actx, group) {
     geocodes: (lat, lon) => {
       const key = geoKey(lat, lon);
       return actx.cache.has(key) ? actx.cache.get(key) : undefined;
+    },
+    ruian: (lat, lon) => {
+      const key = pointKey(lat, lon);
+      return actx.ruianCache.has(key) ? actx.ruianCache.get(key) : undefined;
     },
     // Kolik JINÝCH bytů má bod do pár metrů — sdílený bod nelze přiřadit
     // (je to střed ulice, nebo stejný dům, a to z bodu nepoznáme).

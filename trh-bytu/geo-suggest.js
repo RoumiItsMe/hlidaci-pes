@@ -173,16 +173,32 @@ export function resolveAddress(members, ctx) {
         if (osm?.address?.road) streetHints.push({ street: osm.address.road, src: srcName });
       } else {
         const shared = ctx.pinSharedBy(m.lat, m.lon);
-        const inside = pinInsideBuilding(m.lat, m.lon, osm);
+        // Oficiální ověření v RÚIAN (viz ruian.js), když ho volající dává:
+        // undefined = zatím nezjištěno, null/bez budovy = bod v žádném domě.
+        // Bez RÚIAN (testy) se použije hrubý odhad podle obdélníku z mapy.
+        const ru = ctx.ruian ? ctx.ruian(m.lat, m.lon) : "off";
+        const inside = ru === "off" ? pinInsideBuilding(m.lat, m.lon, osm) : Boolean(ru?.building);
         const streetOk = mentionsStreet(osm.address.road);
         const ev = { type: "pin", street: osm.address.road, number: osm.address.house_number, src: srcName };
+        const entrances = ru && ru !== "off" && ru.building ? ru.building.cp : null;
         if (shared > 0) {
           reasons.push(`Bod z ${srcName} sdílí ještě ${shared} další byt${shared === 1 ? "" : "y"} — buď stejný dům, nebo jen ulice, proto se nepřiřazuje.`);
+        } else if (ru === undefined) {
+          reasons.push(`Bod z ${srcName} čeká na ověření v RÚIAN.`);
+        } else if (ru !== "off" && ru?.ambiguous) {
+          reasons.push(`Bod z ${srcName} leží u hranice víc budov, proto se nepřiřazuje.`);
         } else if (!inside) {
-          reasons.push(`Bod z ${srcName} leží vedle budovy (nejspíš jen ulice), proto se nepřiřazuje.`);
+          reasons.push(`Bod z ${srcName} neleží v žádné budově (nejspíš jen ulice), proto se nepřiřazuje.`);
+        } else if (entrances && !entrances.includes(numberKey(osm.address.house_number))) {
+          reasons.push(`Bod z ${srcName}: mapa říká č.p. ${osm.address.house_number}, ale budova v RÚIAN má ${entrances.join(", ")} — nepřiřazuje se.`);
         } else if (!streetOk) {
           reasons.push(`Bod z ${srcName} vychází na ${osm.address.road} ${osm.address.house_number}, ale ulice se v inzerátu neobjevuje — jen slabý hint.`);
           evidence.push({ ...ev, strength: "weak", note: `bod z ${srcName}, ulice se v inzerátu neobjevuje` });
+        } else if (entrances && entrances.length > 1) {
+          // Dům s víc čísly popisnými (vchody): bod ukáže dům, ne vchod —
+          // číslo z mapy je tedy jen tip, který bez dalšího důkazu nestačí.
+          reasons.push(`Bod z ${srcName} míří do domu s víc čísly popisnými (${entrances.join(", ")}) — který vchod to je, z bodu nepoznáme.`);
+          evidence.push({ ...ev, strength: "weak", note: `bod z ${srcName} v domě s víc vchody (${entrances.join(", ")})` });
         } else {
           evidence.push({ ...ev, strength: "strong", note: `bod z ${srcName} uvnitř budovy, ulice sedí s inzerátem` });
         }
@@ -223,6 +239,22 @@ export function resolveAddress(members, ctx) {
   }
 
   const c = solid[0];
+
+  // Číslo z inzerátu se musí shodovat s budovou, do které míří bod: když
+  // bod leží v domě, jehož čísla popisná to číslo neobsahují, jeden ze
+  // zdrojů se mýlí (třeba bod spadl na sousední dům) — nepřiřazuje se nic.
+  if (ctx.ruian) {
+    for (const m of members) {
+      if (typeof m.lat !== "number" || typeof m.lon !== "number") continue;
+      const ru = ctx.ruian(m.lat, m.lon);
+      if (ru && ru.exact && !ru.ambiguous && ru.building && !ru.building.cp.includes(numberKey(c.number))) {
+        result.level = "conflict";
+        result.reasons.unshift(`Číslo ${c.street} ${c.number} neodpovídá budově v bodě z ${m.source} (v RÚIAN má č.p. ${ru.building.cp.join(", ")}) — nepřiřazuje se nic.`);
+        return result;
+      }
+    }
+  }
+
   const types = new Set(c.evidence.map((e) => e.type));
   const hasStrong = c.evidence.some((e) => e.type === "portal" || (e.type === "pin" && e.strength === "strong"));
   // Text sám nestačí, ale potvrzený jiným zdrojem (stejná ulice od portálu,
