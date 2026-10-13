@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
+import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
@@ -91,6 +91,26 @@ const STATUS_FILTERS = ["", "active", "reserved", "possible", "sold", "removed"]
 // jinak by byt po rezervaci z přehledu úplně zmizel.
 function matchesStatusFilter(e, filter) {
   return filter === "possible" ? isPossibleSale(e) : e.status === filter;
+}
+
+// Štítek s PŘESNOU adresou (viz addressInfo) — v přehledu i v tabulce
+// srovnání: zapsaná (nebo appkou určená) se ukáže, nevyplněná u nabídky,
+// která ještě má šanci, upozorní, "neznámá" jen připomene, že se na ni už
+// koukalo. U zmizelých bytů bez adresy se nic neukazuje — doplnit už ji nejde
+// (řeší fronta /kontrola). S `href` je štítek odkaz (v tabulce vede k
+// formuláři adresy v detailu), jinak obyčejný text.
+function addressChipHtml(ai, status, href = null) {
+  const chip = (cls, text, title = null) => {
+    const attrs = ` class="${cls}"${title ? ` title="${esc(title)}"` : ""}`;
+    return href ? `<a href="${href}"${attrs}>${text}</a>` : `<span${attrs}>${text}</span>`;
+  };
+  if (ai.state === "known") {
+    const text = `📍 ${esc([ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", "))}${ai.auto ? " (auto)" : ""}`;
+    return chip(`addr-chip${ai.auto ? " addr-chip--auto" : ""}`, text, ai.auto ? "Adresu doplnila appka sama z polohy v inzerátu — ověř ji a doplň jednotku" : null);
+  }
+  if (ai.state === "unknown") return chip("addr-chip addr-chip--unknown", "📍 adresa neznámá");
+  if (status === "active" || status === "reserved") return chip("addr-chip addr-chip--missing", "📍 doplnit adresu");
+  return "";
 }
 
 // Štítek stavu bytu. Zmizelý byt, u kterého uživatel v katastru ověřil, že
@@ -621,14 +641,7 @@ function renderTable(db, filters) {
       // nabídky, která ještě má šanci, upozorní, "neznámá" jen připomene,
       // že se na ni už koukalo. U zmizelých bytů bez adresy se nic neukazuje —
       // doplnit už ji nejde (řeší fronta /kontrola).
-      const addressChip =
-        ai.state === "known"
-          ? `<span class="addr-chip${ai.auto ? " addr-chip--auto" : ""}" ${ai.auto ? 'title="Adresu doplnila appka sama z polohy v inzerátu — ověř ji a doplň jednotku"' : ""}>📍 ${esc([ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", "))}${ai.auto ? " (auto)" : ""}</span>`
-          : ai.state === "unknown"
-          ? `<span class="addr-chip addr-chip--unknown">📍 adresa neznámá</span>`
-          : status === "active" || status === "reserved"
-          ? `<span class="addr-chip addr-chip--missing">📍 doplnit adresu</span>`
-          : "";
+      const addressChip = addressChipHtml(ai, status);
       // Rezervovaný byt s adresou, u kterého už je čas dohledat prodej v katastru.
       const candidateChip =
         saleCandidate && ai.state === "known" ? `<span class="addr-chip addr-chip--candidate" title="Rezervováno už delší dobu — zkus v katastru dohledat řízení a kupní cenu (záložka Katastr)">🔎 kandidát prodeje</span>` : "";
@@ -790,10 +803,14 @@ function renderComparisonTable(db, filters) {
 
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
         <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="address" value="${esc(e.address || e.city)}" placeholder="adresa…" onchange="this.form.requestSubmit()"></form></td>
+        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="address" value="${esc(e.address || e.city)}" placeholder="adresa…" onchange="this.form.requestSubmit()"></form>${(() => {
+          // Přesná adresa pod přibližnou — to, podle čeho se byt hledá v katastru.
+          const chip = addressChipHtml(e.addressInfo, e.status, `/byt/${encId}#adresa`);
+          return chip ? `<div class="cell-addr">${chip}</div>` : "";
+        })()}</td>
         <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="disposition" value="${esc(e.rep.disposition)}" placeholder="—" onchange="this.form.requestSubmit()"></form></td>
         <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="number" name="area_m2" value="${e.rep.area_m2 ?? ""}" step="0.1" placeholder="m²" onchange="this.form.requestSubmit()"></form></td>
-        <td>${paramField("floorInfo")}</td>
+        <td class="col-floor">${paramField("floorInfo")}</td>
         <td>${paramField("elevator")}</td>
         <td>${paramField("balcony")}</td>
         <td>${paramField("cellar")}</td>
@@ -977,7 +994,7 @@ function renderDetail(db, id) {
     <p><a href="/byt/${encodeURIComponent(rep.id)}/kalkulacka">🧮 Kalkulačka marže re-flipu</a></p>
     <p>${esc(rep.disposition || "—")} · ${rep.area_m2 ? `${rep.area_m2} m²` : "—"} · ${esc(priceLabel(members))}</p>
     <p>${esc(address)}</p>
-    <h2>📍 Přesná adresa</h2>
+    <h2 id="adresa">📍 Přesná adresa</h2>
     <p class="muted">
       Adresa výš je jen přibližná, odhadnutá z inzerátu. Tady si zapiš přesnou adresu a ideálně i jednotku — až inzerát
       zmizí, bude se podle toho byt hledat v katastru. <strong>${esc(addressStatusText)}</strong>
@@ -1829,11 +1846,17 @@ const server = createServer(async (req, res) => {
       } catch {
         override = {};
       }
+      // Hodnota shodná s tím, co říká portál / text inzerátu, přepsání není —
+      // formulář v detailu posílá VŠECHNA pole předvyplněná zobrazenou
+      // hodnotou, takže jinak by každé uložení zmrazilo i to, co uživatel
+      // nezměnil, a pozdější opravy čtení inzerátů (nebo změna na portálu) by
+      // se k bytu už nikdy nedostaly.
+      const portal = mergePortalParams(group.members);
       for (const field of PARAM_OVERRIDE_FIELDS) {
         if (!(field.column in fields)) continue;
         const raw = fields[field.column]?.trim();
         const valid = field.type === "select" ? field.options.some(([v]) => v === raw) : Boolean(raw);
-        if (valid) override[field.column] = raw;
+        if (valid && raw !== portal[field.column]) override[field.column] = raw;
         else delete override[field.column];
       }
       const json = Object.keys(override).length ? JSON.stringify(override) : null;

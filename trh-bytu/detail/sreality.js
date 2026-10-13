@@ -20,13 +20,16 @@
 // `params` (viz ../params.js pro seznam polí): Sreality má strukturovaná
 // data — pole končící na "Cb" jsou objekty `{ name, value }` (interní
 // "codebook", value=0 zpravidla znamená "- nezadáno" → bereme jako
-// neznámé, nezobrazí se). `floorNumber` je 0-indexované (0 = přízemí, dál
-// "1. patro" atd. — standardní česká konvence). Booleovská pole (balkón,
+// neznámé, nezobrazí se). `floorNumber` je číslo PODLAŽÍ (NP, 1 = přízemí; 0
+// se u některých inzerátů používá taky pro přízemí), NE číslo patra — viz
+// formatFloor v ../extract-params.js (naměřeno proti textu inzerátů).
+// Booleovská pole (balkón,
 // sklep, terasa, lodžie, garáž) appka převádí na "Ano"/"Ne", s plochou v
 // závorce, pokud je známá.
 
 import { fetchText } from "../../lib/http.js";
 import { parseCzechDateToIso } from "../parse.js";
+import { formatFloor } from "../extract-params.js";
 
 // "Vloženo: 21. 7. 2026" — vykreslené přímo v HTML (React hydration
 // nechává mezi textem a dvojtečkou prázdný komentář `<!-- -->`), NENÍ
@@ -102,7 +105,7 @@ function extractParams(est) {
     ownership: cbName(p.ownership),
     condition: cbName(p.buildingCondition),
     buildingType: cbName(p.buildingType),
-    floorInfo: p.floorNumber != null && p.floors != null ? `${p.floorNumber === 0 ? "Přízemí" : `${p.floorNumber}. patro`} z ${p.floors}` : null,
+    floorInfo: p.floorNumber != null && p.floors != null ? formatFloor(p.floorNumber, p.floors) : null,
     energyRating: energyLetter(p.energyEfficiencyRating),
     elevator: cbName(p.elevator),
     balcony: yesNo(p.balcony, p.balconyArea),

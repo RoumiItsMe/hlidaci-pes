@@ -19,13 +19,13 @@
 
 // ---------------------------------------------------------------- podlaží
 
-// "N. nadzemní podlaží" → patro v číslování, na které je appka/uživatel
-// zvyklý z portálů ("1. patro", "2. patro"…): 1. NP = přízemí (byt v úrovni
-// terénu), 2. NP = 1. patro, 3. NP = 2. patro atd. — ověřeno na vzorku, kde
-// to inzerát řekl OBOJÍ způsobem naráz ("3. nadzemním podlaží (2. patře)",
-// "5. patře, tedy v 6. nadzemním podlaží"). Appka NEHÁDÁ celkový počet
-// podlaží domu (text ho udává nekonzistentně — slovem, v závorce, nebo
-// vůbec) — "1. patro" bez "z X" je pořád mnohem víc, než prázdné pole.
+// "N. nadzemní podlaží" (NP): 1. NP = přízemí (byt v úrovni terénu), 2. NP =
+// 1. patro, 3. NP = 2. patro atd. — ověřeno na vzorku, kde to inzerát řekl
+// OBOJÍ způsobem naráz ("3. nadzemním podlaží (2. patře)", "5. patře, tedy v
+// 6. nadzemním podlaží"). Výstup má vždy obě čísla, viz formatFloor. Appka
+// NEHÁDÁ celkový počet podlaží domu (text ho udává nekonzistentně — slovem,
+// v závorce, nebo vůbec) — "1. patro (2. NP)" bez "z X" je pořád mnohem víc,
+// než prázdné pole.
 const NADZEMNI_PODLAZI_RE = /(\d+)\.\s*nadzemním?\s*podlaží/iu;
 
 // Zkratka NP: "ve 3.NP", "v 1. NP", "umístění: 4. NP", "2NP".
@@ -62,28 +62,60 @@ const PATRO_LABEL_RE = /podlaží:\s*(\d+)\.?\s*patro/iu;
 // větě o domu není poloha tohohle bytu.
 const PRIZEMI_RE = /(?<!\p{L})přízem/iu;
 
-function npToPatro(np) {
-  return np <= 1 ? "Přízemí" : `${np - 1}. patro`;
+/**
+ * Podlaží ve tvaru, který je jednoznačný: "1. patro (2. NP)", "Přízemí (1. NP)",
+ * případně s počtem podlaží domu ("… z 4").
+ *
+ * Český úzus má dvě číslování a portály je míchají: "NP" (nadzemní podlaží)
+ * počítá přízemí jako 1, "patro" přízemí nepočítá — 2. NP je 1. patro. Sreality
+ * i Bezrealitky dávají číslo podlaží (NP) a appka ho dřív psala jako "patro",
+ * zatímco z textu inzerátu převáděla na patro — v jedné tabulce tak seděla dvě
+ * různá číslování a lišila se o jedno ("2. patro z 4" u Sreality vs. "1. patro"
+ * z textu pro tentýž byt). Ověřeno na inzerátech, které mají strukturovaná data
+ * i číslované podlaží v textu: číslo ze Sreality se rovná NP ve všech 17
+ * případech a u čtyř bytů, o kterých text říká "přízemí", je nativně "1. patro".
+ * Proto se vždy ukládají OBĚ čísla a nezáleží na tom, odkud pocházejí.
+ */
+export function formatFloor(np, total = null) {
+  if (np < 0) return `Podzemní podlaží${total ? ` z ${total}` : ""}`; // suterén — číslování NP se na něj nevztahuje
+  const level = Math.max(1, np);
+  const label = level === 1 ? "Přízemí" : `${level - 1}. patro`;
+  return `${label} (${level}. NP)${total ? ` z ${total}` : ""}`;
+}
+
+/**
+ * Převod dříve uloženého tvaru ("2. patro z 4", "1. patro", "Přízemí z 3",
+ * "Přízemí") na formatFloor. Starý tvar se SE slovem "z N" pochází z portálu
+ * (číslo = NP), bez něj z textu (číslo = patro) — text nikdy počet podlaží
+ * domu neuvádí. Cokoli jiného (už převedené, ručně napsané) vrací beze změny.
+ */
+export function upgradeLegacyFloor(value) {
+  if (typeof value !== "string") return value;
+  let m = value.match(/^(\d+)\. patro z (\d+)$/);
+  if (m) return formatFloor(parseInt(m[1], 10), parseInt(m[2], 10));
+  m = value.match(/^Přízemí z (\d+)$/);
+  if (m) return formatFloor(1, parseInt(m[1], 10));
+  m = value.match(/^(\d+)\. patro$/);
+  if (m) return formatFloor(parseInt(m[1], 10) + 1);
+  if (value === "Přízemí") return formatFloor(1);
+  return value;
 }
 
 function parseFloorFromText(text) {
   if (!text) return null;
   const nadzemni = text.match(NADZEMNI_PODLAZI_RE);
-  if (nadzemni) return npToPatro(parseInt(nadzemni[1], 10));
+  if (nadzemni) return formatFloor(parseInt(nadzemni[1], 10));
   const patro = text.match(PATRO_RE) || text.match(PATRO_LABEL_RE);
-  if (patro) {
-    const n = parseInt(patro[1], 10);
-    return n === 0 ? "Přízemí" : `${n}. patro`;
-  }
+  if (patro) return formatFloor(parseInt(patro[1], 10) + 1); // "v 2. patře" = 3. NP
   const np = text.match(NP_RE);
-  if (np) return npToPatro(parseInt(np[1], 10));
+  if (np) return formatFloor(parseInt(np[1], 10));
   const ordinalPodlazi = text.match(ORDINAL_PODLAZI_RE);
-  if (ordinalPodlazi) return npToPatro(ORDINAL_WORDS[ordinalPodlazi[1].toLowerCase()]);
+  if (ordinalPodlazi) return formatFloor(ORDINAL_WORDS[ordinalPodlazi[1].toLowerCase()]);
   const ordinalPatro = text.match(ORDINAL_PATRO_RE);
-  if (ordinalPatro) return `${ORDINAL_WORDS[ordinalPatro[1].toLowerCase()]}. patro`;
+  if (ordinalPatro) return formatFloor(ORDINAL_WORDS[ordinalPatro[1].toLowerCase()] + 1);
   const podlazi = text.match(PODLAZI_RE);
-  if (podlazi) return npToPatro(parseInt(podlazi[1], 10));
-  if (PRIZEMI_RE.test(text)) return "Přízemí";
+  if (podlazi) return formatFloor(parseInt(podlazi[1], 10));
+  if (PRIZEMI_RE.test(text)) return formatFloor(1);
   return null;
 }
 

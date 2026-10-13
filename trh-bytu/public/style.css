@@ -438,3 +438,9 @@ table.stats-table thead th { color: var(--muted); font-weight: 600; text-align: 
 .address-hint { margin: 0.6rem 0; }
 .address-suggest, .address-retry { display: inline-flex; max-width: none; padding: 0; background: none; border: none; margin: 0.2rem 0; }
 .addr-chip--candidate { color: #b45309; font-weight: 600; }
+/* Sloupec Patro nese obě číslování ("1. patro (2. NP) z 4") — široký input, ať se neořezává. */
+table.compare .col-floor input { width: 12rem; }
+/* Přesná adresa pod přibližnou v tabulce srovnání (/tabulka) */
+.cell-addr { padding: 0 0.4rem 0.1rem; }
+.cell-addr .addr-chip { margin-left: 0; text-decoration: none; }
+.cell-addr a.addr-chip:hover { text-decoration: underline; }

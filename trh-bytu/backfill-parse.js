@@ -38,9 +38,10 @@
 //           node trh-bytu/backfill-parse.js --params-only   (jen fáze 4 a 5)
 
 import { openDb } from "./db.js";
+import { groupListings, mergePortalParams } from "./group.js";
 import { parseDisposition, parseAddressFromTitle, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
 import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
-import { extractParamsFromText, mergeExtractedParams, normalizeOwnership } from "./extract-params.js";
+import { extractParamsFromText, mergeExtractedParams, normalizeOwnership, upgradeLegacyFloor } from "./extract-params.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { watches } from "../config.js";
@@ -185,14 +186,31 @@ const filled = {};
 let upgradedNo = 0;
 let normalizedOwnership = 0;
 
+let upgradedFloors = 0;
+
 for (const row of paramRows) {
-  let existing = {};
+  let original = {};
   try {
-    existing = row.params_json ? JSON.parse(row.params_json) : {};
+    original = row.params_json ? JSON.parse(row.params_json) : {};
   } catch {
-    existing = {};
+    original = {};
   }
   const extracted = extractParamsFromText(row.title, row.description);
+
+  // Podlaží se dřív ukládalo ve dvou různých číslováních podle zdroje (viz
+  // formatFloor): "2. patro z 4" z portálu je ve skutečnosti 2. NP, "2. patro"
+  // z textu skutečně patro. Starý tvar se převede na jednoznačný
+  // "1. patro (2. NP)"; hodnotu z textu (bez "z N") appka radši dopočítá znovu
+  // novými pravidly, než aby převáděla výsledek starých.
+  const existing = { ...original };
+  if (typeof existing.floorInfo === "string" && !/\(\d+\. NP\)|^Podzemní/.test(existing.floorInfo)) {
+    const fromPortal = /\sz\s\d+$/.test(existing.floorInfo);
+    const upgraded = fromPortal ? upgradeLegacyFloor(existing.floorInfo) : extracted.floorInfo ?? upgradeLegacyFloor(existing.floorInfo);
+    if (upgraded !== existing.floorInfo) {
+      existing.floorInfo = upgraded;
+      upgradedFloors++;
+    }
+  }
   const merged = mergeExtractedParams(extracted, existing);
   const ownership = normalizeOwnership(merged.ownership);
   if (merged.ownership != null && ownership !== merged.ownership) {
@@ -202,10 +220,10 @@ for (const row of paramRows) {
 
   const changes = {};
   for (const [key, value] of Object.entries(merged)) {
-    if (JSON.stringify(value) === JSON.stringify(existing[key])) continue;
-    changes[key] = existing[key] == null ? value : `${existing[key]} → ${value}`;
-    if (existing[key] == null) filled[key] = (filled[key] || 0) + 1;
-    else if (key !== "ownership") upgradedNo++;
+    if (JSON.stringify(value) === JSON.stringify(original[key])) continue;
+    changes[key] = original[key] == null ? value : `${original[key]} → ${value}`;
+    if (original[key] == null) filled[key] = (filled[key] || 0) + 1;
+    else if (key !== "ownership" && key !== "floorInfo") upgradedNo++;
   }
   if (Object.keys(changes).length === 0) continue;
 
@@ -214,8 +232,43 @@ for (const row of paramRows) {
 }
 
 console.log(
-  `Fáze 4 hotovo. Zkoumáno ${paramRows.length} záznamů — doplněno: ${JSON.stringify(filled)}, "Ne" opraveno podle textu u ${upgradedNo}, velikost písmen u vlastnictví sjednocena u ${normalizedOwnership}.`
+  `Fáze 4 hotovo. Zkoumáno ${paramRows.length} záznamů — doplněno: ${JSON.stringify(filled)}, "Ne" opraveno podle textu u ${upgradedNo}, podlaží převedeno na tvar "patro (NP)" u ${upgradedFloors}, velikost písmen u vlastnictví sjednocena u ${normalizedOwnership}.`
 );
+
+// --- Fáze 4b: ruční přepsání parametrů (params_override_json) ---
+// Uložení formuláře v detailu dřív zapsalo jako "ruční přepsání" i hodnoty,
+// které uživatel nezměnil (formulář je posílá předvyplněné) — takové zmrazené
+// kopie pak blokují každou opravu čtení inzerátu. Tady se (1) podlaží ve
+// starém tvaru převede stejně jako ve fázi 4 a (2) přepsání, které se shoduje
+// s hodnotou z portálu/textu, zahodí. Skutečně odlišná ruční hodnota zůstane.
+const overrideRows = db.prepare("SELECT * FROM listings").all();
+let droppedOverrides = 0;
+let keptOverrides = 0;
+for (const group of groupListings(overrideRows)) {
+  const holder = group.members.find((m) => m.params_override_json);
+  if (!holder) continue;
+  let override;
+  try {
+    override = JSON.parse(holder.params_override_json);
+  } catch {
+    continue;
+  }
+  const portal = mergePortalParams(group.members);
+  const kept = {};
+  for (const [key, raw] of Object.entries(override)) {
+    const value = key === "floorInfo" ? upgradeLegacyFloor(raw) : raw;
+    if (value === portal[key]) droppedOverrides++;
+    else {
+      kept[key] = value;
+      keptOverrides++;
+    }
+  }
+  const json = Object.keys(kept).length ? JSON.stringify(kept) : null;
+  if (json === holder.params_override_json) continue;
+  for (const m of group.members) db.prepare("UPDATE listings SET params_override_json = ? WHERE id = ?").run(json, m.id);
+  console.log(`${holder.id}: přepsání ${holder.params_override_json} → ${json ?? "žádné"}`);
+}
+console.log(`Fáze 4b hotovo. Zahozeno ${droppedOverrides} přepsání shodných s portálem/textem, ponecháno ${keptOverrides} skutečně ručních.`);
 
 // --- Fáze 5: offline, ulice u adresy, co skončila jen na holém městě ---
 // Na rozdíl od fáze 1 tahle neběží nad `address IS NULL` (ta u těchhle

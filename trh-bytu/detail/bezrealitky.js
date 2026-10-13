@@ -15,6 +15,7 @@
 // inzeráty používají různé pole pro totéž), proto se bere `floor ?? etage`.
 
 import { fetchText } from "../../lib/http.js";
+import { formatFloor } from "../extract-params.js";
 
 function extractNextData(html) {
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
@@ -75,7 +76,8 @@ function extractParams(adv) {
     ownership: humanize(adv.ownership),
     condition: humanize(adv.condition),
     buildingType: humanize(adv.construction),
-    floorInfo: floor != null && adv.totalFloors != null ? `${floor}. patro z ${adv.totalFloors}` : null,
+    // `floor` je číslo podlaží (NP, 1 = přízemí), ne patro — viz formatFloor.
+    floorInfo: floor != null && adv.totalFloors != null ? formatFloor(floor, adv.totalFloors) : null,
     energyRating: adv.penb || null,
     elevator: adv.lift == null ? null : adv.lift ? "Ano" : "Ne",
     balcony: yesNo(adv.balcony, adv.balconySurface),

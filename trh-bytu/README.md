@@ -42,9 +42,29 @@ text řekne výslovně — nezmínění věci neznamená, že tam není. Portál
 záznamy dopočítá `node trh-bytu/backfill-parse.js --params-only` (jen
 parametry z textu a ulice, bez sítě).
 
+**Podlaží se vždy píše oběma číslováními** — „1. patro (2. NP) z 4", „Přízemí
+(1. NP)". V češtině se míchají dvě: NP (nadzemní podlaží) počítá přízemí jako 1,
+„patro" ho nepočítá, takže 2. NP je 1. patro. Sreality i Bezrealitky dávají číslo
+podlaží (NP) — appka ho dřív psala jako „patro", z textu naopak převáděla na
+patro, a v jedné tabulce tak seděla dvě číslování lišící se o jedno (u
+inzerátů s oběma údaji se číslo ze Sreality rovnalo NP ve 17 z 17 případů, a
+u čtyř bytů, o kterých text říká „přízemí", je u Sreality „1. patro"). Starší
+záznamy převedl `backfill-parse.js --params-only` (fáze 4); sloupec Patro je
+v tabulce kvůli délce širší.
+
+**Ruční přepsání parametrů** (výběr/pole v tabulce nebo v detailu) se ukládá jen
+tehdy, když se hodnota liší od toho, co říká portál nebo text inzerátu —
+formulář v detailu dřív posílal všechna pole předvyplněná zobrazenou hodnotou
+a každé uložení tak zmrazilo i to, co uživatel nezměnil (pozdější opravy čtení
+inzerátů se k bytu pak nikdy nedostaly). Zmrazené kopie, které už v databázi
+byly, zahodila fáze 4b backfillu; skutečně ruční hodnoty zůstaly.
+
 **Ulice v adrese:** když inzerát ulici nedává strukturovaně, appka ji hledá v
 titulku a popisu („ulice X", „ul. X", „na ulici X") a připojí k městu
-(„Česká Třebová, ul. Litomyšlská").
+(„Česká Třebová, ul. Litomyšlská"). **Přesná adresa** (zapsaná ručně nebo určená
+automaticky z polohy, viz Přesná adresa) je v tabulce srovnání pod přibližnou
+jako štítek „📍 …"; u nabídek, kde chybí, je tam odkaz „📍 doplnit adresu" na
+formulář v detailu.
 
 **Hlavní přehled je řádkový** — 1 nemovitost = 1 řádek, ale hustší než
 holá tabulka: náhledová fotka (nebo "Bez fotky", když ji appka nemá u

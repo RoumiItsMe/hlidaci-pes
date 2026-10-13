@@ -521,3 +521,14 @@ export function mergeParams(members) {
   mergeJsonColumn(merged, members, "params_json");
   return merged;
 }
+
+/**
+ * Totéž BEZ ručního přepsání — to, co o bytě říká portál / text inzerátu.
+ * Slouží k poznání, jestli se ruční hodnota od zdrojů vůbec liší (viz POST
+ * /params: uložení formuláře nesmí zmrazit hodnoty, které uživatel nezměnil).
+ */
+export function mergePortalParams(members) {
+  const merged = {};
+  mergeJsonColumn(merged, members, "params_json");
+  return merged;
+}
