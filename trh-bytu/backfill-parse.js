@@ -34,11 +34,13 @@
 // detect-own-fields.js bez rizika.
 //
 // Spuštění: node trh-bytu/backfill-parse.js
+//           node trh-bytu/backfill-parse.js --offline   (bez fází 2 a 6, žádné síťové dotazy)
+//           node trh-bytu/backfill-parse.js --params-only   (jen fáze 4 a 5)
 
 import { openDb } from "./db.js";
 import { parseDisposition, parseAddressFromTitle, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
 import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
-import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
+import { extractParamsFromText, mergeExtractedParams, normalizeOwnership } from "./extract-params.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { watches } from "../config.js";
@@ -47,13 +49,18 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// `--params-only`: jen fáze 4 a 5 (parametry z textu + ulice), bez doplňování
+// dispozice/adresy/vlastního hodnocení a bez sítě — bezpečné po vylepšení
+// extract-params.js, nesahá na vlastní hodnocení, které uživatel mohl vymazat.
+const PARAMS_ONLY = process.argv.includes("--params-only");
+const OFFLINE = PARAMS_ONLY || process.argv.includes("--offline");
 const watch = watches.find((w) => w.key === "byty");
 if (!watch) throw new Error('watch "byty" nenalezen v config.js');
 
 const db = openDb();
 
 // --- Fáze 1: offline, dispozice/adresa ze SVÝCH VLASTNÍCH title/description ---
-const rows = db.prepare("SELECT id, source, url, title, description, address, disposition FROM listings WHERE disposition IS NULL OR address IS NULL").all();
+const rows = PARAMS_ONLY ? [] : db.prepare("SELECT id, source, url, title, description, address, disposition FROM listings WHERE disposition IS NULL OR address IS NULL").all();
 
 let fixedDisposition = 0;
 let fixedAddress = 0;
@@ -92,7 +99,7 @@ for (const row of rows) {
 }
 
 // --- Fáze 2: Bazoš PSČ, vyžaduje znovu navštívit detail ---
-for (const row of stillMissingAddress) {
+for (const row of OFFLINE ? [] : stillMissingAddress) {
   const detail = await fetchBazosDetail(row.url);
   const address = zipToKnownPlace(detail.zip, watch);
   if (address != null) {
@@ -108,11 +115,13 @@ console.log(
 );
 
 // --- Fáze 3: offline, vlastní hodnocení (own_condition/own_construction/own_revitalized) ---
-const ownRows = db
-  .prepare(
-    "SELECT id, title, description, own_condition, own_construction, own_revitalized FROM listings WHERE own_condition IS NULL OR own_construction IS NULL OR own_revitalized IS NULL"
-  )
-  .all();
+const ownRows = PARAMS_ONLY
+  ? []
+  : db
+      .prepare(
+        "SELECT id, title, description, own_condition, own_construction, own_revitalized FROM listings WHERE own_condition IS NULL OR own_construction IS NULL OR own_revitalized IS NULL"
+      )
+      .all();
 
 let fixedCondition = 0;
 let fixedConstruction = 0;
@@ -161,16 +170,20 @@ console.log(
   `Fáze 3 hotovo. Zkoumáno ${ownRows.length} záznamů s chybějícím vlastním hodnocením — stav doplněn u ${fixedCondition}, konstrukce u ${fixedConstruction}, revitalizace u ${fixedRevitalized}.`
 );
 
-// --- Fáze 4: offline, PARAM_FIELDS (patro/sklep/vlastnictví) z textu ---
+// --- Fáze 4: offline, PARAM_FIELDS (patro/výtah/sklep/balkon/vlastnictví…) z textu ---
 // Všechny záznamy, ne jen ty s NULL params_json — extrakce doplňuje
-// JEDNOTLIVÉ klíče uvnitř JSON blobu (floorInfo/cellar/ownership), takže i
-// řádek s vyplněnými jinými poli (typicky Sreality condition/buildingType)
-// může tyhle tři pořád postrádat, viz mergeExtractedParams.
+// JEDNOTLIVÉ klíče uvnitř JSON blobu, takže i řádek s vyplněnými jinými poli
+// (typicky Sreality condition/buildingType) může některé z nich pořád
+// postrádat, viz mergeExtractedParams. Mění se jen to, co chybí, a "Ne" u
+// vybavení, které text výslovně vyvrací (viz mergeExtractedParams) — jiná
+// hodnota se nepřepisuje. Navíc se sjednotí velikost písmen u vlastnictví
+// (dřív se ukládalo "družstevní" malými písmeny, což výběr v tabulce
+// nepoznal).
 const paramRows = db.prepare("SELECT id, title, description, params_json FROM listings").all();
 
-let fixedFloor = 0;
-let fixedCellar = 0;
-let fixedOwnership = 0;
+const filled = {};
+let upgradedNo = 0;
+let normalizedOwnership = 0;
 
 for (const row of paramRows) {
   let existing = {};
@@ -180,19 +193,28 @@ for (const row of paramRows) {
     existing = {};
   }
   const extracted = extractParamsFromText(row.title, row.description);
-  const additions = Object.keys(extracted).filter((k) => extracted[k] != null && existing[k] == null);
-  if (additions.length === 0) continue;
-
   const merged = mergeExtractedParams(extracted, existing);
-  if (additions.includes("floorInfo")) fixedFloor++;
-  if (additions.includes("cellar")) fixedCellar++;
-  if (additions.includes("ownership")) fixedOwnership++;
+  const ownership = normalizeOwnership(merged.ownership);
+  if (merged.ownership != null && ownership !== merged.ownership) {
+    merged.ownership = ownership;
+    normalizedOwnership++;
+  }
+
+  const changes = {};
+  for (const [key, value] of Object.entries(merged)) {
+    if (JSON.stringify(value) === JSON.stringify(existing[key])) continue;
+    changes[key] = existing[key] == null ? value : `${existing[key]} → ${value}`;
+    if (existing[key] == null) filled[key] = (filled[key] || 0) + 1;
+    else if (key !== "ownership") upgradedNo++;
+  }
+  if (Object.keys(changes).length === 0) continue;
+
   db.prepare("UPDATE listings SET params_json = ? WHERE id = ?").run(JSON.stringify(merged), row.id);
-  console.log(`${row.id}: ${JSON.stringify(Object.fromEntries(additions.map((k) => [k, extracted[k]])))}`);
+  console.log(`${row.id}: ${JSON.stringify(changes)}`);
 }
 
 console.log(
-  `Fáze 4 hotovo. Zkoumáno ${paramRows.length} záznamů — patro doplněno u ${fixedFloor}, sklep u ${fixedCellar}, vlastnictví u ${fixedOwnership}.`
+  `Fáze 4 hotovo. Zkoumáno ${paramRows.length} záznamů — doplněno: ${JSON.stringify(filled)}, "Ne" opraveno podle textu u ${upgradedNo}, velikost písmen u vlastnictví sjednocena u ${normalizedOwnership}.`
 );
 
 // --- Fáze 5: offline, ulice u adresy, co skončila jen na holém městě ---
@@ -217,7 +239,7 @@ for (const row of bareCityRows) {
 console.log(`Fáze 5 hotovo. Zkoumáno ${bareCityRows.length} záznamů s holou městskou adresou — ulice doplněna u ${fixedStreet}.`);
 
 // --- Fáze 6: Sreality + Bazoš síťová fáze, skutečné datum zveřejnění ---
-const listedAtRows = db.prepare("SELECT id, source, url FROM listings WHERE source IN ('sreality','bazos') AND listed_at IS NULL").all();
+const listedAtRows = OFFLINE ? [] : db.prepare("SELECT id, source, url FROM listings WHERE source IN ('sreality','bazos') AND listed_at IS NULL").all();
 
 let fixedListedAt = 0;
 for (const row of listedAtRows) {

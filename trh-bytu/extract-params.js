@@ -7,15 +7,39 @@
 // nedávají nikdy. Volající (track.js) tohle používá jen jako ZÁCHRANNOU SÍŤ
 // — nativní hodnota od portálu, když existuje, má vždy přednost (viz
 // mergeExtractedParams).
+//
+// Pravidla vycházejí z reálných formulací v popisech (Bazoš/iDNES/Sreality),
+// ne z odhadu: "bez výtahu", "Výtah: ne", "domu s výtahem", "K bytu náleží
+// sklep o výměře 9 m²", "družstevní byt", "v OV", "3. NP", "ve 2. nadzemním
+// podlaží"… Obecné pravidlo: appka tvrdí "Ne" jen tehdy, když to text řekne
+// VÝSLOVNĚ ("bez výtahu"); nezmínění věci neznamená, že tam není.
+//
+// Regulární výrazy mají `u` a `\p{L}` místo `\b`/`\w` — `\b` v JS zná jen
+// ASCII, takže u českých slov s diakritikou na okraji nesedí.
+
+// ---------------------------------------------------------------- podlaží
 
 // "N. nadzemní podlaží" → patro v číslování, na které je appka/uživatel
-// zvyklí z portálů ("1. patro", "2. patro"…): 1. NP = přízemí (byt v úrovni
+// zvyklý z portálů ("1. patro", "2. patro"…): 1. NP = přízemí (byt v úrovni
 // terénu), 2. NP = 1. patro, 3. NP = 2. patro atd. — ověřeno na vzorku, kde
 // to inzerát řekl OBOJÍ způsobem naráz ("3. nadzemním podlaží (2. patře)",
 // "5. patře, tedy v 6. nadzemním podlaží"). Appka NEHÁDÁ celkový počet
 // podlaží domu (text ho udává nekonzistentně — slovem, v závorce, nebo
 // vůbec) — "1. patro" bez "z X" je pořád mnohem víc, než prázdné pole.
-const NADZEMNI_PODLAZI_RE = /(\d+)\.\s*nadzemním?\s*podlaží/i;
+const NADZEMNI_PODLAZI_RE = /(\d+)\.\s*nadzemním?\s*podlaží/iu;
+
+// Zkratka NP: "ve 3.NP", "v 1. NP", "umístění: 4. NP", "2NP".
+const NP_RE = /(?<![\p{L}\d])(\d+)\s*\.?\s*NP(?![\p{L}])/iu;
+
+// Slovní řadová čísla: "ve druhém podlaží", "ve třetím nadzemním podlaží".
+const ORDINAL_WORDS = { prvním: 1, druhém: 2, třetím: 3, čtvrtém: 4, pátém: 5, šestém: 6, sedmém: 7, osmém: 8 };
+const ORDINAL_PODLAZI_RE = /(?<![\p{L}])ve?\s+(prvním|druhém|třetím|čtvrtém|pátém|šestém|sedmém|osmém)\s+(?:nadzemním\s+)?podlaží/iu;
+const ORDINAL_PATRO_RE = /(?<![\p{L}])ve?\s+(prvním|druhém|třetím|čtvrtém|pátém|šestém|sedmém|osmém)\s+patře/iu;
+
+// "ve 2. podlaží" bez slova "nadzemní" — v inzerátech se tím myslí totéž co
+// NP (1. podlaží = přízemí). Vyžaduje předložku, ať se nechytne "dům má 6
+// podlaží".
+const PODLAZI_RE = /(?<![\p{L}])ve?\s+(\d+)\.\s*podlaží/iu;
 
 // Přímé označení patra ("Byt se nachází v 3 patře", "ve 2. patře") — na
 // rozdíl od "N. nadzemní podlaží" výš tohle číslo UŽ je v číslování, na
@@ -23,7 +47,10 @@ const NADZEMNI_PODLAZI_RE = /(\d+)\.\s*nadzemním?\s*podlaží/i;
 // "v"/"ve" bezprostředně před číslem, ať se nechytí věta o CELKOVÉM počtu
 // podlaží domu ("dům má 3 patra") — tu appka záměrně nehádá (viz komentář
 // u NADZEMNI_PODLAZI_RE).
-const PATRO_RE = /\bve?\s+(\d+)\.?\s*patř/i;
+const PATRO_RE = /(?<![\p{L}])ve?\s+(\d+)\.?\s*patř/iu;
+
+// Štítek "Podlaží: 2. patro" v přepsaném RK exportu.
+const PATRO_LABEL_RE = /podlaží:\s*(\d+)\.?\s*patro/iu;
 
 // Přízemí — na rozdíl od čísla patra appka NEVYŽADUJE předložku před slovem:
 // dům "má" přízemí vždy, takže tu (na rozdíl od "3 patra" u čísel) není
@@ -31,81 +58,204 @@ const PATRO_RE = /\bve?\s+(\d+)\.?\s*patř/i;
 // skloňované/odvozené tvary ("přízemní byt", "v přízemním patře") a
 // předřazený přívlastek ("ve zvýšeném přízemí", "snížené přízemí") — appka
 // jen hledá podřetězec "přízem", nerozebírá, jaký přesně tvar/pád to je.
-// `\p{L}` (ne `\b`/`\w`) kvůli diakritice — obyčejné `\b` v JS zná jen
-// ASCII [A-Za-z0-9_], takže za "í" na konci slova vůbec nesepne a předchozí
-// přísnější varianta (`\bv\s+přízemí\b`) kvůli tomu tiše propadala i na
-// přímém "v přízemí domu".
+// Zkouší se AŽ PO číslovaných označeních: "zahrádky u přízemních bytů" ve
+// větě o domu není poloha tohohle bytu.
 const PRIZEMI_RE = /(?<!\p{L})přízem/iu;
 
+function npToPatro(np) {
+  return np <= 1 ? "Přízemí" : `${np - 1}. patro`;
+}
+
 function parseFloorFromText(text) {
-  if (PRIZEMI_RE.test(text || "")) return "Přízemí";
-  const nadzemni = text?.match(NADZEMNI_PODLAZI_RE);
-  if (nadzemni) {
-    const np = parseInt(nadzemni[1], 10);
-    return np === 1 ? "Přízemí" : `${np - 1}. patro`;
-  }
-  const patro = text?.match(PATRO_RE);
+  if (!text) return null;
+  const nadzemni = text.match(NADZEMNI_PODLAZI_RE);
+  if (nadzemni) return npToPatro(parseInt(nadzemni[1], 10));
+  const patro = text.match(PATRO_RE) || text.match(PATRO_LABEL_RE);
   if (patro) {
     const n = parseInt(patro[1], 10);
     return n === 0 ? "Přízemí" : `${n}. patro`;
   }
+  const np = text.match(NP_RE);
+  if (np) return npToPatro(parseInt(np[1], 10));
+  const ordinalPodlazi = text.match(ORDINAL_PODLAZI_RE);
+  if (ordinalPodlazi) return npToPatro(ORDINAL_WORDS[ordinalPodlazi[1].toLowerCase()]);
+  const ordinalPatro = text.match(ORDINAL_PATRO_RE);
+  if (ordinalPatro) return `${ORDINAL_WORDS[ordinalPatro[1].toLowerCase()]}. patro`;
+  const podlazi = text.match(PODLAZI_RE);
+  if (podlazi) return npToPatro(parseInt(podlazi[1], 10));
+  if (PRIZEMI_RE.test(text)) return "Přízemí";
   return null;
 }
 
-// "Sklepní kóje 3,10m2" / "sklepní kója o velikosti 5 m²" → "Ano (X m²)",
-// stejný formát jako nativní portálová data (viz sreality "Ano (5 m²)").
-// Bez plochy, jen počet ("2 sklepy") → "Ano" bez plochy — appka si číslo
-// nevymýšlí. Nikdy "Ne": nezmínění sklepa neznamená, že sklep není.
-const CELLAR_AREA_RE = /sklep(?:ní|em)?\s*k[oó]j[ei]?\s*(?:o\s*(?:velikosti|ploše|rozměrech)\s*)?(\d+(?:[,.]\d+)?)\s*m[²2]/i;
-const CELLAR_COUNT_RE = /(\d+)\s*sklep(?:y|ů)?\b/i;
+// ------------------------------------------------------------ plochy (m²)
 
 // Text píše plochu s desetinnou ČÁRKOU ("3,10m2"), appka ji pro zápis do
 // čísla nejdřív převede na tečku a zaokrouhlí na 1 des. místo (portálové
 // údaje nebývají přesnější), pak pro ZOBRAZENÍ vrátí zpátky na českou
 // čárku a zbytečnou nulu ("3,10" → "3,1") ořízne.
-function formatCellarArea(raw) {
+function formatArea(raw) {
   const num = parseFloat(raw.replace(",", "."));
   if (!Number.isFinite(num)) return null;
   const rounded = Math.round(num * 10) / 10;
   return String(rounded).replace(".", ",");
 }
 
+const AREA = String.raw`(\d+(?:[,.]\d+)?)\s*m\s*[²2]`;
+
+// Ano/Ne + případná plocha, ve stejném tvaru jako nativní portálová data
+// ("Ano (5 m²)", viz Sreality).
+function yesWithArea(area) {
+  const formatted = area ? formatArea(area) : null;
+  return formatted ? `Ano (${formatted} m²)` : "Ano";
+}
+
+// Slovo, před kterým stojí kontext "stavební práce / společné části domu"
+// ("zateplení sklepů", "okna ve sklepích", "sdílené balkóny") — taková zmínka
+// neříká nic o TOMHLE bytě.
+const COMMON_PARTS_CONTEXT_RE = /(?:zateplení|izolac\p{L}*|oprav\p{L}*|výměn\p{L}*|rekonstrukc\p{L}*|okna|společn\p{L}*|sdílen\p{L}*|vlhk\p{L}*)[^.\n;]{0,25}$/iu;
+
+function inCommonPartsContext(text, index) {
+  const before = text.slice(Math.max(0, index - 40), index);
+  return COMMON_PARTS_CONTEXT_RE.test(before);
+}
+
+// Najde první zmínku slova mimo kontext společných částí domu.
+function findOwnMention(text, wordRe) {
+  const re = new RegExp(wordRe.source, wordRe.flags.includes("g") ? wordRe.flags : `${wordRe.flags}g`);
+  for (const m of text.matchAll(re)) {
+    if (!inCommonPartsContext(text, m.index)) return m;
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ sklep
+
+const CELLAR_WORD = /(?<![\p{L}])sklep\p{L}*/iu;
+// Zápor jen těsně u slova — "To není běžná malá sklepní kóje" (reálná věta z
+// inzerátu o velkém sklepu) nesmí vyjít jako "bez sklepa".
+const CELLAR_NO_RES = [
+  /(?<![\p{L}])bez\s+sklep/iu,
+  /(?<![\p{L}])sklep\p{L}*\s*[:\-–]\s*(?:ne|není)(?![\p{L}])/iu,
+  /(?<![\p{L}])(?:nemá|není|nepatří|nenáleží)\s+(?:(?:zde|žádný|žádná)\s+)?sklep/iu,
+];
+// "sklep o výměře 9 m²", "Sklep: cca 5 m²", "sklepní kóje 3,10m2", "sklepem (1 m2)".
+const CELLAR_AREA_AFTER_RE = new RegExp(String.raw`(?<![\p{L}])sklep\p{L}*(?:\s+k[oó]j\p{L}*)?[^.\n;,]{0,36}?${AREA}`, "iu");
+// "9 m² sklep", "4 m² velká zděná sklepní kóje" — ale ne "55 m² včetně sklepa"
+// (celková plocha) ani "63 m² + sklepní kóje" (plus mezi nimi).
+const CELLAR_AREA_BEFORE_RE = new RegExp(String.raw`${AREA}\s+(?:(?!včetně|bez)\p{L}+\s+){0,2}?(?<![\p{L}])sklep\p{L}*`, "iu");
+// Víc sklepů ("2 sklepy", "dva sklepní prostory"): plocha jednoho z nich by
+// byla zavádějící, bere se jen úhrnná ("o celkové výměře").
+const CELLAR_MULTI_RE = /(?<![\p{L}\d])(?:[2-9]|dva|dvě|dvou|tři)\s*[x×]?\s*(?:\p{L}+\s+)?sklep/iu;
+
 function parseCellarFromText(text) {
   if (!text) return null;
-  const areaMatch = text.match(CELLAR_AREA_RE);
-  if (areaMatch) {
-    const area = formatCellarArea(areaMatch[1]);
-    if (area != null) return `Ano (${area} m²)`;
-  }
-  return CELLAR_COUNT_RE.test(text) ? "Ano" : null;
+  if (CELLAR_NO_RES.some((re) => re.test(text))) return "Ne";
+  if (!findOwnMention(text, CELLAR_WORD)) return null;
+  const after = text.match(CELLAR_AREA_AFTER_RE);
+  const before = text.match(CELLAR_AREA_BEFORE_RE);
+  const found = after || before;
+  if (found && CELLAR_MULTI_RE.test(text) && !/celk/iu.test(found[0])) return "Ano";
+  return yesWithArea(found?.[1]);
 }
+
+// -------------------------------------------------------------- vlastnictví
 
 // Bazoš u části inzerátů (přepsaný RK export, viz reálný text "vlastnictví:
 // Družstevní druh objektu: Panelová stav objektu: Dobrý…") přikládá na
 // konec popisu strukturovaný blok stejných polí, jaké appka jinak čte jen
-// ze Sreality/Bezrealitky JSON. Vlastnictví z něj appka zatím nečte vůbec.
-const OWNERSHIP_RE = /vlastnictví:\s*(Osobní|Družstevní|Státní|Obecní)/i;
+// ze Sreality/Bezrealitky JSON.
+const OWNERSHIP_LABEL_RE = /vlastnictví:\s*(Osobní|Družstevní|Státní|Obecní)/iu;
+const COOP_RE = /(?<![\p{L}])družstevn/iu;
+const PERSONAL_RE = /(?<![\p{L}])osobní(?:m|ho)?\s+vlastnictví/iu;
+// Zkratky "OV" / "DV" (např. titulek "Prodej bytu 2+1, OV, CP 57 m²") — jen
+// velkými písmeny a jako samostatné slovo.
+const PERSONAL_ABBR_RE = /(?<![\p{L}\d])OV(?![\p{L}\d])/u;
+const COOP_ABBR_RE = /(?<![\p{L}\d])DV(?![\p{L}\d])/u;
+// "družstevní vlastnictví s možností převodu do osobního" — byt je družstevní.
+const COOP_TRANSFER_RE = /(?:převod\p{L}*|převést|přechod\p{L}*|možnost\p{L}*)[^.\n]{0,60}osobní|do\s+osobního/iu;
+
+// Hodnoty se ukládají vždy v tvaru "Osobní"/"Družstevní" (jak je nabízí
+// výběr v tabulce srovnání, viz PARAM_OVERRIDE_FIELDS) — dřív se ukládala
+// přesně tak, jak byla v textu napsaná, takže "družstevní" malými písmeny
+// ve výběru nesedělo na žádnou volbu a pole vypadalo prázdné.
+export function normalizeOwnership(value) {
+  if (!value) return null;
+  const v = String(value).trim();
+  return v ? v[0].toLocaleUpperCase("cs") + v.slice(1).toLocaleLowerCase("cs") : null;
+}
 
 function parseOwnershipFromText(text) {
-  const m = text?.match(OWNERSHIP_RE);
-  return m ? m[1] : null;
+  if (!text) return null;
+  const label = text.match(OWNERSHIP_LABEL_RE);
+  if (label) return normalizeOwnership(label[1]);
+  const coop = COOP_RE.test(text) || COOP_ABBR_RE.test(text);
+  const personal = PERSONAL_RE.test(text) || PERSONAL_ABBR_RE.test(text);
+  if (coop && !personal) return "Družstevní";
+  if (personal && !coop) return "Osobní";
+  if (coop && personal) return COOP_TRANSFER_RE.test(text) ? "Družstevní" : null; // odporuje si — radši nic
+  return null;
+}
+
+// ------------------------------------------------------------------- výtah
+
+const ELEVATOR_NO_RES = [
+  /(?<![\p{L}])bez\s+(?:osobního\s+)?výtah/iu,
+  /(?<![\p{L}])(?:nemá|není|nejsou|chybí)\s+(?:(?:zde|žádný|dům|v\s+domě)\s+)?výtah/iu,
+  /(?<![\p{L}])výtah\p{L}*\s*[:\-–]\s*(?:ne|není)(?![\p{L}])/iu,
+  /(?<![\p{L}])výtah\s+(?:zde\s+|v\s+domě\s+)?(?:není|nemá)/iu,
+];
+const ELEVATOR_WORD = /(?<![\p{L}])výtah\p{L}*/iu;
+// "možnost instalace výtahu", "plánovaný výtah" — výtah tam zatím není.
+const ELEVATOR_FUTURE_RE = /(?:možnost\p{L}*|plánovan\p{L}*|připravuj\p{L}*|bude|budoucn\p{L}*)[^.\n;]{0,30}$/iu;
+
+function parseElevatorFromText(text) {
+  if (!text) return null;
+  if (ELEVATOR_NO_RES.some((re) => re.test(text))) return "Ne";
+  const re = new RegExp(ELEVATOR_WORD.source, "giu");
+  for (const m of text.matchAll(re)) {
+    if (!ELEVATOR_FUTURE_RE.test(text.slice(Math.max(0, m.index - 45), m.index))) return "Ano";
+  }
+  return null;
+}
+
+// --------------------------------------------------- balkon, lodžie, terasa
+
+// Jen jednotné číslo ("balkon", "balkónem") — "balkonové dveře", "nové
+// balkóny" jsou stavební práce na domě, ne informace o bytu.
+const AMENITIES = {
+  balcony: { word: /(?<![\p{L}])balk[oó]n(?:em|u)?(?![\p{L}])/iu, no: /(?<![\p{L}])bez\s+balk[oó]n/iu },
+  loggia: { word: /(?<![\p{L}])lodži[ieíě]?(?![\p{L}])/iu, no: /(?<![\p{L}])bez\s+lodži/iu },
+  terrace: { word: /(?<![\p{L}])teras(?:a|u|ou)(?![\p{L}])/iu, no: /(?<![\p{L}])bez\s+teras/iu },
+};
+
+function parseAmenityFromText(text, { word, no }) {
+  if (!text) return null;
+  if (no.test(text)) return "Ne";
+  const mention = findOwnMention(text, word);
+  if (!mention) return null;
+  // Plocha hned za slovem ("balkón o ploše 6 m²"), v téže větě.
+  const rest = text.slice(mention.index, mention.index + 80);
+  const area = rest.match(new RegExp(String.raw`^[^.\n;,]{0,32}?${AREA}`, "iu"));
+  return yesWithArea(area?.[1]);
 }
 
 /**
- * Dotáhne floorInfo/cellar/ownership z titulku+popisu (v tomto pořadí
- * zdrojů — titulek bývá kratší, ale popis říká skoro vždy víc). Vrací
- * objekt jen s klíči, které se podařilo najít — appka si prázdné pole
- * nevymýšlí.
+ * Dotáhne PARAM_FIELDS z titulku+popisu (v tomto pořadí zdrojů — titulek
+ * bývá kratší, ale popis říká skoro vždy víc): patro, výtah, sklep,
+ * balkon/lodžii/terasu a vlastnictví. Vrací objekt jen s klíči, které se
+ * podařilo najít — appka si prázdné pole nevymýšlí.
  */
 export function extractParamsFromText(title, description) {
   const text = `${title || ""} ${description || ""}`;
   const result = {};
-  const floorInfo = parseFloorFromText(text);
-  if (floorInfo != null) result.floorInfo = floorInfo;
-  const cellar = parseCellarFromText(text);
-  if (cellar != null) result.cellar = cellar;
-  const ownership = parseOwnershipFromText(text);
-  if (ownership != null) result.ownership = ownership;
+  const set = (key, value) => {
+    if (value != null) result[key] = value;
+  };
+  set("floorInfo", parseFloorFromText(text));
+  set("elevator", parseElevatorFromText(text));
+  set("cellar", parseCellarFromText(text));
+  set("ownership", parseOwnershipFromText(text));
+  for (const [key, spec] of Object.entries(AMENITIES)) set(key, parseAmenityFromText(text, spec));
   return result;
 }
 
@@ -122,7 +272,16 @@ export function extractParamsFromText(title, description) {
 export function mergeExtractedParams(extracted, native) {
   const merged = { ...extracted };
   for (const [key, value] of Object.entries(native || {})) {
-    if (value != null) merged[key] = value;
+    if (value == null) continue;
+    // Výjimka: "Ne" u vybavení znamená u Sreality/Bezrealitek jen NEZAŠKRTNUTÉ
+    // políčko, ne popření — prodejce píše "K bytu náleží sklep" a políčko
+    // nechá prázdné (naměřeno: u všech ~10 takových rozporů pravdu měl text,
+    // např. "sklep o ploše 2,52 m²" při nativním "Ne"). Výslovně pozitivní
+    // zmínka v textu proto "Ne" přebíjí; naopak nativní "Ano" text nepřebije.
+    if (value === "Ne" && AMENITY_KEYS.has(key) && /^Ano/.test(extracted?.[key] ?? "")) continue;
+    merged[key] = value;
   }
   return merged;
 }
+
+const AMENITY_KEYS = new Set(["cellar", "balcony", "loggia", "terrace"]);

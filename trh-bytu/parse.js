@@ -161,7 +161,10 @@ export function zipToKnownPlace(zip, watch) {
 // text má mezi nimi neoznačenou hranici a "ulice Popradská" na konci
 // titulku by pak zabralo i první (náhodou velkým písmenem začínající)
 // slova popisu za ní.
-const STREET_RE = /ulic[eiě]\s+([A-ZÁ-Ž][\p{L}]*(?:\s+[A-ZÁ-Ž][\p{L}]*){0,2})/u;
+// Zkratka "ul." ("…v České Třebové, ul. Litomyšlská. Byt má…") je stejně
+// běžná jako slovo "ulice" — dřív se chytalo jen slovo a ulice zapsaná
+// zkratkou se v tabulce nikdy neobjevila.
+const STREET_RE = /(?<![\p{L}])(?:ulic[eiě]\s+|ul\.\s*)([A-ZÁ-Ž][\p{L}]*(?:\s+[A-ZÁ-Ž][\p{L}]*){0,2})/u;
 
 // Reálný případ (iDNES popis, ne titulek): "…, ulice Popradská Nabízíme
 // Vám ke koupi byt…" — popis sám ZAČÍNÁ opakováním titulku bez tečky mezi

@@ -187,8 +187,15 @@ function paramOverrideFieldHtml(column, currentValue, { autoSubmit = false } = {
   const field = PARAM_OVERRIDE_FIELD_BY_COLUMN[column];
   const onChange = autoSubmit ? ` onchange="this.form.requestSubmit()"` : "";
   if (field.type === "select") {
+    // Hodnota z portálu/textu se s nabídkou porovnává bez ohledu na velikost
+    // písmen a hodnota MIMO nabídku (např. "Státní" u vlastnictví) se přidá
+    // jako vlastní volba — jinak by pole vypadalo prázdné ("—"), ačkoli ho
+    // appka zná, a další dotyk by hodnotu tiše přepsal.
+    const wanted = currentValue == null ? "" : String(currentValue).toLocaleLowerCase("cs");
+    const matched = wanted ? field.options.find(([v]) => v.toLocaleLowerCase("cs") === wanted) : null;
     const opts = [`<option value="">—</option>`]
-      .concat(field.options.map(([v, label]) => `<option value="${esc(v)}" ${currentValue === v ? "selected" : ""}>${esc(label)}</option>`))
+      .concat(field.options.map(([v, label]) => `<option value="${esc(v)}" ${matched?.[0] === v ? "selected" : ""}>${esc(label)}</option>`))
+      .concat(wanted && !matched ? [`<option value="${esc(currentValue)}" selected>${esc(currentValue)}</option>`] : [])
       .join("");
     return `<select name="${column}"${onChange}>${opts}</select>`;
   }

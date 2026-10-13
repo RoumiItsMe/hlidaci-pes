@@ -28,9 +28,23 @@ většinou jen Sreality vs. iDNES vs. zbytek.
 **Strukturované parametry** (vlastnictví, stav, typ budovy, podlaží,
 energetická náročnost, výtah, balkón/lodžie/terasa/sklep/parkování/garáž)
 — podobně jako je Sreality/Bazoš ukazují u vlastní nabídky, viz
-[`params.js`](params.js). K dispozici jsou jen ze Sreality a Bezrealitky
-(jediné dva portály se strukturovaným JSON na detailu) — u ostatních zůstává
-sekce Parametry skrytá.
+[`params.js`](params.js). Strukturovaně je dávají jen Sreality a Bezrealitky
+(jediné dva portály se strukturovaným JSON na detailu); u ostatních je appka
+**vytěží z textu inzerátu** ([`extract-params.js`](extract-params.js)):
+patro, výtah, sklep (i plochu), balkon/lodžii/terasu a vlastnictví — z
+formulací jako „bez výtahu", „Výtah: ne", „K bytu náleží sklep o výměře 9 m²",
+„družstevní byt", „v OV", „3. NP". Pravidla jsou poměřená proti inzerátům,
+které strukturovaná data mají (výtah a vlastnictví sedí ve 100 % případů,
+sklep v ~80 %, zbytek jsou chyby portálu). „Ne" appka napíše jen tehdy, když to
+text řekne výslovně — nezmínění věci neznamená, že tam není. Portálové
+„Ne" u sklepa/balkonu/lodžie/terasy ale ustoupí textu, který tvrdí opak
+(prodejce nezaškrtne políčko a v popisu píše „K bytu náleží sklep"). Starší
+záznamy dopočítá `node trh-bytu/backfill-parse.js --params-only` (jen
+parametry z textu a ulice, bez sítě).
+
+**Ulice v adrese:** když inzerát ulici nedává strukturovaně, appka ji hledá v
+titulku a popisu („ulice X", „ul. X", „na ulici X") a připojí k městu
+(„Česká Třebová, ul. Litomyšlská").
 
 **Hlavní přehled je řádkový** — 1 nemovitost = 1 řádek, ale hustší než
 holá tabulka: náhledová fotka (nebo "Bez fotky", když ji appka nemá u
