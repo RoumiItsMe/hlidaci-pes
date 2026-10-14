@@ -195,6 +195,27 @@ test("fáze ceny hlídání API neovlivní: kontroly ceny jedou dál podle rozvr
   assert.equal(t.watched, false);
 });
 
+test("buildSaleTrack: zmizelý byt bez rezervace do rozvrhu nepatří, dokud není prodej potvrzený", () => {
+  const gone = listing("a", { status: "removed", removed_at: iso(at(5)) });
+  assert.equal(buildSaleTrack([gone], [], at(40)), null);
+  assert.equal(buildSaleTrack([{ ...gone, sale_verdict: "withdrawn", kn_checked_at: iso(at(20)) }], [], at(40)), null);
+});
+
+test("buildSaleTrack: zmizelý byt bez rezervace s podaným vkladem jde do fáze ceny od podání", () => {
+  const gone = listing("a", { status: "removed", removed_at: iso(at(5)), sale_verdict: "sold", kn_filed_at: "2026-08-10" });
+  const t = buildSaleTrack([gone], [], at(40)); // 26 dní po 10. 8.
+  assert.equal(t.stage, "price");
+  assert.equal(t.unreserved, true);
+  assert.equal(t.reservedAt, iso(at(5))); // místo rezervace datum zmizení
+  assert.equal(t.due, true);
+  // S cenou je hotovo.
+  const sold = buildSaleTrack([{ ...gone, verified_sale_price_czk: 3100000 }], [], at(40));
+  assert.equal(sold.stage, "done");
+  // S rezervací se příznak nenastavuje.
+  const reserved = buildSaleTrack([listing("b")], [{ listing_id: "b", event_type: "reserved", occurred_at: iso(T0) }], at(15));
+  assert.equal(reserved.unreserved, false);
+});
+
 test("buildSaleTrack předá hlídání funkci podle začátku rezervace; bez ní se chová jako dřív", () => {
   const events = [{ listing_id: "a", event_type: "reserved", occurred_at: iso(T0) }];
   const withWatch = buildSaleTrack([listing("a")], events, at(15), (reservedAt) => {

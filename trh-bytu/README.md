@@ -511,6 +511,18 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     případech karta ukáže **nápovědu**
     (č., LV, podíl na společných částech, datum podání, stav) s tlačítkem **To je
     ten byt**, které zapíše jednotku, vklad i LV.
+  - **Zmizelé byty bez rezervace** (Sreality rezervaci vůbec neukazuje a inzerát se
+    mohl stáhnout dřív, než ji někdo zapsal) hlídá API taky. Místo začátku
+    rezervace se bere **zmizení inzerátu** (plomba podaná do 14 dní před ním se
+    ještě počítá) a hlídá se **120 dní** po něm (`UNRESERVED_HORIZON_DAYS`,
+    `unreservedTrack`). Podmínka je stejná jako jinde: přesná adresa a dům v ISKN —
+    zmizelý byt bez adresy se zkontrolovat nedá, dokud se adresa nedoplní (ukládání
+    adresy pak dům prohledá hned). Pravidla jsou taky stejná: ve domě do 30 bytů a
+    s jedinou volnou plombou se přiřadí sama, jinak je byt v seznamu **nahoře** s
+    nápovědou a tlačítkem „To je ten byt“; kde API nic nenašlo, leží byt ve sbalené
+    skupině „Zmizelé byty, které hlídá API katastru“. Po potvrzení (nebo
+    automatickém přiřazení) je byt „Prodáno — vklad podán“ a jde do fáze ceny jako
+    rezervovaný, s časovou osou „Bez rezervace · inzerát zmizel …“.
   - **Ruční kontrola se tam, kde hlídá API, nepřipomíná.** Pokud se dům
     prochází a sken je čerstvý (do 8 dnů), nemá smysl chodit do katastru
     „zkontrolovat, jestli je podaný vklad“ — appka už ví, že není. Takový byt

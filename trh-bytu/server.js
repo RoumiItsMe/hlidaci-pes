@@ -13,7 +13,7 @@ import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js"
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
-import { loadKnScans, createWatchResolver, refreshKnScans } from "./kn-scan.js";
+import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
 import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
 import { buildSaleRecordUpdates, currentSaleState } from "./sale-record.js";
@@ -527,6 +527,11 @@ function computeEntries(db) {
     // Fáze prodeje po rezervaci a rozvrh kontrol v katastru (kn-schedule.js);
     // `null`, když byt nemá platnou rezervaci nebo je pořád v nabídce.
     const track = buildSaleTrack(g.members, events, Date.now(), watchFor(g));
+    // Zmizelý byt BEZ rezervace hlídá API katastru stejně jako rezervované
+    // (kn-scan.js, unreservedTrack): místo začátku rezervace se bere zmizení
+    // inzerátu. `needsConfirm` = po zmizení se objevila plomba, kterou appka
+    // nedokázala sama přiřadit.
+    const unreservedWatch = !track && status === "removed" && !verdict && removedAt ? watchFor(g)?.(removedAt) ?? null : null;
     // "Doba v nabídce" počítá do DNEŠKA u živých/rezervovaných nabídek,
     // u zmizelých do data zmizení — obojí je "jak dlouho byl byt na trhu",
     // jen s jiným koncovým bodem. `removedAt` je `null` u živých/
@@ -559,6 +564,7 @@ function computeEntries(db) {
       // fronty /kontrola, viz sale-triage.js).
       addressInfo: addressInfo(g.members),
       track,
+      unreservedWatch,
       // Čas se podívat do katastru: nastal kontrolní bod rozvrhu a po něm se
       // ještě nekontrolovalo (viz kn-schedule.js).
       saleCandidate: Boolean(track?.due),
@@ -1488,6 +1494,8 @@ function renderPlombaBlock(e, scan) {
   const manualUnit = parseUnitNumber(e.addressInfo.unit);
   const guessedUnit = manualUnit == null ? parseUnitNumber(e.knAutoUnit) : null;
   const a = analyzePlombas(scan, { reservedAt: e.track.reservedAt, unitNumber: manualUnit ?? guessedUnit });
+  // Zmizelý byt bez rezervace: počátek je zmizení inzerátu (kn-scan.js, unreservedTrack).
+  const since = e.track.unreserved ? "po zmizení inzerátu" : "po rezervaci";
   const stamp = `<span class="muted"> (API katastru, ${esc(formatKnDay(scan.scannedAt))})</span>`;
   const stavy = (c) => c.proceedings.map((r) => `${esc(formatKnDay(r.datumPrijeti))}${r.stav ? ` — ${esc(r.stav)}` : ""}`).join("; ");
   const closedText = (c) =>
@@ -1498,10 +1506,10 @@ function renderPlombaBlock(e, scan) {
     else if (a.candidates.length)
       a.candidates.forEach((c) =>
         lines.push(
-          `🔖 <strong>Jednotka ${esc(c.label)}${c.lv ? ` (LV ${esc(c.lv)})` : ""}: vklad podán</strong>${guessedUnit != null ? " <em>(odhad — v domě je po rezervaci jediná plomba a tenhle byt je v domě jediný sledovaný; není-li to on, zruš vklad)</em>" : ""} — ${stavy(c)}`
+          `🔖 <strong>Jednotka ${esc(c.label)}${c.lv ? ` (LV ${esc(c.lv)})` : ""}: vklad podán</strong>${guessedUnit != null ? ` <em>(odhad — v domě je ${since} jediná plomba a tenhle byt je v domě jediný sledovaný; není-li to on, zruš vklad)</em>` : ""} — ${stavy(c)}`
         )
       );
-    else lines.push(`Jednotka ${esc(a.unit.label)}: po rezervaci žádná plomba.`);
+    else lines.push(`Jednotka ${esc(a.unit.label)}: ${since} žádná plomba.`);
   } else if (a.unitCount === 0) {
     lines.push("Dům nemá v katastru vymezené jednotky (typicky družstevní byty) — vklad tu nevznikne, prodej v katastru nepůjde sledovat.");
   } else if (a.incomplete) {
@@ -1516,7 +1524,7 @@ function renderPlombaBlock(e, scan) {
       lines.push(`<div class="kn-plomba-row">č. <strong>${esc(c.label)}</strong>${c.lv ? ` (LV ${esc(c.lv)})` : ""}${c.share ? ` · podíl ${esc(c.share)}` : ""} — podáno ${stavy(c)} ${confirm}</div>`);
     }
   } else {
-    lines.push(`V domě (${a.unitCount} jednotek) po rezervaci nikdo nepodal vklad. Zapíšeš-li jednotku bytu v detailu, appka ji pak sleduje sama.`);
+    lines.push(`V domě (${a.unitCount} jednotek) ${since} nikdo nepodal vklad. Zapíšeš-li jednotku bytu v detailu, appka ji pak sleduje sama.`);
   }
   for (const c of a.closed) lines.push(closedText(c));
   return `<div class="kn-plomba">${lines.map((l) => (l.startsWith("<div") ? l : `<div>${l}</div>`)).join("")}${stamp}</div>`;
@@ -1624,6 +1632,14 @@ function renderKnQueue(db) {
         b.triage.score - a.triage.score ||
         (b.removedAt || "").localeCompare(a.removedAt || "")
     );
+  // Plomba po zmizení bytu, kterou appka sama nepřiřadila (viz apiWatch) — k
+  // potvrzení; "Zatím nic" ji odloží, dokud nepřijde novější.
+  const confirmNeeded = (e) =>
+    Boolean(e.unreservedWatch?.needsConfirm) && !(e.knCheckedAt && e.unreservedWatch.confirmAt <= Date.parse(e.knCheckedAt));
+  // Dům se hlídá a nic se nenašlo: ruční kontrola nic nepřinese. Dům bez
+  // jednotek (družstevní) hlídat nejde, ten zůstává mezi ručními.
+  const otherWatched = otherRemoved.filter((e) => e.unreservedWatch && !e.unreservedWatch.unverifiable && !confirmNeeded(e));
+  const otherManual = otherRemoved.filter((e) => !otherWatched.includes(e)).sort((a, b) => Number(confirmNeeded(b)) - Number(confirmNeeded(a)));
   // Jen výsledky zapsané touhle frontou — "Prodáno" z Telegramu se tu
   // zobrazovat nemá. Byt ve fázi "cena" (vklad podán) ještě hotový není.
   const done = entries
@@ -1655,7 +1671,7 @@ function renderKnQueue(db) {
   // Časová osa bytu v jedné větě: co se kdy stalo.
   const timeline = (e) => {
     const t = e.track;
-    const parts = [`Rezervováno od ${formatDateOnly(t.reservedAt)} (${t.ageDays} dní)`];
+    const parts = [t.unreserved ? "Bez rezervace" : `Rezervováno od ${formatDateOnly(t.reservedAt)} (${t.ageDays} dní)`];
     if (e.removedAt) parts.push(`inzerát zmizel ${formatDateOnly(e.removedAt)}`);
     if (e.knFiledAt) parts.push(`vklad podán ${formatDateOnly(e.knFiledAt)}`);
     if (e.knCheckedAt) parts.push(`naposledy zkontrolováno ${formatDateOnly(e.knCheckedAt)}`);
@@ -1735,11 +1751,12 @@ function renderKnQueue(db) {
     })
     .join("");
 
-  const otherItems = otherRemoved
-    .map((e) => {
+  const otherCard = (e) => {
       const encId = encodeURIComponent(e.rep.id);
-      const { lookup, houseFacts } = lookupFor(e);
+      const { lookup, houseFacts, buildingId } = lookupFor(e);
       const t = e.triage;
+      const scan = e.unreservedWatch && buildingId ? knScans.get(buildingId) : null;
+      const plomba = scan ? renderPlombaBlock({ ...e, track: { reservedAt: e.removedAt, unreserved: true } }, scan) : "";
       const checked = e.knCheckedAt ? ` · naposledy zkontrolováno ${esc(formatDateOnly(e.knCheckedAt))}` : "";
       return `<div class="kn-item${checkedRecently(e) ? " kn-item--checked" : ""}">
         <div class="kn-head">
@@ -1748,8 +1765,18 @@ function renderKnQueue(db) {
         </div>
         <div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}${houseFacts}</div>
         <div class="muted">Zmizel ${esc(formatDateOnly(e.removedAt))} · ${esc(t.reasons.join(" · ") || "bez zvláštního signálu")}${checked}</div>
+        ${plomba}
         ${actionForm(encId, `${saleFields(e)}${btn("sold", "Prodáno", "kn-btn--sold")}${btn("withdrawn", "Neprodáno", "")}${btn("check", "Zatím nic", "kn-btn--later")}`)}
       </div>`;
+  };
+  const otherItems = otherManual.map(otherCard).join("");
+  const otherWatchedItems = otherWatched
+    .map((e) => {
+      const scan = lookupFor(e).buildingId ? knScans.get(lookupFor(e).buildingId) : null;
+      return `<details class="kn-wait">
+        <summary><a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— zmizel ${esc(formatDateOnly(e.removedAt))}; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}, plomba zatím není</span></summary>
+        ${otherCard(e)}
+      </details>`;
     })
     .join("");
 
@@ -1809,13 +1836,15 @@ function renderKnQueue(db) {
     ${expiredRows ? `<details class="kn-done"><summary>Nezjištěno (${expired.length})</summary><ul>${expiredRows}</ul></details>` : ""}
     ${lagNote}
 
-    <h2>Zmizelé byty bez rezervace (${otherRemoved.length})</h2>
+    <h2>Zmizelé byty bez rezervace (${otherManual.length})</h2>
     <p class="muted">
       Zmizely z nabídky a nic nenasvědčuje prodeji — portály o tom po zmizení inzerátu nic neříkají, jistota je jen
       katastr. Nahoře jsou ty, u kterých je prodej nejpravděpodobnější (odhad podle historie bytu, ne jistota); do rozvrhu
-      kontrol nepatří.
+      kontrol nepatří. U bytů s přesnou adresou je prochází i API katastru (${UNRESERVED_HORIZON_DAYS} dní po zmizení): plomba se
+      ukáže na kartě, a kde ji API nenašlo, byt leží ve sbalené skupině níž.
     </p>
     <div class="kn-list">${otherItems || `<p class="empty">Nic ke kontrole.</p>`}</div>
+    ${otherWatchedItems ? `<details class="kn-done"><summary>Zmizelé byty, které hlídá API katastru (${otherWatched.length})</summary>${otherWatchedItems}</details>` : ""}
     ${doneRows ? `<details class="kn-done"><summary>Vyřízené (${done.length})</summary><ul>${doneRows}</ul></details>` : ""}`;
 }
 

@@ -13,7 +13,7 @@
 //    (viz matchFilings), jinak jen nabídne na kartě tlačítko "To je ten byt".
 
 import { nowIso, updateListingFields } from "./db.js";
-import { groupListings, pickOwnValue, isHidden, primaryListing } from "./group.js";
+import { groupListings, pickOwnValue, isHidden, primaryListing, mergedStatus, saleVerdict, latestRemovedAt } from "./group.js";
 import { buildAddressContext, knInfoForGroup, resolveForGroup } from "./auto-address.js";
 import { buildSaleTrack, FILING_CHECK_DAYS } from "./kn-schedule.js";
 import { createKnClient, scanBuilding, parseUnitNumber, KnApiError } from "./kn-api.js";
@@ -29,6 +29,10 @@ const DAILY_BUDGET = 350;
 const RESERVE = 100;
 // Sken starší než tohle znamená, že rozpočet nestačí na všechny domy.
 const STALE_WARN_DAYS = 10;
+// Zmizelý byt bez rezervace se hlídá tolik dní po zmizení. Po rezervaci se
+// prodej objeví za týdny až měsíce; kdo se do ~4 měsíců neprodal, nejspíš byl
+// jen stažený, a širší okno by hlídalo i zbytečně staré případy.
+export const UNRESERVED_HORIZON_DAYS = 120;
 // Odhad "jediná plomba v domě patří jedinému sledovanému bytu" se dělá jen v
 // malých domech. Ve velkém (panelák o devadesáti bytech) se za pár týdnů
 // prodává mimo sledovaný byt i jiný docela běžně, takže tam plomba bez
@@ -51,7 +55,22 @@ export function unitOf(entry) {
 }
 
 /**
- * Skupiny bytů, které stojí za kontrolu plomby: mají platnou rezervaci,
+ * Zmizelý byt BEZ rezervace (portál ji neukazuje — třeba Sreality — nebo se
+ * inzerát stáhl dřív) a bez verdiktu: plomba po zmizení inzerátu je stejný
+ * signál jako po rezervaci. Místo začátku rezervace se bere zmizení; plomba
+ * podaná krátce před ním (rezerva v analyzePlombas) se ještě počítá.
+ * Hlídá se UNRESERVED_HORIZON_DAYS po zmizení. Jinak null.
+ */
+export function unreservedTrack(members, now = Date.now()) {
+  if (mergedStatus(members) !== "removed" || saleVerdict(members)) return null;
+  const removedAt = latestRemovedAt(members);
+  if (!removedAt || now - Date.parse(removedAt) > UNRESERVED_HORIZON_DAYS * DAY_MS) return null;
+  return { stage: "filing", reservedAt: removedAt, unreserved: true, due: false, expired: false };
+}
+
+/**
+ * Skupiny bytů, které stojí za kontrolu plomby: mají platnou rezervaci (nebo
+ * zmizely bez ní, viz unreservedTrack),
  * rozvrh kontrol ještě neskončil (není hotovo, neprodáno ani "nezjištěno"),
  * znají přesnou adresu a dům má id v ISKN.
  */
@@ -67,7 +86,8 @@ export function collectTrackedGroups(db, now = Date.now()) {
   const tracked = [];
   for (const group of groups) {
     if (isHidden(group.members)) continue;
-    const track = buildSaleTrack(group.members, group.members.flatMap((m) => eventsByListing.get(m.id) || []), now);
+    const track =
+      buildSaleTrack(group.members, group.members.flatMap((m) => eventsByListing.get(m.id) || []), now) ?? unreservedTrack(group.members, now);
     if (!track || track.expired || (track.stage !== "filing" && track.stage !== "price")) continue;
     if (!pickOwnValue(group.members, "exact_address")) continue;
     const kn = knInfoForGroup(actx, group, resolveForGroup(actx, group));
@@ -169,7 +189,7 @@ function filingMessage(entry, candidate, via) {
     "",
     `• ${specs}${exact ? `, ${exact}` : ""}`,
     `  jednotka ${candidate.label}${candidate.lv ? ` (LV ${candidate.lv})` : ""}, návrh přijat ${formatDay(candidate.filedAt)}${first?.cislo ? ` (řízení V-${first.cislo}/${first.rok})` : ""}`,
-    `  rezervováno od ${formatDay(entry.track.reservedAt)}`,
+    entry.track.unreserved ? `  inzerát zmizel ${formatDay(entry.track.reservedAt)} (bez rezervace)` : `  rezervováno od ${formatDay(entry.track.reservedAt)}`,
     "",
     via === "building"
       ? "V domě je po rezervaci jediná plomba a tenhle byt je v domě jediný, který sledujeme — proto jsem ji k němu přiřadil. Je to odhad: pokud to není on, zruš to v Katastru („Zrušit vklad podán“) a appka už nic sama nepřiřadí."

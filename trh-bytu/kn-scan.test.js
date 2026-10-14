@@ -1,7 +1,7 @@
 // node --test trh-bytu/kn-scan.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectBuildingsToScan, matchFilings, CYCLE_DAYS } from "./kn-scan.js";
+import { selectBuildingsToScan, matchFilings, unreservedTrack, CYCLE_DAYS, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-10-14T06:00:00.000Z");
@@ -118,4 +118,31 @@ test("velký dům: odhad podle jediné plomby se nedělá, zapsaná jednotka fun
   // Garáže se do velikosti domu nepočítají.
   const withGarages = { ...scanOf(), units: [...manyUnits(10), ...Array.from({ length: 40 }, (_, i) => ({ id: 500 + i, number: 939000 + i, lv: 7000 + i, use: "garáž" })), { id: 1, number: 930004, lv: 6319, use: "byt", share: "1/10" }] };
   assert.equal(matchFilings([flat()], withGarages).length, 1);
+});
+
+// --- zmizelé byty bez rezervace ---
+
+const gone = (extra = {}) => ({ id: "a", source: "sreality", status: "removed", removed_at: iso(NOW - 10 * DAY), first_seen_at: iso(NOW - 60 * DAY), ...extra });
+
+test("zmizelý byt bez rezervace se hlídá od zmizení, jen UNRESERVED_HORIZON_DAYS", () => {
+  const t = unreservedTrack([gone()], NOW);
+  assert.equal(t.stage, "filing");
+  assert.equal(t.unreserved, true);
+  assert.equal(t.reservedAt, iso(NOW - 10 * DAY)); // místo rezervace datum zmizení
+  assert.equal(unreservedTrack([gone({ removed_at: iso(NOW - (UNRESERVED_HORIZON_DAYS + 1) * DAY) })], NOW), null);
+  assert.ok(unreservedTrack([gone({ removed_at: iso(NOW - (UNRESERVED_HORIZON_DAYS - 1) * DAY) })], NOW));
+});
+
+test("nehlídá se byt, který je v nabídce, má verdikt, nebo se už prodal", () => {
+  assert.equal(unreservedTrack([gone({ status: "active", removed_at: null })], NOW), null);
+  assert.equal(unreservedTrack([gone({ sale_verdict: "withdrawn", kn_checked_at: iso(NOW - 5 * DAY) })], NOW), null);
+  assert.equal(unreservedTrack([gone({ sale_verdict: "sold" })], NOW), null);
+});
+
+test("plomba po zmizení bytu bez rezervace se páruje stejně jako po rezervaci (rezerva 14 dní před zmizením)", () => {
+  const e = flat({ track: { reservedAt: iso(NOW - 10 * DAY), unreserved: true } });
+  const early = scanOf({ plomby: [[930004, iso(NOW - 20 * DAY).slice(0, 10)]] }); // 10 dní před zmizením — v rezervě
+  const tooEarly = scanOf({ plomby: [[930004, iso(NOW - 40 * DAY).slice(0, 10)]] }); // 30 dní před zmizením
+  assert.equal(matchFilings([e], early).length, 1);
+  assert.equal(matchFilings([e], tooEarly).length, 0);
 });

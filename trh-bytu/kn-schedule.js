@@ -129,10 +129,19 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
  * rezervaci (a tedy není součástí téhle fronty), nebo je pořád v nabídce.
  */
 export function buildSaleTrack(members, events, now = Date.now(), watchFor = null) {
-  const reservedAt = reservationStart(members, events);
-  if (!reservedAt) return null;
+  let reservedAt = reservationStart(members, events);
   const status = mergedStatus(members);
   const verdict = saleVerdict(members);
+  // Byt bez rezervace (portál ji nezná, nebo se inzerát stáhl dřív): do rozvrhu
+  // patří, až když je prodej potvrzený — vklad podán nebo prodáno. Do té doby je
+  // ve frontě "zmizelé bez rezervace" (sale-triage.js). Místo rezervace se bere
+  // zmizení inzerátu; `unreserved` ať to UI řekne správně.
+  let unreserved = false;
+  if (!reservedAt) {
+    if (verdict !== "sold" && pickOwnValue(members, "kn_filed_at") == null) return null;
+    reservedAt = latestRemovedAt(members) ?? new Date(now).toISOString();
+    unreserved = true;
+  }
   if (status === "active") return null; // nabízí se dál (třeba jinde) — není to prodej
   if (!verdict && status === "sold") return { ...assessSaleTrack({ reservedAt, verdict: "sold", priceKnown: true, now }), reservedAt };
 
@@ -148,7 +157,7 @@ export function buildSaleTrack(members, events, now = Date.now(), watchFor = nul
     watch: watchFor ? watchFor(reservedAt) : null,
     now,
   });
-  return { ...track, reservedAt };
+  return { ...track, reservedAt, unreserved };
 }
 
 /** Dny od rezervace do podání vkladu (pro "jak to u tebe obvykle trvá"), jinak null. */
