@@ -692,9 +692,17 @@ iDNES čte detail i u známých inzerátů, dokud nejsou prodané.
 Prodej je **konečný stav** "Prodáno" (vlastní filtr a štítek, událost "Prodáno
 — prodejní cena X Kč" v časové ose, datum = kdy ho appka zjistila). Přebíjí
 rezervaci i "v nabídce" (stejně jako rezervace je to fakt o bytu, ne o portálu),
-zmizení z výpisu ho už nepřepíše, a souhrn kontrol v katastru se u něj zastaví. Do statistik "ceny po rekonstrukci" se prodaný byt počítá
-(se stavem "Po rekonstrukci") a jeho cena se bere jako **ověřená** — poslední
-cena inzerátu je tady skutečná prodejní, ne jen inzerovaná.
+zmizení z výpisu ho už nepřepíše, a souhrn kontrol v katastru se u něj zastaví, jakmile je cena ověřená. Do statistik "ceny po rekonstrukci" se prodaný byt počítá
+(se stavem "Po rekonstrukci"). **Cena z inzerátu, který portál označil jako
+„prodáno“, ale ověřená NENÍ** — je to poslední inzerovaná cena, ne kupní (po
+slevě a vyjednávání se byt prodá jinak). Takový byt jde do fronty Katastr (fáze
+ceny, první kontrola 25 dní po prodeji, nebo po podání vkladu podle API) a ve
+statistikách se počítá jako „odhad“, dokud se cena neověří. **Výjimka: družstevní
+byt** — v katastru se nepřevádí vkladem a cena ani vklad se tam ověřit nedají, proto
+se poslední cena z portálu bere jako potvrzená a byt je rovnou vyřízený.
+Družstevní byt se pozná podle vlastnictví z inzerátu (nebo ručně opraveného v
+„Doplnit parametry“), případně podle toho, že dům v katastru nemá jednotky; takové
+byty se přes API ani nekontrolují.
 
 **Telegram upozornění:** appka na rezervaci pošle i zprávu přes stejného
 Telegram bota jako hlídací pes (`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` v

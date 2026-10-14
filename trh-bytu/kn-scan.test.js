@@ -1,7 +1,7 @@
 // node --test trh-bytu/kn-scan.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectBuildingsToScan, matchFilings, unreservedTrack, CYCLE_DAYS, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
+import { selectBuildingsToScan, matchFilings, unreservedTrack, isCooperativeOwnership, CYCLE_DAYS, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-10-14T06:00:00.000Z");
@@ -145,4 +145,20 @@ test("plomba po zmizení bytu bez rezervace se páruje stejně jako po rezervaci
   const tooEarly = scanOf({ plomby: [[930004, iso(NOW - 40 * DAY).slice(0, 10)]] }); // 30 dní před zmizením
   assert.equal(matchFilings([e], early).length, 1);
   assert.equal(matchFilings([e], tooEarly).length, 0);
+});
+
+// --- družstevní byty ---
+
+test("družstevní vlastnictví se pozná z inzerátu i z ruční opravy, ruční oprava má přednost", () => {
+  const params = (o) => JSON.stringify(o);
+  assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({ ownership: "Družstevní" }) }]), true);
+  assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({ ownership: "družstevní vlastnictví" }) }]), true);
+  assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({ ownership: "Osobní" }) }]), false);
+  assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({}) }]), false);
+  assert.equal(isCooperativeOwnership([{ source: "sreality" }]), false);
+  // Ruční oprava ("Doplnit parametry") přebíjí portál — v obou směrech.
+  assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({ ownership: "Družstevní" }), params_override_json: params({ ownership: "Osobní" }) }]), false);
+  assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({ ownership: "Osobní" }), params_override_json: params({ ownership: "Družstevní" }) }]), true);
+  // Stačí, že to říká kterákoli nabídka bytu.
+  assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({}) }, { source: "bazos", params_json: params({ ownership: "Družstevní" }) }]), true);
 });

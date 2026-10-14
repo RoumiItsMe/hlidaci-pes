@@ -227,3 +227,54 @@ test("buildSaleTrack předá hlídání funkci podle začátku rezervace; bez n�
   assert.equal(buildSaleTrack([listing("a")], events, at(15)).due, true);
   assert.equal(buildSaleTrack([listing("a")], events, at(15), () => null).due, true);
 });
+
+// --- byt prodaný podle portálu ("prodáno"): cena z inzerátu není kupní cena ---
+
+const portalSold = (extra = {}) => listing("a", { status: "sold", price_czk: 2850000, removed_at: iso(at(10)), ...extra });
+
+test("prodáno podle portálu: byt jde do fáze ceny od data prodeje, cena z inzerátu se neověřuje sama", () => {
+  const t = buildSaleTrack([portalSold()], [], at(20)); // 10 dní po prodeji
+  assert.equal(t.stage, "price");
+  assert.equal(t.priceAssumed, false);
+  assert.equal(t.due, false);
+  assert.equal(t.nextAt, at(10 + FILING_CHECK_DAYS[0])); // první kontrola ceny 25. den
+  const later = buildSaleTrack([portalSold()], [], at(10 + FILING_CHECK_DAYS[0] + 1));
+  assert.equal(later.due, true);
+  assert.equal(later.kind, "price");
+});
+
+test("prodáno podle portálu + dům se nedá ověřit (družstevní): poslední cena platí jako potvrzená", () => {
+  const unverifiable = () => ({ needsConfirm: false, confirmAt: null, unverifiable: true });
+  const t = buildSaleTrack([portalSold()], [], at(20), unverifiable);
+  assert.equal(t.stage, "done");
+  assert.equal(t.priceAssumed, true);
+  assert.equal(t.due, false);
+});
+
+test("poslední cena se jako potvrzená nebere bez portálu: ručně označené prodáno čeká na cenu i v neověřitelném domě", () => {
+  const unverifiable = () => ({ needsConfirm: false, confirmAt: null, unverifiable: true });
+  const manual = listing("a", { status: "removed", removed_at: iso(at(10)), sale_verdict: "sold", kn_filed_at: "2026-08-12", price_czk: 3000000 });
+  const t = buildSaleTrack([manual], [], at(40), unverifiable);
+  assert.equal(t.stage, "price");
+  assert.equal(t.priceAssumed, false);
+});
+
+test("prodáno podle portálu s ověřenou cenou je hotovo a cena se neoznačuje jako předpoklad", () => {
+  const t = buildSaleTrack([portalSold({ verified_sale_price_czk: 2790000 })], [], at(20));
+  assert.equal(t.stage, "done");
+  assert.equal(t.priceAssumed, false);
+});
+
+test("prodáno podle portálu a vklad podán (plomba z API): kontroly ceny se počítají od podání", () => {
+  const filed = iso(at(14)).slice(0, 10);
+  const t = buildSaleTrack([portalSold({ kn_filed_at: filed })], [], at(30));
+  assert.equal(t.stage, "price");
+  assert.equal(t.nextAt, Date.parse(filed) + FILING_CHECK_DAYS[0] * DAY); // 25 dní po dni podání
+});
+
+test("hlídání API ovlivňuje jen fázi vkladu: prodaný byt v domě s jednotkami čeká na ověření ceny dál", () => {
+  const covered = () => ({ needsConfirm: false, confirmAt: null, unverifiable: false });
+  const t = buildSaleTrack([portalSold()], [], at(40), covered);
+  assert.equal(t.stage, "price");
+  assert.equal(t.due, true);
+});

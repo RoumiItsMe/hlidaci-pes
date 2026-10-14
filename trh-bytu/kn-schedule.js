@@ -68,6 +68,11 @@ function checkpoint(base, day, kind) {
  * @param filedAt        den podání vkladu podle uživatele (ISO / YYYY-MM-DD), jinak null
  * @param verdict        'sold' | 'withdrawn' | null (viz saleVerdict v group.js)
  * @param priceKnown     je zjištěná kupní cena?
+ * @param portalPrice    portál označil byt jako prodaný a má u něj poslední (inzerovanou)
+ *                       cenu. To je fakt o prodeji, ale ne kupní cena — dokud ji
+ *                       uživatel neověří v katastru, byt je ve fázi ceny. Výjimka:
+ *                       když se byt v katastru ověřit nedá (`watch.unverifiable`, třeba
+ *                       družstevní), bere se poslední cena jako potvrzená (`priceAssumed`).
  * @param priceBaseAt    odkdy počítat kontroly ceny, když byt je prodaný, ale
  *                       plomba se nezapsala (např. "Prodáno" z Telegramu)
  * @param lastCheckedAt  poslední kontrola v katastru (ISO), jinak null
@@ -80,14 +85,16 @@ function checkpoint(base, day, kind) {
  *                       dokud uživatel po jejím podání neklikl na "Zatím nic".
  * @returns `{ stage, ageDays, due, dueAt, kind, reason, nextAt, expired, watched, unverifiable }`
  */
-export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, verdict = null, priceKnown = false, priceBaseAt = null, lastCheckedAt = null, watch = null, now = Date.now() }) {
+export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, verdict = null, priceKnown = false, portalPrice = false, priceBaseAt = null, lastCheckedAt = null, watch = null, now = Date.now() }) {
   const reservedMs = toMs(reservedAt);
   const ageDays = reservedMs == null ? null : Math.floor((now - reservedMs) / DAY_MS);
-  const base = { ageDays, due: false, dueAt: null, kind: null, reason: null, nextAt: null, expired: false, watched: false, unverifiable: false };
+  const base = { ageDays, due: false, dueAt: null, kind: null, reason: null, nextAt: null, expired: false, watched: false, unverifiable: false, priceAssumed: false };
 
   if (verdict === "withdrawn") return { ...base, stage: "withdrawn" };
   const sold = verdict === "sold" || filedAt != null;
   if (sold && priceKnown) return { ...base, stage: "done" };
+  // Prodáno podle portálu, v katastru to ověřit nejde: poslední cena platí.
+  if (sold && portalPrice && watch?.unverifiable) return { ...base, stage: "done", unverifiable: true, priceAssumed: true };
 
   let stage;
   let points;
@@ -131,7 +138,12 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
 export function buildSaleTrack(members, events, now = Date.now(), watchFor = null) {
   let reservedAt = reservationStart(members, events);
   const status = mergedStatus(members);
-  const verdict = saleVerdict(members);
+  // Prodáno podle portálu (iDNES "prodáno") je fakt o prodeji, ale cena u
+  // inzerátu je jen poslední inzerovaná, ne kupní. Byt proto jde do fáze ceny,
+  // dokud ji uživatel neověří v katastru (výjimka: družstevní byt, viz
+  // assessSaleTrack, `portalPrice`).
+  const soldMembers = members.filter((m) => m.status === "sold");
+  const verdict = saleVerdict(members) ?? (soldMembers.length ? "sold" : null);
   // Byt bez rezervace (portál ji nezná, nebo se inzerát stáhl dřív): do rozvrhu
   // patří, až když je prodej potvrzený — vklad podán nebo prodáno. Do té doby je
   // ve frontě "zmizelé bez rezervace" (sale-triage.js). Místo rezervace se bere
@@ -143,7 +155,6 @@ export function buildSaleTrack(members, events, now = Date.now(), watchFor = nul
     unreserved = true;
   }
   if (status === "active") return null; // nabízí se dál (třeba jinde) — není to prodej
-  if (!verdict && status === "sold") return { ...assessSaleTrack({ reservedAt, verdict: "sold", priceKnown: true, now }), reservedAt };
 
   const lastCheckedAt = members.reduce((max, m) => (m.kn_checked_at && m.kn_checked_at > max ? m.kn_checked_at : max), "") || null;
   const track = assessSaleTrack({
@@ -152,7 +163,10 @@ export function buildSaleTrack(members, events, now = Date.now(), watchFor = nul
     filedAt: pickOwnValue(members, "kn_filed_at"),
     verdict,
     priceKnown: pickOwnValue(members, "verified_sale_price_czk") != null,
-    priceBaseAt: pickOwnValue(members, "reservation_sold_at") ?? lastCheckedAt,
+    portalPrice: soldMembers.some((m) => m.price_czk != null),
+    // Kontroly ceny se počítají od chvíle, kdy se o prodeji vědělo: Telegram
+    // "Prodáno", u portálu zmizení prodaného inzerátu, jinak poslední kontrola.
+    priceBaseAt: pickOwnValue(members, "reservation_sold_at") ?? (soldMembers.length ? latestRemovedAt(members) : null) ?? lastCheckedAt,
     lastCheckedAt,
     watch: watchFor ? watchFor(reservedAt) : null,
     now,

@@ -13,7 +13,7 @@
 //    (viz matchFilings), jinak jen nabídne na kartě tlačítko "To je ten byt".
 
 import { nowIso, updateListingFields } from "./db.js";
-import { groupListings, pickOwnValue, isHidden, primaryListing, mergedStatus, saleVerdict, latestRemovedAt } from "./group.js";
+import { groupListings, pickOwnValue, isHidden, primaryListing, mergedStatus, saleVerdict, latestRemovedAt, mergeParams } from "./group.js";
 import { buildAddressContext, knInfoForGroup, resolveForGroup } from "./auto-address.js";
 import { buildSaleTrack, FILING_CHECK_DAYS } from "./kn-schedule.js";
 import { createKnClient, scanBuilding, parseUnitNumber, KnApiError } from "./kn-api.js";
@@ -86,6 +86,7 @@ export function collectTrackedGroups(db, now = Date.now()) {
   const tracked = [];
   for (const group of groups) {
     if (isHidden(group.members)) continue;
+    if (isCooperativeOwnership(group.members)) continue; // v katastru nemá vklad, sken by byl zbytečný
     const track =
       buildSaleTrack(group.members, group.members.flatMap((m) => eventsByListing.get(m.id) || []), now) ?? unreservedTrack(group.members, now);
     if (!track || track.expired || (track.stage !== "filing" && track.stage !== "price")) continue;
@@ -160,17 +161,29 @@ export function matchFilings(entries, scan) {
 }
 
 /**
+ * Družstevní byt: v katastru se nepřevádí vkladem vlastnického práva (mění se
+ * členský podíl), takže tam nejde ověřit ani vklad, ani cenu. Podle vlastnictví
+ * z inzerátu nebo ručně opraveného v "Doplnit parametry" (mergeParams).
+ */
+export function isCooperativeOwnership(members) {
+  return /družstev/i.test(mergeParams(members).ownership ?? "");
+}
+
+const UNVERIFIABLE_WATCH = { needsConfirm: false, confirmAt: null, unverifiable: true };
+
+/**
  * Pro `buildSaleTrack`: jak plombu u dané skupiny hlídá API (viz apiWatch).
- * Bez jediného skenu (tedy bez klíče) vrací funkci, která nikdy nic nehlídá,
- * takže se chování rozvrhu nemění. Bez přesné adresy se byt nehlídá — sken
- * tu stejně nepoběží.
+ * Družstevní byt je neověřitelný hned podle vlastnictví, bez skenu. Ostatní
+ * se hlídají, jen když dům má sken a byt přesnou adresu — bez adresy sken
+ * nepoběží, takže se nehlídá a platí ruční rozvrh.
  */
 export function createWatchResolver(db, listings, groups, now = Date.now(), existingContext = null) {
   const scans = loadKnScans(db);
-  if (!scans.size) return () => null;
-  const actx = existingContext ?? buildAddressContext(db, listings, groups);
+  let actx = existingContext;
   return (group) => (reservedAt) => {
-    if (!pickOwnValue(group.members, "exact_address")) return null;
+    if (isCooperativeOwnership(group.members)) return UNVERIFIABLE_WATCH;
+    if (!scans.size || !pickOwnValue(group.members, "exact_address")) return null;
+    actx ??= buildAddressContext(db, listings, groups);
     const buildingId = knInfoForGroup(actx, group, resolveForGroup(actx, group))?.building?.isknId;
     const scan = buildingId ? scans.get(buildingId) : null;
     const unitNumber = parseUnitNumber(pickOwnValue(group.members, "unit_number")) ?? parseUnitNumber(pickOwnValue(group.members, "kn_auto_unit"));

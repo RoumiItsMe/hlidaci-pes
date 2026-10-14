@@ -1306,18 +1306,18 @@ function isEligibleForRenoStats(e) {
 // přednost — je to REÁLNÁ transakce. Bez ní appka bere poslední evidovanou
 // (inzerovanou) cenu těsně před zmizením — návod výslovně upozorňuje, že to
 // NENÍ prodejní cena (typicky o pár % výš), proto se u takových řádků
-// značí "odhad" a počet ověřených/odhadnutých se ukazuje zvlášť. Výjimka:
-// byt, který portál sám označil jako PRODÁNO — tam je poslední cena
-// inzerátu skutečná prodejní cena (viz detail/idnes.js), takže se počítá
-// jako ověřená i bez ruční kontroly v katastru (`isSalePriceKnown`).
+// značí "odhad" a počet ověřených/odhadnutých se ukazuje zvlášť. To platí i
+// pro byt, který portál označil jako PRODÁNO: je to fakt o prodeji, ale cena
+// u inzerátu je jen poslední inzerovaná, ne kupní — jde do fronty Katastr
+// ověřit. Výjimka: družstevní byt (v katastru se ověřit nedá), tam se poslední
+// cena z portálu bere jako potvrzená (`isSalePriceKnown`, kn-schedule.js).
 function effectivePriceForStats(e) {
   return e.verifiedSalePrice ?? e.price;
 }
-// Stav "sold" teď může vzniknout i z ruční kontroly v katastru (bez ceny) —
-// proto se u poslední inzerované ceny ptáme, jestli byt jako prodaný označil
-// PORTÁL (člen skupiny se stavem sold), ne jen jestli je výsledný stav sold.
+// Cena je ověřená, když je zadaná z katastru, nebo když ji v katastru ověřit
+// nejde a portál byt označil jako prodaný (`track.priceAssumed`).
 function isSalePriceKnown(e) {
-  return e.verifiedSalePrice != null || (e.g.members.some((m) => m.status === "sold") && e.price != null);
+  return e.verifiedSalePrice != null || Boolean(e.track?.priceAssumed && e.price != null);
 }
 
 // Souhrn "cena/m² u prodaných bytů po rekonstrukci" — PRIMÁRNĚ podle
@@ -1464,7 +1464,8 @@ function renderStats(db) {
     <p class="muted">
       Byty zmizelé z nabídky nebo označené jako prodané, se stavem „Po rekonstrukci", případně ručně
       přehlasované přes sloupec „Ve statistice" v tabulce srovnání. Cena je ověřená prodejní, pokud ji máš dohledanou
-      v katastru nebo ji portál uvádí u inzerátu označeného „prodáno", jinak poslední inzerovaná cena před zmizením —
+      v katastru, nebo jde o družstevní byt označený portálem jako „prodáno" (tam se ověřit nedá, bere se poslední cena z inzerátu),
+      jinak poslední inzerovaná cena před zmizením nebo u prodaného bytu, kterou jde v katastru ještě ověřit —
       u ní počítej s návodovým odečtem cca 5 % pro konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
     </p>
     ${renoStats.cities.length ? renoStats.cities.map(renderCityStatsTable).join("") : `<p class="muted">Zatím žádná data.</p>`}`;
@@ -1532,10 +1533,12 @@ function renderPlombaBlock(e, scan) {
 
 // Stav prodeje jednou větou — v detailu bytu. Čte stejné údaje jako fronta
 // Katastr a statistiky (sale-record.js), takže se nemůžou rozejít.
-function saleStageText({ verdict, track, price, saleDate, filed }) {
+function saleStageText({ verdict, track, price, saleDate, filed, portalSold = false, lastPrice = null }) {
   if (verdict === "withdrawn") return "Neprodáno — ověřeno v katastru";
   if (price != null) return `Prodáno za ${formatCzk(price)}${saleDate ? ` (${formatDateOnly(saleDate)})` : ""}`;
-  if (verdict === "sold") return filed ? `Prodáno — vklad podán ${formatDateOnly(filed)}, cena se dohledá po rozhodnutí o vkladu` : "Prodáno — cena zatím neznámá";
+  if (track?.priceAssumed) return `Prodáno podle portálu — poslední cena ${formatCzk(lastPrice)} platí jako potvrzená, v katastru ji nejde ověřit`;
+  if (portalSold && !filed && lastPrice != null) return `Prodáno podle portálu — cena z inzerátu ${formatCzk(lastPrice)} zatím není ověřená v katastru`;
+  if (verdict === "sold" || portalSold) return filed ? `Prodáno — vklad podán ${formatDateOnly(filed)}, cena se dohledá po rozhodnutí o vkladu` : "Prodáno — cena zatím neznámá";
   if (track) {
     if (track.expired) return "Vklad se nenašel — nezjištěno";
     if (track.watched) return track.unverifiable ? "Čeká na vklad — v katastru ho nejde ověřit" : "Čeká na vklad — plomby hlídá appka přes API katastru";
@@ -1555,8 +1558,9 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
   const lv = pickOwnValue(members, "lv_number");
   const autoUnit = pickOwnValue(members, "kn_auto_unit");
   const encId = encodeURIComponent(rep.id);
-  const hasData = Boolean(verdict || price != null || saleDate || filed || lv || track);
-  const stage = saleStageText({ verdict, track, price, saleDate, filed });
+  const hasData = Boolean(verdict || price != null || saleDate || filed || lv || track || members.some((m) => m.status === "sold"));
+  const soldListing = members.find((m) => m.status === "sold");
+  const stage = saleStageText({ verdict, track, price, saleDate, filed, portalSold: Boolean(soldListing), lastPrice: soldListing?.price_czk ?? null });
   const unitLine = ai.unit
     ? `Jednotka: <strong>${esc(ai.unit)}</strong> (mění se výš v „Přesná adresa“).`
     : autoUnit
@@ -1617,10 +1621,10 @@ function renderKnQueue(db) {
   const dueNow = inPipeline.filter((e) => e.track.due && known(e)).sort((a, b) => a.track.dueAt - b.track.dueAt);
   const waiting = inPipeline.filter((e) => !e.track.due && !e.track.watched && !e.track.expired && known(e)).sort((a, b) => a.track.nextAt - b.track.nextAt);
   // Plomby hlídá API katastru — ruční kontrola nic nepřinese, ozve se samo.
-  const watched = inPipeline.filter((e) => e.track.watched && !e.track.expired && known(e)).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
+  const watched = inPipeline.filter((e) => e.track.watched && !e.track.expired && (known(e) || e.track.unverifiable)).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
   // Bez přesné adresy se byt v katastru dohledat nedá — takové byty jen
   // připomínáme, ať se adresa doplní, dokud je inzerát online.
-  const noAddress = inPipeline.filter((e) => !e.track.expired && !known(e)).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
+  const noAddress = inPipeline.filter((e) => !e.track.expired && !known(e) && !e.track.unverifiable).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
   const expired = inPipeline.filter((e) => e.track.expired).sort((a, b) => b.track.reservedAt.localeCompare(a.track.reservedAt));
   // Zmizelé byty BEZ rezervace — o prodeji nic nenaznačuje, řadí je odhad
   // pravděpodobnosti (sale-triage.js). Do rozvrhu nepatří.
@@ -1643,7 +1647,7 @@ function renderKnQueue(db) {
   // Jen výsledky zapsané touhle frontou — "Prodáno" z Telegramu se tu
   // zobrazovat nemá. Byt ve fázi "cena" (vklad podán) ještě hotový není.
   const done = entries
-    .filter((e) => e.saleVerdict && e.g.members.some((m) => m.sale_verdict) && e.track?.stage !== "price")
+    .filter((e) => e.track?.priceAssumed || (e.saleVerdict && e.g.members.some((m) => m.sale_verdict) && e.track?.stage !== "price"))
     .sort((a, b) => (b.knCheckedAt || "").localeCompare(a.knCheckedAt || ""));
 
   // Údaje, podle kterých se byt v katastru hledá: přesná adresa zapsaná
@@ -1736,8 +1740,10 @@ function renderKnQueue(db) {
   const noAddressRows = noAddress
     .map(
       (e) =>
-        `<li><a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— rezervováno ${e.track.ageDays} dní${
-          e.status === "removed" ? ", inzerát už zmizel (adresu jde doplnit jen ručně v detailu)" : ", doplň přesnou adresu"
+        `<li><a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— ${
+          e.track.stage === "price"
+            ? "prodáno, cenu jde v katastru ověřit až s přesnou adresou (doplň ji v detailu)"
+            : `rezervováno ${e.track.ageDays} dní${e.status === "removed" ? ", inzerát už zmizel (adresu jde doplnit jen ručně v detailu)" : ", doplň přesnou adresu"}`
         }</span></li>`
     )
     .join("");
@@ -1783,9 +1789,10 @@ function renderKnQueue(db) {
   const doneRows = done
     .map((e) => {
       const encId = encodeURIComponent(e.rep.id);
-      const verdictText = e.saleVerdict === "sold" ? "Prodáno" : "Neprodáno";
+      const verdictText = e.saleVerdict === "withdrawn" ? "Neprodáno" : "Prodáno";
       const facts = [
         e.verifiedSalePrice != null ? formatCzk(e.verifiedSalePrice) : null,
+        e.track?.priceAssumed && e.verifiedSalePrice == null ? `poslední cena z portálu ${formatCzk(e.price)} platí jako potvrzená, v katastru ji nejde ověřit` : null,
         e.verifiedSaleDate ? `prodáno ${formatDateOnly(e.verifiedSaleDate)}` : null,
         e.knFiledAt ? `vklad podán ${formatDateOnly(e.knFiledAt)}` : null,
         e.lvNumber ? `LV ${e.lvNumber}` : null,
@@ -1793,7 +1800,7 @@ function renderKnQueue(db) {
       ].filter(Boolean);
       return `<li><a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> — ${esc(verdictText)}${
         facts.length ? ` <span class="muted">(${esc(facts.join(" · "))})</span>` : ""
-      } ${actionForm(encId, btn("reset", "Vrátit do fronty", "kn-btn--later", e.verifiedSalePrice != null || e.verifiedSaleDate ? RESET_CONFIRM : null))}</li>`;
+      } ${e.track?.priceAssumed ? "" : actionForm(encId, btn("reset", "Vrátit do fronty", "kn-btn--later", e.verifiedSalePrice != null || e.verifiedSaleDate ? RESET_CONFIRM : null))}</li>`;
     })
     .join("");
 
