@@ -107,7 +107,9 @@ export async function scanBuilding(client, buildingId, { prev = null, wantUnits 
     units = (b.jednotky ?? []).map((u) => ({ id: u.id, number: u.cisloJednotky, lv: known.get(u.id)?.lv ?? null, use: known.get(u.id)?.use ?? null, share: known.get(u.id)?.share ?? null }));
   }
 
-  const toScan = full ? units : units.filter((u) => wantUnits.has(u.number));
+  // Celý dům: jen byty. Garáže a nebytové prostory (druh známe z minulého
+  // skenu) se přeskočí — ušetří to volání a jejich plomba není prodej bytu.
+  const toScan = full ? units.filter((u) => u.use == null || u.use === "byt") : units.filter((u) => wantUnits.has(u.number));
   if (left() < toScan.length) return { skipped: "budget", needed: toScan.length };
 
   const prevByUnit = new Map((prev?.plomby ?? []).map((p) => [p.unit, p]));

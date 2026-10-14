@@ -532,6 +532,7 @@ function computeEntries(db) {
       // ještě nekontrolovalo (viz kn-schedule.js).
       saleCandidate: Boolean(track?.due),
       knFiledAt: pickOwnValue(g.members, "kn_filed_at"),
+      knAutoUnit: pickOwnValue(g.members, "kn_auto_unit"),
       lvNumber: pickOwnValue(g.members, "lv_number"),
       saleVerdict: verdict,
       knCheckedAt: g.members.reduce((max, m) => (m.kn_checked_at && m.kn_checked_at > max ? m.kn_checked_at : max), "") || null,
@@ -1506,7 +1507,11 @@ function renderKnQueue(db) {
     const scan = buildingId ? knScans.get(buildingId) : null;
     if (!scan) return "";
     const encId = encodeURIComponent(e.rep.id);
-    const a = analyzePlombas(scan, { reservedAt: e.track.reservedAt, unitNumber: parseUnitNumber(e.addressInfo.unit) });
+    // Jednotka zapsaná ručně má přednost; jinak ta, kterou appka odhadla podle
+    // jediné plomby v domě (kn-scan.js) — u té se píše, že je to odhad.
+    const manualUnit = parseUnitNumber(e.addressInfo.unit);
+    const guessedUnit = manualUnit == null ? parseUnitNumber(e.knAutoUnit) : null;
+    const a = analyzePlombas(scan, { reservedAt: e.track.reservedAt, unitNumber: manualUnit ?? guessedUnit });
     const stamp = `<span class="muted"> (API katastru, ${esc(formatKnDay(scan.scannedAt))})</span>`;
     const stavy = (c) => c.proceedings.map((r) => `${esc(formatKnDay(r.datumPrijeti))}${r.stav ? ` — ${esc(r.stav)}` : ""}`).join("; ");
     const closedText = (c) =>
@@ -1514,7 +1519,12 @@ function renderKnQueue(db) {
     const lines = [];
     if (a.mode === "unit") {
       if (a.unit.missing) lines.push(`⚠ Jednotka ${esc(a.unit.label)} v domě neexistuje — zkontroluj číslo v detailu bytu.`);
-      else if (a.candidates.length) a.candidates.forEach((c) => lines.push(`🔖 <strong>Jednotka ${esc(c.label)}${c.lv ? ` (LV ${esc(c.lv)})` : ""}: vklad podán</strong> — ${stavy(c)}`));
+      else if (a.candidates.length)
+        a.candidates.forEach((c) =>
+          lines.push(
+            `🔖 <strong>Jednotka ${esc(c.label)}${c.lv ? ` (LV ${esc(c.lv)})` : ""}: vklad podán</strong>${guessedUnit != null ? " <em>(odhad — v domě je po rezervaci jediná plomba a tenhle byt je v domě jediný sledovaný; není-li to on, zruš vklad)</em>" : ""} — ${stavy(c)}`
+          )
+        );
       else lines.push(`Jednotka ${esc(a.unit.label)}: po rezervaci žádná plomba.`);
     } else if (a.unitCount === 0) {
       lines.push("Dům nemá v katastru vymezené jednotky (typicky družstevní byty) — vklad tu nevznikne, prodej v katastru nepůjde sledovat.");
@@ -1835,6 +1845,9 @@ const server = createServer(async (req, res) => {
       let updates;
       if (action === "reset") {
         updates = { sale_verdict: null, kn_checked_at: null, kn_filed_at: null, kn_digest_cp: null };
+        // Vrací-li uživatel odhad appky ("není to ten byt"), appka mu už
+        // automaticky nic nepřiřadí (kn-scan.js, matchFilings).
+        if (pickOwnValue(group.members, "kn_auto_unit")) Object.assign(updates, { kn_auto_unit: null, kn_auto_off: 1 });
       } else if (action === "check") {
         updates = { kn_checked_at: now };
       } else if (action === "unit") {
@@ -1844,7 +1857,7 @@ const server = createServer(async (req, res) => {
         updates = {};
         if (unitNumber != null) {
           const today = now.slice(0, 10);
-          updates = { unit_number: formatUnitNumber(unitNumber), sale_verdict: "sold", kn_checked_at: now };
+          updates = { unit_number: formatUnitNumber(unitNumber), kn_auto_unit: null, sale_verdict: "sold", kn_checked_at: now };
           if (!pickOwnValue(group.members, "kn_filed_at")) updates.kn_filed_at = isDay(fields.kn_filed_at) && fields.kn_filed_at <= today ? fields.kn_filed_at : today;
         }
       } else if (action === "filed") {

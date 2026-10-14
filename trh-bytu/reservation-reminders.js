@@ -96,7 +96,7 @@ export async function sendKnCheckDigest(db, log, now = Date.now()) {
     if (kn) lines.push(`  🏛️ ${describeKn(kn)}`);
     // Co o domě říká API katastru (kn-scan.js) — jen když tam něco je.
     const scan = kn?.building?.isknId ? scans.get(kn.building.isknId) : null;
-    const hint = scan ? plombaHintLine(analyzePlombas(scan, { reservedAt: d.track.reservedAt, unitNumber: parseUnitNumber(unit) })) : null;
+    const hint = scan ? plombaHintLine(analyzePlombas(scan, { reservedAt: d.track.reservedAt, unitNumber: parseUnitNumber(unit) ?? parseUnitNumber(pickOwnValue(members, "kn_auto_unit")) })) : null;
     if (hint) lines.push(`  ${hint}`);
     lines.push(`  ⏰ ${d.track.reason}${d.track.stage === "price" ? "" : ` (rezervováno ${formatDay(d.track.reservedAt)})`}`);
   }

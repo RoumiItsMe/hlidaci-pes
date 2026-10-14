@@ -197,6 +197,13 @@ const COLUMN_MIGRATIONS = [
   { table: "listings", column: "kn_filed_at", ddl: "TEXT" },
   { table: "listings", column: "lv_number", ddl: "TEXT" },
   { table: "listings", column: "kn_digest_cp", ddl: "TEXT" },
+  // Automatické přiřazení plomby k bytu (kn-scan.js): když je v domě po
+  // rezervaci jediná plomba a jediný sledovaný byt, appka je spojí sama.
+  // `kn_auto_unit`: jednotka (např. "412/12"), kterou appka ODHADLA — na rozdíl
+  // od `unit_number`, který je vždy ruční. `kn_auto_off` = 1: uživatel odhad
+  // zrušil, tomuhle bytu se už automaticky nepřiřazuje nic.
+  { table: "listings", column: "kn_auto_unit", ddl: "TEXT" },
+  { table: "listings", column: "kn_auto_off", ddl: "INTEGER" },
 ];
 
 function runMigrations(db) {

@@ -118,3 +118,22 @@ test("plomba, která zmizela: řízení skončilo, jeho konečný stav se zapama
   assert.equal(third.closed.length, 1);
   assert.ok(!again.log.includes("proceeding:100"));
 });
+
+test("plný sken přeskočí garáže a nebytové prostory, které zná z minula; první sken (druh neznámý) projde vše", async () => {
+  const prev = {
+    units: [
+      { id: 11, number: 930001, lv: 6316, use: "garáž", share: null },
+      { id: 12, number: 930004, lv: 6319, use: "byt", share: null },
+    ],
+    plomby: [],
+    closed: [],
+  };
+  const client = fakeClient();
+  const scan = await scanBuilding(client, 1, { now: NOW, prev });
+  assert.ok(!client.log.includes("unit:11"));
+  assert.ok(client.log.includes("unit:12"));
+  assert.equal(scan.units.length, 2); // seznam jednotek zůstává celý
+  const first = fakeClient();
+  await scanBuilding(first, 1, { now: NOW });
+  assert.ok(first.log.includes("unit:11") && first.log.includes("unit:12"));
+});
