@@ -463,7 +463,9 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     nejdřív po **5 dnech** a denně se vezme nejvýš pětina domů, nejstarší první
     (`CYCLE_DAYS`, `selectBuildingsToScan`). Plomba trvá týdny (řízení o vkladu),
     takže ji pětidenní cyklus nepropásne, jen oznámí o pár dní později. Nový byt
-    se zkontroluje hned. Garáže a nebytové
+    se zkontroluje hned: při dalším sběru, nebo **ihned po uložení adresy v appce**
+    (server k tomu načte `KN_API_KEY` z `.env.local`; ať byt s právě doplněnou
+    adresou nevisí v „Zkontrolovat teď“ do dalšího sběru). Garáže a nebytové
     prostory se při dalších skenech přeskakují. Navíc je tvrdý strop 350 volání
     denně (100 zůstává v rezervě) a dům, na který by rozpočet nestačil celý, se
     neskenuje — neúplný sken by prohlásil nezkontrolované jednotky za čisté. Když

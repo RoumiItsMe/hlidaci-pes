@@ -6,13 +6,14 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
-import { loadKnScans, createWatchResolver } from "./kn-scan.js";
+import { loadKnScans, createWatchResolver, refreshKnScans } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
 import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
@@ -20,6 +21,32 @@ import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { watches } from "../config.js";
+
+// KN_API_KEY (a Telegram kvůli zprávě o nalezeném vkladu) z `.env.local` v
+// kořeni repa, stejně jako v track.js. Server je potřebuje jen kvůli kontrole
+// domu hned po zapsání adresy; bez souboru se ta kontrola přeskočí.
+try {
+  process.loadEnvFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".env.local"));
+} catch {
+  // Bez .env.local appka běží, jen nekontroluje plomby přes API.
+}
+
+// Kontrola domů přes API katastru (kn-scan.js), kterou nespouští denní sběr,
+// ale uložení adresy: byt s čerstvě doplněnou adresou by jinak do příštího
+// sběru visel v "Zkontrolovat teď", protože jeho dům ještě nikdo neprošel.
+// Naráz běží nejvýš jedna (dvě souběžné by prošly tentýž dům podruhé).
+let knRefreshRunning = null;
+function refreshKnScansNow(db) {
+  if (!knRefreshRunning) {
+    knRefreshRunning = refreshKnScans(db, (line) => console.log(line))
+      .then((line) => line && console.log(line))
+      .catch((err) => console.log(`KN API: ${err.message}`))
+      .finally(() => {
+        knRefreshRunning = null;
+      });
+  }
+  return knRefreshRunning;
+}
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
 
@@ -1842,6 +1869,10 @@ const server = createServer(async (req, res) => {
             }
           }
         }
+        // Dům nově zapsané adresy hned projít přes API katastru (viz výš).
+        // Čeká se nejvýš pár vteřin, ať stránka po přesměrování rovnou ukáže
+        // výsledek; delší kontrola doběhne na pozadí.
+        await Promise.race([refreshKnScansNow(db), new Promise((resolve) => setTimeout(resolve, 8000))]);
       }
     }
     res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
