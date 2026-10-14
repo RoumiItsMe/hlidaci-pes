@@ -105,3 +105,26 @@ export function currentSaleState(members) {
     autoUnit: pickOwnValue(members, "kn_auto_unit"),
   };
 }
+
+// Družstevní byt prodaný podle portálu se v katastru ověřit nedá, takže se
+// bere poslední INZEROVANÁ cena. Ta ale bývá o pár procent vyšší než kupní (po
+// vyjednávání se byt prodá níž), proto se do statistik počítá snížená o tohle.
+// Cena se nikam neukládá, počítá se při čtení: jakmile uživatel zadá skutečnou
+// cenu, platí ta.
+export const ASSUMED_PRICE_DISCOUNT = 0.1;
+
+export function assumedSalePrice(lastPrice) {
+  return lastPrice == null ? null : Math.round(lastPrice * (1 - ASSUMED_PRICE_DISCOUNT));
+}
+
+/**
+ * Cena bytu pro statistiky a její původ:
+ *  - `verified`: kupní cena zadaná z katastru;
+ *  - `assumed`: družstevní byt, poslední inzerovaná cena snížená o ASSUMED_PRICE_DISCOUNT;
+ *  - `asking`: poslední inzerovaná cena beze změny (zatím neověřená).
+ */
+export function statsSalePrice({ verified, price, assumed }) {
+  if (verified != null) return { price: verified, basis: "verified" };
+  if (assumed && price != null) return { price: assumedSalePrice(price), basis: "assumed" };
+  return { price: price ?? null, basis: "asking" };
+}

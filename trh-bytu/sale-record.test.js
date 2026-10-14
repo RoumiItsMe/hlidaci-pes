@@ -1,7 +1,7 @@
 // node --test trh-bytu/sale-record.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSaleRecordUpdates, currentSaleState } from "./sale-record.js";
+import { buildSaleRecordUpdates, currentSaleState, assumedSalePrice, statsSalePrice, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
 
 const NOW = "2026-10-14T10:00:00.000Z";
 const none = { verdict: null, filedAt: null, autoUnit: null };
@@ -102,4 +102,19 @@ test("fronta Katastr: 'Vklad podán' s prázdnými poli nic dalšího nepřepí�
 test("currentSaleState čte verdikt, vklad a odhad ze skupiny nabídek", () => {
   const members = [{ id: "a", sale_verdict: null }, { id: "b", sale_verdict: "sold", kn_filed_at: "2026-10-09", kn_auto_unit: "412/5" }];
   assert.deepEqual(currentSaleState(members), { verdict: "sold", filedAt: "2026-10-09", autoUnit: "412/5" });
+});
+
+test("družstevní byt: poslední inzerovaná cena se do statistik počítá snížená o 10 %", () => {
+  assert.equal(ASSUMED_PRICE_DISCOUNT, 0.1);
+  assert.equal(assumedSalePrice(3000000), 2700000);
+  assert.equal(assumedSalePrice(2850000), 2565000);
+  assert.equal(assumedSalePrice(2999999), 2699999); // zaokrouhleno na koruny
+  assert.equal(assumedSalePrice(null), null);
+});
+
+test("cena pro statistiky: ověřená má vždy přednost, snížená jen u neověřitelného družstevního bytu, jinak inzerovaná", () => {
+  assert.deepEqual(statsSalePrice({ verified: 2850000, price: 3100000, assumed: true }), { price: 2850000, basis: "verified" }); // Spořitelní: ruční cena zůstává
+  assert.deepEqual(statsSalePrice({ verified: null, price: 3000000, assumed: true }), { price: 2700000, basis: "assumed" });
+  assert.deepEqual(statsSalePrice({ verified: null, price: 3000000, assumed: false }), { price: 3000000, basis: "asking" });
+  assert.deepEqual(statsSalePrice({ verified: null, price: null, assumed: true }), { price: null, basis: "asking" });
 });

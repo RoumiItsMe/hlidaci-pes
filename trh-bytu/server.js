@@ -16,7 +16,7 @@ import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
 import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
 import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
-import { buildSaleRecordUpdates, currentSaleState } from "./sale-record.js";
+import { buildSaleRecordUpdates, currentSaleState, statsSalePrice, assumedSalePrice, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
@@ -1309,15 +1309,12 @@ function isEligibleForRenoStats(e) {
 // značí "odhad" a počet ověřených/odhadnutých se ukazuje zvlášť. To platí i
 // pro byt, který portál označil jako PRODÁNO: je to fakt o prodeji, ale cena
 // u inzerátu je jen poslední inzerovaná, ne kupní — jde do fronty Katastr
-// ověřit. Výjimka: družstevní byt (v katastru se ověřit nedá), tam se poslední
-// cena z portálu bere jako potvrzená (`isSalePriceKnown`, kn-schedule.js).
+// ověřit. Výjimka: družstevní byt (v katastru se ověřit nedá) — tam je byt
+// hotový a bere se poslední cena z portálu, ale SNÍŽENÁ o ASSUMED_PRICE_DISCOUNT
+// (kupní cena bývá nižší než inzerovaná) a ve statistikách je označená jako
+// odhad (`statsSalePrice`, sale-record.js).
 function effectivePriceForStats(e) {
-  return e.verifiedSalePrice ?? e.price;
-}
-// Cena je ověřená, když je zadaná z katastru, nebo když ji v katastru ověřit
-// nejde a portál byt označil jako prodaný (`track.priceAssumed`).
-function isSalePriceKnown(e) {
-  return e.verifiedSalePrice != null || Boolean(e.track?.priceAssumed && e.price != null);
+  return statsSalePrice({ verified: e.verifiedSalePrice, price: e.price, assumed: Boolean(e.track?.priceAssumed) });
 }
 
 // Souhrn "cena/m² u prodaných bytů po rekonstrukci" — PRIMÁRNĚ podle
@@ -1330,12 +1327,12 @@ function renovatedSaleStats(entries) {
     .filter(isEligibleForRenoStats)
     .map((e) => ({
       pricePerM2: (() => {
-        const price = effectivePriceForStats(e);
+        const { price } = effectivePriceForStats(e);
         return price != null && e.rep.area_m2 ? price / e.rep.area_m2 : null;
       })(),
       disposition: e.rep.disposition || "—",
       city: e.city || "—",
-      verified: isSalePriceKnown(e),
+      basis: effectivePriceForStats(e).basis, // verified | assumed | asking
       // Pro rozklikávací seznam bytů za průměrem (viz renderCityStatsTable)
       // — appka jinak ukazovala jen holé číslo bez možnosti ověřit, ze
       // kterých konkrétních bytů vzniklo.
@@ -1349,7 +1346,8 @@ function renovatedSaleStats(entries) {
     const values = rows.map((r) => r.pricePerM2);
     return {
       count: rows.length,
-      verifiedCount: rows.filter((r) => r.verified).length,
+      verifiedCount: rows.filter((r) => r.basis === "verified").length,
+      assumedCount: rows.filter((r) => r.basis === "assumed").length,
       avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
       min: Math.round(Math.min(...values)),
       max: Math.round(Math.max(...values)),
@@ -1386,7 +1384,12 @@ function renovatedSaleStats(entries) {
 function renderStatsItemsList(items) {
   const rows = items
     .map((it) => {
-      const verifiedBadge = it.verified ? ` <span class="muted">(ověřeno)</span>` : "";
+      const verifiedBadge =
+        it.basis === "verified"
+          ? ` <span class="muted">(ověřeno)</span>`
+          : it.basis === "assumed"
+          ? ` <span class="muted">(družstevní — poslední cena −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %)</span>`
+          : "";
       const areaLabel = it.areaM2 ? `, ${it.areaM2} m²` : "";
       return `<li><a href="/byt/${encodeURIComponent(it.id)}">${esc(it.address)}${areaLabel}</a> — ${formatCzk(Math.round(it.pricePerM2))}/m²${verifiedBadge}</li>`;
     })
@@ -1399,7 +1402,7 @@ function renderCityStatsTable(cityStats) {
     .map(
       (d) => `<tr>
         <td>${esc(d.disposition)}</td>
-        <td>${renderStatsItemsList(d.items)}${d.verifiedCount ? ` <span class="muted">(${d.verifiedCount}× ověřeno)</span>` : ""}</td>
+        <td>${renderStatsItemsList(d.items)}${d.verifiedCount ? ` <span class="muted">(${d.verifiedCount}× ověřeno)</span>` : ""}${d.assumedCount ? ` <span class="muted">(${d.assumedCount}× družstevní −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %)</span>` : ""}</td>
         <td>${formatCzk(d.avg)}/m²</td>
         <td class="muted">${formatCzk(d.min)}–${formatCzk(d.max)}/m²</td>
       </tr>`
@@ -1421,12 +1424,13 @@ function renderStats(db) {
   // stejný byt nalezený na 2 portálech vyšel v součtu jako 2 byty.
   const counts = { active: 0, reserved: 0, sold: 0, removed: 0 };
   for (const e of entries) counts[e.status]++;
-  const soldWithPrice = entries.filter((e) => e.status === "sold" && isSalePriceKnown(e)).length;
+  const soldVerified = entries.filter((e) => e.status === "sold" && e.verifiedSalePrice != null).length;
+  const soldAssumed = entries.filter((e) => e.status === "sold" && e.verifiedSalePrice == null && e.track?.priceAssumed).length;
   const countRows = Object.entries(counts)
     .map(
       ([k, n]) =>
         `<li>${esc(STATUS_LABELS[k].text)}: <strong>${n}</strong>${
-          k === "sold" && n ? ` <span class="muted">(s cenou ${soldWithPrice}, cena zatím neznámá ${n - soldWithPrice})</span>` : ""
+          k === "sold" && n ? ` <span class="muted">(ověřená cena ${soldVerified}, družstevní odhad z poslední ceny ${soldAssumed}, zatím neověřeno ${n - soldVerified - soldAssumed})</span>` : ""
         }</li>`
     )
     .join("");
@@ -1464,9 +1468,10 @@ function renderStats(db) {
     <p class="muted">
       Byty zmizelé z nabídky nebo označené jako prodané, se stavem „Po rekonstrukci", případně ručně
       přehlasované přes sloupec „Ve statistice" v tabulce srovnání. Cena je ověřená prodejní, pokud ji máš dohledanou
-      v katastru, nebo jde o družstevní byt označený portálem jako „prodáno" (tam se ověřit nedá, bere se poslední cena z inzerátu),
-      jinak poslední inzerovaná cena před zmizením nebo u prodaného bytu, kterou jde v katastru ještě ověřit —
-      u ní počítej s návodovým odečtem cca 5 % pro konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
+      v katastru. Družstevní byt označený portálem jako „prodáno" se v katastru ověřit nedá — počítá se poslední cena z inzerátu
+      snížená o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (kupní cena bývá nižší než inzerovaná) a je označený jako odhad. Jinak je to poslední
+      inzerovaná cena před zmizením nebo u prodaného bytu, kterou jde v katastru ještě ověřit — u ní počítej s návodovým odečtem
+      cca 5 % pro konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
     </p>
     ${renoStats.cities.length ? renoStats.cities.map(renderCityStatsTable).join("") : `<p class="muted">Zatím žádná data.</p>`}`;
 }
@@ -1536,7 +1541,7 @@ function renderPlombaBlock(e, scan) {
 function saleStageText({ verdict, track, price, saleDate, filed, portalSold = false, lastPrice = null }) {
   if (verdict === "withdrawn") return "Neprodáno — ověřeno v katastru";
   if (price != null) return `Prodáno za ${formatCzk(price)}${saleDate ? ` (${formatDateOnly(saleDate)})` : ""}`;
-  if (track?.priceAssumed) return `Prodáno podle portálu — poslední cena ${formatCzk(lastPrice)} platí jako potvrzená, v katastru ji nejde ověřit`;
+  if (track?.priceAssumed) return `Prodáno podle portálu — poslední cena ${formatCzk(lastPrice)}, v katastru ji nejde ověřit; do statistik se počítá snížená o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (${formatCzk(assumedSalePrice(lastPrice))})`;
   if (portalSold && !filed && lastPrice != null) return `Prodáno podle portálu — cena z inzerátu ${formatCzk(lastPrice)} zatím není ověřená v katastru`;
   if (verdict === "sold" || portalSold) return filed ? `Prodáno — vklad podán ${formatDateOnly(filed)}, cena se dohledá po rozhodnutí o vkladu` : "Prodáno — cena zatím neznámá";
   if (track) {
@@ -1792,7 +1797,7 @@ function renderKnQueue(db) {
       const verdictText = e.saleVerdict === "withdrawn" ? "Neprodáno" : "Prodáno";
       const facts = [
         e.verifiedSalePrice != null ? formatCzk(e.verifiedSalePrice) : null,
-        e.track?.priceAssumed && e.verifiedSalePrice == null ? `poslední cena z portálu ${formatCzk(e.price)} platí jako potvrzená, v katastru ji nejde ověřit` : null,
+        e.track?.priceAssumed && e.verifiedSalePrice == null ? `poslední cena z portálu ${formatCzk(e.price)}, v katastru nejde ověřit — ve statistikách −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (${formatCzk(assumedSalePrice(e.price))})` : null,
         e.verifiedSaleDate ? `prodáno ${formatDateOnly(e.verifiedSaleDate)}` : null,
         e.knFiledAt ? `vklad podán ${formatDateOnly(e.knFiledAt)}` : null,
         e.lvNumber ? `LV ${e.lvNumber}` : null,

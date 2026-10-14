@@ -699,7 +699,12 @@ slevě a vyjednávání se byt prodá jinak). Takový byt jde do fronty Katastr 
 ceny, první kontrola 25 dní po prodeji, nebo po podání vkladu podle API) a ve
 statistikách se počítá jako „odhad“, dokud se cena neověří. **Výjimka: družstevní
 byt** — v katastru se nepřevádí vkladem a cena ani vklad se tam ověřit nedají, proto
-se poslední cena z portálu bere jako potvrzená a byt je rovnou vyřízený.
+je byt rovnou vyřízený a bere se poslední cena z portálu. Ta je ale **inzerovaná, ne
+kupní** (po vyjednávání se byt prodá níž), takže se do statistik počítá **snížená o
+10 %** (`ASSUMED_PRICE_DISCOUNT` v `sale-record.js`) a všude je označená jako
+odhad: ve statistikách „družstevní — poslední cena −10 %“ (a zvlášť v počtech), v
+detailu i ve „Vyřízených“ s oběma částkami. Cena se nikam neukládá, počítá se při
+čtení; jakmile zadáš skutečnou cenu, platí ta (a koeficient se už nepoužije).
 Družstevní byt se pozná podle vlastnictví z inzerátu (nebo ručně opraveného v
 „Doplnit parametry“), případně podle toho, že dům v katastru nemá jednotky; takové
 byty se přes API ani nekontrolují.
