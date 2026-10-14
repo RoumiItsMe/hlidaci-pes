@@ -56,7 +56,7 @@ export function knInfoForGroup(actx, group, resolution) {
   return {
     ku: best.r.ku,
     via: best.via,
-    building: b ? { cp: b.cp, flats: b.flats, floors: b.floors, completed: b.completed } : null,
+    building: b ? { cp: b.cp, flats: b.flats, floors: b.floors, completed: b.completed, isknId: b.isknId ?? null } : null,
   };
 }
 

@@ -447,6 +447,41 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   zpráva nechodí při každém běhu; v jedné zprávě je max. 8 bytů, zbytek příště.
   Výsledek se zapisuje v appce (tlačítka ve zprávě nejsou); selhání Telegramu
   body neoznačí a zkusí se další běh.
+- **Plomby z bezplatného API katastru** (`kn-api.js`, `kn-plomba.js`,
+  `kn-scan.js`; testy `kn-api.test.js`, `kn-plomba.test.js`): po každém sběru
+  (`track.js`) appka projde domy rezervovaných bytů s přesnou adresou a zjistí,
+  které jednotky mají **plombu** (podaný návrh na vklad). Z řízení čte přesné
+  **datum podání** a stav. Cenu API nedává — ta zůstává na tobě (výpis z katastru
+  za 50 Kč, nebo ručně).
+  - **Klíč** `KN_API_KEY=…` patří do `.env.local` v kořeni repa (stejný soubor
+    jako Telegram; jedna řádka, bez uvozovek, nikdy do gitu ani do chatu).
+    Bez klíče se tahle část přeskočí. Klíč má **omezenou platnost** (aktuální
+    vyprší 12. 4. 2027 — vygeneruj nový v portálu `api-kn.cuzk.gov.cz`).
+  - **Limit volání** je 500 za období (den). Plomby jsou vidět jen u jednotky, ne u
+    domu, takže sken domu stojí 1 + počet jednotek volání (22 jednotek ≈ 23
+    volání), dům s jednotkou bytu zapsanou v appce stojí 1–3. Sken běží nejvýš
+    jednou za ~20 hodin na dům a nesmí sníst víc než 350 volání (a 100 nechává
+    rezervu); na dům, který by rozpočet nestačil prohledat celý, se nesahá — neúplný
+    sken by prohlásil nezkontrolované jednotky za čisté.
+  - **Jednotka bytu známá** (zapsaná v detailu bytu jako `č.p./číslo`, např.
+    `412/12`): plomba po rezervaci na ní je silný důkaz → appka sama zapíše
+    „Vklad podán" s datem z řízení (i LV), pošle zprávu na Telegram a byt přejde do
+    fáze ceny (první kontrola ceny 25. den po podání). Vklad podaný před rezervací
+    (s rezervou 14 dní) se nepočítá. Zapsaný vklad jde vrátit tlačítkem „Zrušit
+    vklad podán“.
+  - **Jednotka neznámá**: v domě se prodává víc bytů, takže plomba sama nic
+    nedokazuje. Karta v Katastru ukáže **nápovědu** — jednotky domu s plombou po
+    rezervaci (č., LV, podíl na společných částech, datum podání, stav řízení) a
+    tlačítko **To je ten byt**, které zapíše jednotku, vklad podán i LV; od té
+    chvíle appka byt sleduje sama. Nic se tedy nepřiřadí bez tvého potvrzení.
+    Souhrn na Telegramu nápovědu zmíní taky.
+  - Když plomba z minula zmizela, řízení skončilo (vklad proveden, nebo
+    zamítnut) — karta to napíše i se stavem řízení („zjisti cenu“).
+  - **Družstevní byty** v katastru žádný vklad nemají (převádí se členský
+    podíl), API u nich nic nenajde: dům Křib 1807 je družstevní a API u něj nevrací
+    žádné jednotky. Karta to napíše („Dům nemá v katastru vymezené jednotky“),
+    ať se tam zbytečně nehledá.
+  - Výsledky skenu leží v tabulce `kn_scans` (jeden řádek na dům).
 - **Možný prodej:** byt, který byl těsně před zmizením **rezervovaný** a do
   nabídky se nevrátil, má v přehledu štítek **Možný prodej** (a filtr se stejným
   názvem) místo obyčejného „Zmizelo z nabídky" — po rezervaci se inzerát

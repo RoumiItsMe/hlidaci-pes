@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { watches } from "../config.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
+import { refreshKnScans } from "./kn-scan.js";
 import { fetchSrealityAllPages } from "../sources/sreality.js";
 import { fetchBezrealitky } from "../sources/bezrealitky.js";
 import { fetchIdnes } from "../sources/idnes.js";
@@ -386,6 +387,17 @@ async function run() {
     if (assigned || revoked) log(`[geo] adresy: ${assigned} doplněno automaticky, ${revoked} odvoláno.`);
   } catch (err) {
     log(`[geo] zpracování polohy selhalo: ${err.message}`);
+  }
+
+  // Plomby (podané vklady) v domech rezervovaných bytů přes bezplatné API
+  // katastru (kn-scan.js) — před souhrnem, ať souhrn vidí čerstvá data a byt,
+  // u kterého se vklad našel sám, už mezi "k vyřízení" nepatří. Bez KN_API_KEY
+  // v .env.local se nedělá nic.
+  try {
+    const line = await refreshKnScans(db, log);
+    if (line) log(line);
+  } catch (err) {
+    log(`Kontrola plomb v katastru selhala: ${err.message}`);
   }
 
   // Souhrn "tyhle byty je čas zkontrolovat v katastru" (rozvrh viz

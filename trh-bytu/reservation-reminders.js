@@ -27,6 +27,9 @@ import { sendTelegramMessage, getTelegramUpdates, answerTelegramCallback, editTe
 import { addressNoticeLines, buildAddressContext, resolveForGroup, knInfoForGroup, describeKn } from "./auto-address.js";
 import { assessSale } from "./sale-triage.js";
 import { buildSaleTrack } from "./kn-schedule.js";
+import { loadKnScans } from "./kn-scan.js";
+import { analyzePlombas, plombaHintLine } from "./kn-plomba.js";
+import { parseUnitNumber } from "./kn-api.js";
 
 const OFFSET_KEY = "telegram_update_offset";
 // Kolik bytů se vypíše v jedné zprávě; zbytek přijde příště (nedoznačený
@@ -78,6 +81,7 @@ export async function sendKnCheckDigest(db, log, now = Date.now()) {
   if (!fresh.length) return;
 
   const actx = buildAddressContext(db, listings, groups);
+  const scans = loadKnScans(db);
   const shown = fresh.slice(0, DIGEST_MAX_ITEMS);
   const lines = [`🏛️ Kontrola v katastru (${fresh.length})`, ""];
   for (const d of shown) {
@@ -90,6 +94,10 @@ export async function sendKnCheckDigest(db, log, now = Date.now()) {
     lines.push(`• ${specs}${rep.address ? `, ${rep.address}` : ""} — ${price}`);
     lines.push(`  📍 ${[d.exact, unit ? `jednotka ${unit}` : null, lv ? `LV ${lv}` : null].filter(Boolean).join(" · ")}`);
     if (kn) lines.push(`  🏛️ ${describeKn(kn)}`);
+    // Co o domě říká API katastru (kn-scan.js) — jen když tam něco je.
+    const scan = kn?.building?.isknId ? scans.get(kn.building.isknId) : null;
+    const hint = scan ? plombaHintLine(analyzePlombas(scan, { reservedAt: d.track.reservedAt, unitNumber: parseUnitNumber(unit) })) : null;
+    if (hint) lines.push(`  ${hint}`);
     lines.push(`  ⏰ ${d.track.reason}${d.track.stage === "price" ? "" : ` (rezervováno ${formatDay(d.track.reservedAt)})`}`);
   }
   const more = fresh.length - shown.length;

@@ -12,6 +12,9 @@ import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js"
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
+import { loadKnScans } from "./kn-scan.js";
+import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
+import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
@@ -1424,6 +1427,7 @@ const KN_RECHECK_DAYS = 7;
 function renderKnQueue(db) {
   const entries = computeEntries(db).filter((e) => !e.hidden);
   const knActx = buildAddressContext(db, db.prepare("SELECT * FROM listings").all());
+  const knScans = loadKnScans(db);
   const DAY = 24 * 60 * 60 * 1000;
   const checkedRecently = (e) => e.knCheckedAt && Date.now() - new Date(e.knCheckedAt).getTime() < KN_RECHECK_DAYS * DAY;
   const known = (e) => e.addressInfo.state === "known";
@@ -1482,7 +1486,7 @@ function renderKnQueue(db) {
     const houseFacts = kn?.building
       ? ` <span class="muted">(dům: č.p. ${esc(kn.building.cp.join(", "))}${kn.building.floors ? `, ${kn.building.floors} podlaží` : ""}${kn.building.flats ? `, ${kn.building.flats} bytů` : ""})</span>`
       : "";
-    return { lookup, houseFacts };
+    return { lookup, houseFacts, buildingId: kn?.building?.isknId ?? null };
   };
 
   // Časová osa bytu v jedné větě: co se kdy stalo.
@@ -1495,12 +1499,49 @@ function renderKnQueue(db) {
     return esc(parts.join(" · "));
   };
 
+  // Co o domě ví API katastru (kn-scan.js): plomby po rezervaci. U bytu se
+  // zapsanou jednotkou je to přímý údaj, jinak jen nápověda — v domě se
+  // prodává víc bytů a plomba nemusí patřit tomuhle, rozhodne tlačítko.
+  const plombaBlock = (e, buildingId) => {
+    const scan = buildingId ? knScans.get(buildingId) : null;
+    if (!scan) return "";
+    const encId = encodeURIComponent(e.rep.id);
+    const a = analyzePlombas(scan, { reservedAt: e.track.reservedAt, unitNumber: parseUnitNumber(e.addressInfo.unit) });
+    const stamp = `<span class="muted"> (API katastru, ${esc(formatKnDay(scan.scannedAt))})</span>`;
+    const stavy = (c) => c.proceedings.map((r) => `${esc(formatKnDay(r.datumPrijeti))}${r.stav ? ` — ${esc(r.stav)}` : ""}`).join("; ");
+    const closedText = (c) =>
+      `řízení V-${esc(c.proceeding.cislo)}/${esc(c.proceeding.rok)} u č. ${esc(c.label)} skončilo${c.proceeding.stav ? ` (${esc(c.proceeding.stav)})` : ""} — zjisti cenu`;
+    const lines = [];
+    if (a.mode === "unit") {
+      if (a.unit.missing) lines.push(`⚠ Jednotka ${esc(a.unit.label)} v domě neexistuje — zkontroluj číslo v detailu bytu.`);
+      else if (a.candidates.length) a.candidates.forEach((c) => lines.push(`🔖 <strong>Jednotka ${esc(c.label)}${c.lv ? ` (LV ${esc(c.lv)})` : ""}: vklad podán</strong> — ${stavy(c)}`));
+      else lines.push(`Jednotka ${esc(a.unit.label)}: po rezervaci žádná plomba.`);
+    } else if (a.unitCount === 0) {
+      lines.push("Dům nemá v katastru vymezené jednotky (typicky družstevní byty) — vklad tu nevznikne, prodej v katastru nepůjde sledovat.");
+    } else if (a.incomplete) {
+      return "";
+    } else if (a.candidates.length) {
+      lines.push(`🔎 V domě je podaný vklad — je to tenhle byt?`);
+      for (const c of a.candidates) {
+        const confirm = actionForm(
+          encId,
+          `<input type="hidden" name="unit_number" value="${esc(c.label)}"><input type="hidden" name="kn_filed_at" value="${esc(c.filedAt)}"><input type="hidden" name="lv_number" value="${esc(c.lv ?? "")}">${btn("unit", "To je ten byt", "kn-btn--sold")}`
+        );
+        lines.push(`<div class="kn-plomba-row">č. <strong>${esc(c.label)}</strong>${c.lv ? ` (LV ${esc(c.lv)})` : ""}${c.share ? ` · podíl ${esc(c.share)}` : ""} — podáno ${stavy(c)} ${confirm}</div>`);
+      }
+    } else {
+      lines.push(`V domě (${a.unitCount} jednotek) po rezervaci nikdo nepodal vklad. Zapíšeš-li jednotku bytu v detailu, appka ji pak sleduje sama.`);
+    }
+    for (const c of a.closed) lines.push(closedText(c));
+    return `<div class="kn-plomba">${lines.map((l) => (l.startsWith("<div") ? l : `<div>${l}</div>`)).join("")}${stamp}</div>`;
+  };
+
   // Tělo karty: kde hledat + formulář podle fáze. Ve fázi "filing" se zapisuje
   // buď podaný vklad (prodej potvrzený, cena později), nebo rovnou cena.
   const cardBody = (e) => {
     const encId = encodeURIComponent(e.rep.id);
     const t = e.track;
-    const { lookup, houseFacts } = lookupFor(e);
+    const { lookup, houseFacts, buildingId } = lookupFor(e);
     const forms =
       t.stage === "price"
         ? actionForm(encId, `${lvInput(e)}${saleFields}${btn("sold", "Cena zjištěna", "kn-btn--sold")}${btn("check", "Zatím nic", "kn-btn--later")}${btn("reset", "Zrušit „vklad podán“", "kn-btn--later")}`)
@@ -1511,6 +1552,7 @@ function renderKnQueue(db) {
           `<details class="kn-direct"><summary>Znám rovnou cenu</summary>${actionForm(encId, `${saleFields}${btn("sold", "Prodáno", "kn-btn--sold")}`)}</details>`;
     return `<div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}${houseFacts}</div>
         <div class="muted">${timeline(e)}</div>
+        ${plombaBlock(e, buildingId)}
         ${forms}`;
   };
 
@@ -1786,7 +1828,7 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(knMatch[1]);
     const fields = await parseBody(req);
     const action = fields.action;
-    const group = ["filed", "sold", "withdrawn", "check", "reset"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
+    const group = ["filed", "unit", "sold", "withdrawn", "check", "reset"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
     if (group) {
       const now = nowIso();
       const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || "") && !Number.isNaN(Date.parse(v));
@@ -1795,6 +1837,16 @@ const server = createServer(async (req, res) => {
         updates = { sale_verdict: null, kn_checked_at: null, kn_filed_at: null, kn_digest_cp: null };
       } else if (action === "check") {
         updates = { kn_checked_at: now };
+      } else if (action === "unit") {
+        // "To je ten byt" z nápovědy API katastru: zapíše jednotku (od teď ji
+        // appka sleduje sama) a vklad podán. Už zapsaný den podání nepřepíše.
+        const unitNumber = parseUnitNumber(fields.unit_number);
+        updates = {};
+        if (unitNumber != null) {
+          const today = now.slice(0, 10);
+          updates = { unit_number: formatUnitNumber(unitNumber), sale_verdict: "sold", kn_checked_at: now };
+          if (!pickOwnValue(group.members, "kn_filed_at")) updates.kn_filed_at = isDay(fields.kn_filed_at) && fields.kn_filed_at <= today ? fields.kn_filed_at : today;
+        }
       } else if (action === "filed") {
         // Podaný návrh na vklad (plomba): prodej je potvrzený, cena se zjistí
         // až po rozhodnutí o vkladu (viz kn-schedule.js, fáze "price"). Den
@@ -1808,7 +1860,7 @@ const server = createServer(async (req, res) => {
       // Číslo LV je nepovinné a nikdy se nemaže prázdným polem — příští
       // kontrola pak stačí podle k.ú. + LV, bez dohledávání podle adresy.
       const lv = (fields.lv_number || "").trim();
-      if (/^[0-9A-Za-z/ -]{1,20}$/.test(lv)) updates.lv_number = lv;
+      if (/^[0-9A-Za-z/ -]{1,20}$/.test(lv) && Object.keys(updates).length) updates.lv_number = lv;
       // Kupní cena z katastru je nepovinná a nikdy se nemaže prázdným polem
       // — přepisuje se jen když ji uživatel opravdu zadal.
       if (action === "sold") {
@@ -1817,7 +1869,7 @@ const server = createServer(async (req, res) => {
         // Datum prodeje stejně: jen platné YYYY-MM-DD, prázdné pole nic nemaže.
         if (isDay(fields.verified_sale_date)) updates.verified_sale_date = fields.verified_sale_date;
       }
-      for (const m of group.members) updateListingFields(db, m.id, updates);
+      if (Object.keys(updates).length) for (const m of group.members) updateListingFields(db, m.id, updates);
     }
     res.writeHead(302, { Location: req.headers.referer || "/kontrola" });
     return res.end();

@@ -74,6 +74,15 @@ CREATE TABLE IF NOT EXISTS ruian_cache (
   fetched_at TEXT NOT NULL
 );
 
+-- Poslední kontrola domu přes bezplatné API katastru (viz kn-scan.js): jednotky
+-- domu, plomby (podané vklady) a řízení k nim. Jeden řádek na dům, klíč je id
+-- stavby v ISKN (RÚIAN: isknbudovaid). JSON drží jen to, co appka zobrazuje.
+CREATE TABLE IF NOT EXISTS kn_scans (
+  building_id INTEGER PRIMARY KEY,
+  scanned_at TEXT NOT NULL,
+  result_json TEXT NOT NULL
+);
+
 -- Drobný stav appky (zatím: kdy uživatel naposledy přečetl upozornění)
 CREATE TABLE IF NOT EXISTS app_state (
   key TEXT PRIMARY KEY,

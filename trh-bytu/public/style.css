@@ -412,6 +412,11 @@ a.addr-chip--candidate:hover { text-decoration: underline; }
 /* `form label` (výš) skládá popisek nad pole — tady má být v jedné řadě. */
 .kn-form .kn-date { flex-direction: row; align-items: center; gap: 0.35rem; }
 .kn-form .kn-date input { width: auto; }
+/* Údaje z API katastru na kartě bytu (plomby po rezervaci) */
+.kn-plomba { margin: 0.4rem 0 0.2rem; padding: 0.4rem 0.6rem; border-left: 3px solid var(--border); font-size: 0.9rem; }
+.kn-plomba > div + div { margin-top: 0.2rem; }
+.kn-plomba-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.kn-plomba-row .kn-form { margin-top: 0; }
 .kn-btn {
   border: 1px solid var(--border);
   background: var(--card);
