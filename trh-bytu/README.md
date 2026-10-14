@@ -66,6 +66,16 @@ automaticky z polohy, viz Přesná adresa) je v tabulce srovnání pod přibliž
 jako štítek „📍 …"; u nabídek, kde chybí, je tam odkaz „📍 doplnit adresu" na
 formulář v detailu.
 
+**Tabulka srovnání (`/tabulka`) je ve výchozím stavu zúžená na 15 sloupců** —
+to, podle čeho se byty porovnávají (adresa, dispozice, plocha, patro, výtah,
+balkón, sklep, vlastnictví, cena, Kč/m², sleva, přidáno, doba v nabídce, odkazy).
+Sloupce, které appka vyplňuje sama nebo se do nich sahá zřídka (Stav, Konstrukce,
+Revitalizace, Ve statistice, Ověřená cena, Poznámka, Motivace prodávajícího),
+jsou za přepínačem **Víc sloupců (+7)**; všechno z toho je i v detailu bytu.
+Přepínač je v adrese (`?cols=all`), takže se zachová při filtrování a řazení.
+Filtry stavu a řazení v tabulce se vracejí do tabulky a drží zvolené město a
+sloupce (dřív odkaz filtru stavu vedl na přehled a řazení zapomnělo filtr).
+
 **Hlavní přehled je řádkový** — 1 nemovitost = 1 řádek, ale hustší než
 holá tabulka: náhledová fotka (nebo "Bez fotky", když ji appka nemá u
 žádného sloučeného zdroje), čitelný nadpis ve tvaru

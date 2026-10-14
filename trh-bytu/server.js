@@ -399,14 +399,16 @@ function truncate(text, maxLen) {
 // Sestaví "/?..." se stávajícími filtry + přepsáním jen zadaných klíčů —
 // každý filtrovací/řadicí odkaz tak zachová VŠECHNY ostatní aktivní
 // filtry (klik na "Cena ↑" nesmí zapomenout zvolené město atd.).
-function buildQuery(current, overrides) {
+// `base` = stránka, na kterou odkaz vede ("/" přehled, "/tabulka" srovnání) —
+// bez toho odkazy ve filtrech tabulky srovnání vedly na přehled.
+function buildQuery(current, overrides, base = "/") {
   const merged = { ...current, ...overrides };
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(merged)) {
     if (v) params.set(k, v);
   }
   const qs = params.toString();
-  return qs ? `/?${qs}` : "/";
+  return qs ? `${base}?${qs}` : base;
 }
 
 // Výchozí řazení ve čtyřech skupinách za sebou:
@@ -730,15 +732,17 @@ const COMPARE_SORT_COLUMNS = {
   days: { get: (e) => e.daysOnMarket, label: "Doba v nabídce", firstDir: "desc" },
 };
 
+// `current` = všechny aktivní filtry tabulky (status, město, sloupce, řazení) —
+// klik na hlavičku přepíše jen řazení, ostatní filtry zůstanou.
 function compareSortHeader(current, key, label) {
   const col = COMPARE_SORT_COLUMNS[key];
-  const [curKey, curDir] = (current || "").split("_dir_");
+  const [curKey, curDir] = (current.sort || "").split("_dir_");
   const isActive = curKey === key;
   // První klik na sloupec jede ve `firstDir`u, druhý klik na TENTÝŽ sloupec
   // směr otočí — třetí zase zpátky atd.
   const nextDir = isActive ? (curDir === "asc" ? "desc" : "asc") : col.firstDir;
   const arrow = isActive ? (curDir === "asc" ? " ↑" : " ↓") : "";
-  return `<a class="compare-sort${isActive ? " active" : ""}" href="?sort=${key}_dir_${nextDir}">${esc(label)}${arrow}</a>`;
+  return `<a class="compare-sort${isActive ? " active" : ""}" href="${buildQuery(current, { sort: `${key}_dir_${nextDir}` }, "/tabulka")}">${esc(label)}${arrow}</a>`;
 }
 
 /**
@@ -751,7 +755,11 @@ function compareSortHeader(current, key, label) {
  * `this.form.submit()`, stejný vzorec jako filtr Město/Vlastnictví na "/").
  */
 function renderComparisonTable(db, filters) {
-  const { status: statusFilter, city: cityFilter, sort: sortParam } = filters;
+  const { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam } = filters;
+  // Výchozí tabulka drží jen to, podle čeho se byty porovnávají; sloupce, které
+  // appka vyplňuje sama nebo se do nich sahá zřídka, jsou za "Víc sloupců"
+  // (a všechny jsou i v detailu bytu).
+  const showAll = colsParam === "all";
   const entries = computeEntries(db);
 
   const cityOptions = [...new Set(entries.map((e) => e.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
@@ -775,71 +783,98 @@ function renderComparisonTable(db, filters) {
     return dir === "asc" ? cmp : -cmp;
   });
 
-  const current = { status: statusFilter, city: cityFilter, sort: sortParam };
+  const current = { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam };
   const filterLinks = STATUS_FILTERS
     .map((s) => {
       const label = s ? STATUS_LABELS[s].text : "Vše";
       const active = statusFilter === s || (!statusFilter && !s) ? "active" : "";
-      return `<a class="filter ${active}" href="${buildQuery(current, { status: s })}">${esc(label)}</a>`;
+      return `<a class="filter ${active}" href="${buildQuery(current, { status: s }, "/tabulka")}">${esc(label)}</a>`;
     })
     .join("");
   const cityOptionsHtml = [`<option value="">Všechna města</option>`]
     .concat(cityOptions.map((c) => `<option value="${esc(c)}" ${cityFilter === c ? "selected" : ""}>${esc(c)}</option>`))
     .join("");
 
+  // Sloupce na jednom místě — hlavička i buňky z téhož seznamu, takže se
+  // nemůžou rozejít při přidání/skrytí sloupce. `ext` = jen ve "Víc sloupců".
+  // column = sloupec v DB ("own_condition"...), value = odpovídající
+  // předpočítaná hodnota entry (e.ownCondition...) — přímé mapování, ne
+  // odvozování jednoho jména z druhého.
+  const noteInput = (encId, name, value, placeholder, type = "text", extra = "") =>
+    `<form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="${type}" name="${name}" value="${esc(value)}" placeholder="${placeholder}"${extra} onchange="this.form.requestSubmit()"></form>`;
+  const ownSelect = (encId, column, value) =>
+    `<form class="cell-form" method="post" action="/byt/${encId}/notes">${ownFieldSelectHtml(column, value, { autoSubmit: true })}</form>`;
+  // Stejný vzorec jako ownSelect, jen jiný cíl (/params) a jiný generátor
+  // pole (text i select, viz PARAM_OVERRIDE_FIELDS).
+  const paramField = (encId, e, column) =>
+    `<form class="cell-form" method="post" action="/byt/${encId}/params">${paramOverrideFieldHtml(column, e.params[column], { autoSubmit: true })}</form>`;
+
+  const COLUMNS = [
+    {
+      head: "Nabídka",
+      cell: (e) => {
+        const st = statusLabelFor(e.status, e.saleVerdict, e.triage);
+        return `<td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>`;
+      },
+    },
+    {
+      head: "Adresa / lokalita",
+      cell: (e, encId) => {
+        // Přesná adresa pod přibližnou — to, podle čeho se byt hledá v katastru.
+        const chip = addressChipHtml(e.addressInfo, e.status, `/byt/${encId}#adresa`);
+        return `<td>${noteInput(encId, "address", e.address || e.city, "adresa…")}${chip ? `<div class="cell-addr">${chip}</div>` : ""}</td>`;
+      },
+    },
+    { head: "Dispozice", cell: (e, encId) => `<td>${noteInput(encId, "disposition", e.rep.disposition, "—")}</td>` },
+    { head: "Plocha", cell: (e, encId) => `<td>${noteInput(encId, "area_m2", e.rep.area_m2 ?? "", "m²", "number", ' step="0.1"')}</td>` },
+    { head: "Patro", cell: (e, encId) => `<td class="col-floor">${paramField(encId, e, "floorInfo")}</td>` },
+    { head: "Výtah", cell: (e, encId) => `<td>${paramField(encId, e, "elevator")}</td>` },
+    { head: "Balkón", cell: (e, encId) => `<td>${paramField(encId, e, "balcony")}</td>` },
+    { head: "Sklep", cell: (e, encId) => `<td>${paramField(encId, e, "cellar")}</td>` },
+    { head: "Vlastnictví", cell: (e, encId) => `<td>${paramField(encId, e, "ownership")}</td>` },
+    { head: "Stav", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "own_condition", e.ownCondition)}</td>` },
+    { head: "Konstrukce", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "own_construction", e.ownConstruction)}</td>` },
+    { head: "Revitalizace", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "own_revitalized", e.ownRevitalized)}</td>` },
+    { head: "Ve statistice", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "stats_include", e.statsInclude)}</td>` },
+    { head: "Cena", sort: "price", cell: (e) => `<td>${esc(e.priceLabel)}</td>` },
+    { head: "Cena/m²", sort: "price_m2", cell: (e) => `<td>${esc(formatPricePerM2(e.pricePerM2))}</td>` },
+    { head: "Sleva", sort: "discount", cell: (e) => `<td>${esc(priceDropLabel(e))}</td>` },
+    { head: "Přidáno", sort: "added", cell: (e) => `<td>${esc(formatDateOnly(e.firstSeenAt))}</td>` },
+    { head: "Doba v nabídce", sort: "days", cell: (e) => `<td>${esc(daysOnMarketLabel(e))}</td>` },
+    {
+      head: "Ověřená cena",
+      ext: true,
+      cell: (e, encId) => `<td><form class="cell-form cell-form--stack" method="post" action="/byt/${encId}/notes">
+          <input type="number" name="verified_sale_price_czk" value="${e.verifiedSalePrice ?? ""}" placeholder="Kč" onchange="this.form.requestSubmit()">
+          <input type="date" name="verified_sale_date" value="${e.verifiedSaleDate ?? ""}" onchange="this.form.requestSubmit()">
+        </form></td>`,
+    },
+    {
+      head: "Odkaz",
+      cell: (e, encId) =>
+        `<td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(e.rep.url)}" target="_blank" rel="noopener">Inzerát ↗</a> · <a href="/byt/${encId}/kalkulacka">Kalkulačka</a></td>`,
+    },
+    { head: "Poznámka", ext: true, cell: (e, encId) => `<td>${noteInput(encId, "notes", e.notes, "poznámka…")}</td>` },
+    { head: "Motivace prodávajícího", ext: true, cell: (e, encId) => `<td>${noteInput(encId, "seller_motivation", e.sellerMotivation, "motivace…")}</td>` },
+  ];
+  const visibleColumns = COLUMNS.filter((c) => showAll || !c.ext);
+  const extraColumnCount = COLUMNS.filter((c) => c.ext).length;
+
   const rows = filtered
     .map((e) => {
       const encId = encodeURIComponent(e.rep.id);
-      const st = statusLabelFor(e.status, e.saleVerdict, e.triage);
-      // column = sloupec v DB ("own_condition"...), value = odpovídající
-      // předpočítaná hodnota entry (e.ownCondition...) — přímé mapování, ne
-      // odvozování jednoho jména z druhého.
-      const ownSelect = (column, value) =>
-        `<form class="cell-form" method="post" action="/byt/${encId}/notes">${ownFieldSelectHtml(column, value, { autoSubmit: true })}</form>`;
-      // Stejný vzorec jako ownSelect, jen jiný cíl (/params) a jiný
-      // generátor pole (text i select, viz PARAM_OVERRIDE_FIELDS).
-      const paramField = (column) =>
-        `<form class="cell-form" method="post" action="/byt/${encId}/params">${paramOverrideFieldHtml(column, e.params[column], { autoSubmit: true })}</form>`;
-
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
-        <td><span class="badge small" style="background:${st.color}">${esc(st.text)}</span></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="address" value="${esc(e.address || e.city)}" placeholder="adresa…" onchange="this.form.requestSubmit()"></form>${(() => {
-          // Přesná adresa pod přibližnou — to, podle čeho se byt hledá v katastru.
-          const chip = addressChipHtml(e.addressInfo, e.status, `/byt/${encId}#adresa`);
-          return chip ? `<div class="cell-addr">${chip}</div>` : "";
-        })()}</td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="disposition" value="${esc(e.rep.disposition)}" placeholder="—" onchange="this.form.requestSubmit()"></form></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="number" name="area_m2" value="${e.rep.area_m2 ?? ""}" step="0.1" placeholder="m²" onchange="this.form.requestSubmit()"></form></td>
-        <td class="col-floor">${paramField("floorInfo")}</td>
-        <td>${paramField("elevator")}</td>
-        <td>${paramField("balcony")}</td>
-        <td>${paramField("cellar")}</td>
-        <td>${paramField("ownership")}</td>
-        <td>${ownSelect("own_condition", e.ownCondition)}</td>
-        <td>${ownSelect("own_construction", e.ownConstruction)}</td>
-        <td>${ownSelect("own_revitalized", e.ownRevitalized)}</td>
-        <td>${ownSelect("stats_include", e.statsInclude)}</td>
-        <td>${esc(e.priceLabel)}</td>
-        <td>${esc(formatPricePerM2(e.pricePerM2))}</td>
-        <td>${esc(priceDropLabel(e))}</td>
-        <td>${esc(formatDateOnly(e.firstSeenAt))}</td>
-        <td>${esc(daysOnMarketLabel(e))}</td>
-        <td><form class="cell-form cell-form--stack" method="post" action="/byt/${encId}/notes">
-          <input type="number" name="verified_sale_price_czk" value="${e.verifiedSalePrice ?? ""}" placeholder="Kč" onchange="this.form.requestSubmit()">
-          <input type="date" name="verified_sale_date" value="${e.verifiedSaleDate ?? ""}" onchange="this.form.requestSubmit()">
-        </form></td>
-        <td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(e.rep.url)}" target="_blank" rel="noopener">Inzerát ↗</a> · <a href="/byt/${encId}/kalkulacka">Kalkulačka</a></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="notes" value="${esc(e.notes)}" placeholder="poznámka…" onchange="this.form.requestSubmit()"></form></td>
-        <td><form class="cell-form" method="post" action="/byt/${encId}/notes"><input type="text" name="seller_motivation" value="${esc(e.sellerMotivation)}" placeholder="motivace…" onchange="this.form.requestSubmit()"></form></td>
+        ${visibleColumns.map((c) => c.cell(e, encId)).join("\n        ")}
       </tr>`;
     })
     .join("");
 
-  const headers = [
-    "Nabídka", "Adresa / lokalita", "Dispozice", "Plocha",
-    "Patro", "Výtah", "Balkón", "Sklep", "Vlastnictví",
-    "Stav", "Konstrukce", "Revitalizace", "Ve statistice",
-  ];
+  const headerCells = visibleColumns
+    .map((c) => (c.sort ? `<th>${compareSortHeader(current, c.sort, c.head)}</th>` : `<th>${esc(c.head)}</th>`))
+    .join("");
+  const colsLink = `<a class="filter" href="${buildQuery(current, { cols: showAll ? null : "all" }, "/tabulka")}">${
+    showAll ? "Méně sloupců" : `Víc sloupců (+${extraColumnCount})`
+  }</a>`;
 
   return `
     <h1>Srovnání bytů (${filtered.length})</h1>
@@ -848,24 +883,15 @@ function renderComparisonTable(db, filters) {
       <form method="get" action="/tabulka" class="select-filters">
         <input type="hidden" name="status" value="${esc(statusFilter || "")}">
         <input type="hidden" name="sort" value="${esc(sortParam || "")}">
+        <input type="hidden" name="cols" value="${esc(colsParam || "")}">
         <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
       </form>
+      ${colsLink}
     </div>
     <div class="compare-wrap">
       <table class="compare">
-        <thead><tr>
-          ${headers.map((h) => `<th>${esc(h)}</th>`).join("")}
-          <th>${compareSortHeader(sortParam, "price", "Cena")}</th>
-          <th>${compareSortHeader(sortParam, "price_m2", "Cena/m²")}</th>
-          <th>${compareSortHeader(sortParam, "discount", "Sleva")}</th>
-          <th>${compareSortHeader(sortParam, "added", "Přidáno")}</th>
-          <th>${compareSortHeader(sortParam, "days", "Doba v nabídce")}</th>
-          <th>Ověřená cena</th>
-          <th>Odkaz</th>
-          <th>Poznámka</th>
-          <th>Motivace prodávajícího</th>
-        </tr></thead>
-        <tbody>${rows || `<tr><td colspan="${headers.length + 9}" class="empty">Nic nenalezeno pro zvolené filtry.</td></tr>`}</tbody>
+        <thead><tr>${headerCells}</tr></thead>
+        <tbody>${rows || `<tr><td colspan="${visibleColumns.length}" class="empty">Nic nenalezeno pro zvolené filtry.</td></tr>`}</tbody>
       </table>
     </div>`;
 }
@@ -1630,6 +1656,7 @@ const server = createServer(async (req, res) => {
       status: url.searchParams.get("status") || null,
       city: url.searchParams.get("city") || null,
       sort: url.searchParams.get("sort") || null,
+      cols: url.searchParams.get("cols") === "all" ? "all" : null,
     };
     return sendHtml(res, 200, layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
   }
