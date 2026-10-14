@@ -142,3 +142,67 @@ test("filingLagDays a median", () => {
   assert.equal(median([14, 80]), 47);
   assert.equal(median([]), null);
 });
+
+// --- hlídání plomb přes API katastru ---
+
+const WATCHED = { needsConfirm: false, confirmAt: null, unverifiable: false };
+
+test("API hlídá a plomba není: kontrola pro hotovostního kupce se nepřipomíná", () => {
+  const t = filing(15, { watch: WATCHED }); // 14. den by jinak byl k vyřízení
+  assert.equal(t.due, false);
+  assert.equal(t.watched, true);
+  assert.equal(t.stage, "filing");
+  assert.equal(t.nextAt, at(28));
+  assert.equal(t.expired, false);
+  // ani 60. den (okno hypotéky) se nic nepřipomíná
+  assert.equal(filing(60, { watch: WATCHED }).due, false);
+});
+
+test("API hlídá, ale rozvrh se vyčerpá: byt přesto skončí jako nezjištěno", () => {
+  const t = filing(250, { watch: WATCHED });
+  assert.equal(t.due, false);
+  assert.equal(t.expired, true);
+});
+
+test("API našlo plombu, kterou nepřiřadilo: k vyřízení hned, ke dni podání", () => {
+  const confirmAt = at(12);
+  const t = filing(13, { watch: { needsConfirm: true, confirmAt, unverifiable: false } }); // ještě před 14. dnem
+  assert.equal(t.due, true);
+  assert.equal(t.kind, "confirm");
+  assert.equal(t.dueAt, confirmAt);
+  assert.match(t.reason, /potvrď/);
+  assert.equal(t.watched, false);
+});
+
+test('"Zatím nic" u plomby k potvrzení ji odloží, dokud nepřijde novější plomba', () => {
+  const watch = { needsConfirm: true, confirmAt: at(12), unverifiable: false };
+  assert.equal(filing(20, { watch, lastCheckedAt: iso(at(15)) }).due, false);
+  assert.equal(filing(20, { watch, lastCheckedAt: iso(at(15)) }).watched, true);
+  const newer = { needsConfirm: true, confirmAt: at(18), unverifiable: false };
+  assert.equal(filing(20, { watch: newer, lastCheckedAt: iso(at(15)) }).due, true);
+});
+
+test("dům bez jednotek v katastru se označí jako neověřitelný a nepřipomíná se", () => {
+  const t = filing(15, { watch: { needsConfirm: false, confirmAt: null, unverifiable: true } });
+  assert.equal(t.due, false);
+  assert.equal(t.unverifiable, true);
+});
+
+test("fáze ceny hlídání API neovlivní: kontroly ceny jedou dál podle rozvrhu", () => {
+  const t = assessSaleTrack({ reservedAt: iso(T0), filedAt: iso(at(10)), watch: WATCHED, now: at(36) }); // 26. den po podání
+  assert.equal(t.stage, "price");
+  assert.equal(t.due, true);
+  assert.equal(t.watched, false);
+});
+
+test("buildSaleTrack předá hlídání funkci podle začátku rezervace; bez ní se chová jako dřív", () => {
+  const events = [{ listing_id: "a", event_type: "reserved", occurred_at: iso(T0) }];
+  const withWatch = buildSaleTrack([listing("a")], events, at(15), (reservedAt) => {
+    assert.equal(reservedAt, iso(T0));
+    return WATCHED;
+  });
+  assert.equal(withWatch.watched, true);
+  assert.equal(withWatch.due, false);
+  assert.equal(buildSaleTrack([listing("a")], events, at(15)).due, true);
+  assert.equal(buildSaleTrack([listing("a")], events, at(15), () => null).due, true);
+});

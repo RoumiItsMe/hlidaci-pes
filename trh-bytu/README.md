@@ -462,9 +462,8 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     bytu zapsanou nebo odhadnutou 1–3. Proto se **dávkuje**: dům se znovu prochází
     nejdřív po **5 dnech** a denně se vezme nejvýš pětina domů, nejstarší první
     (`CYCLE_DAYS`, `selectBuildingsToScan`). Plomba trvá týdny (řízení o vkladu),
-    takže ji pětidenní cyklus nepropásne, jen oznámí o pár dní později. Výjimky:
-    nový byt se zkontroluje hned a byt, kterému právě nastal kontrolní bod
-    rozvrhu, dostane čerstvá data, je-li sken starší než 2 dny. Garáže a nebytové
+    takže ji pětidenní cyklus nepropásne, jen oznámí o pár dní později. Nový byt
+    se zkontroluje hned. Garáže a nebytové
     prostory se při dalších skenech přeskakují. Navíc je tvrdý strop 350 volání
     denně (100 zůstává v rezervě) a dům, na který by rozpočet nestačil celý, se
     neskenuje — neúplný sken by prohlásil nezkontrolované jednotky za čisté. Když
@@ -482,9 +481,23 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     ruční `unit_number` to nikdy není), zpráva na Telegramu i karta to označí
     jako **odhad**. Nespojí se, když v domě jiný sledovaný byt čeká na plombu taky,
     když plomby jsou dvě, když jiný byt v domě má vklad zapsaný bez jednotky, nebo
-    když uživatel odhad už jednou zrušil. V těch případech karta ukáže **nápovědu**
+    když uživatel odhad už jednou zrušil, nebo když má dům víc než **30 bytů**
+    (`AUTO_LINK_MAX_FLATS`; garáže se nepočítají) — ve velkém domě se za pár týdnů
+    běžně prodá i jiný byt, takže plomba bez potvrzení k bytu nepatří. V těch
+    případech karta ukáže **nápovědu**
     (č., LV, podíl na společných částech, datum podání, stav) s tlačítkem **To je
     ten byt**, které zapíše jednotku, vklad i LV.
+  - **Ruční kontrola se tam, kde hlídá API, nepřipomíná.** Pokud se dům
+    prochází a sken je čerstvý (do 8 dnů), nemá smysl chodit do katastru
+    „zkontrolovat, jestli je podaný vklad“ — appka už ví, že není. Takový byt
+    nepatří do „Zkontrolovat teď“ ani do Telegram souhrnu a leží ve sbalené
+    skupině **Hlídá appka přes API katastru**. Ozve se jen když najde plombu,
+    kterou nedokázala jednoznačně přiřadit („V domě je podaný vklad — potvrď,
+    jestli je to tenhle byt“; „Zatím nic“ to odloží do příchodu novější plomby).
+    Rozvrh dnů od rezervace platí dál jen tam, kam API nedosáhne: dům bez skenu
+    (bez klíče, nový, rozpočet nestačil), starší sken, byt bez přesné adresy.
+    Po půl roce bez plomby byt skončí jako „nezjištěno“ jako dřív. Fáze ceny se
+    nemění: cena se hledá až po podání vkladu.
   - **Vrácení:** „Zrušit vklad podán“ u odhadnutého vkladu smaže odhad a tomuhle
     bytu už se nic automaticky nepřiřadí (`kn_auto_off`). Vklad podán před
     rezervací (s rezervou 14 dní) se nepočítá.
@@ -493,7 +506,9 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   - **Družstevní byty** v katastru žádný vklad nemají (převádí se členský
     podíl), API u nich nic nenajde: dům Křib 1807 je družstevní a API u něj nevrací
     žádné jednotky. Karta to napíše („Dům nemá v katastru vymezené jednotky“);
-    cena ani prodej se tu ověřit nedají, tak to nechávám být.
+    cena ani prodej se tu ověřit nedají. Takový byt se v „Hlídá appka“ označí
+    („dům nemá v katastru jednotky — nejde ověřit“) a ruční kontrola se
+    nepřipomíná.
   - Výsledky skenu leží v tabulce `kn_scans` (jeden řádek na dům).
 - **Možný prodej:** byt, který byl těsně před zmizením **rezervovaný** a do
   nabídky se nevrátil, má v přehledu štítek **Možný prodej** (a filtr se stejným

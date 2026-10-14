@@ -12,7 +12,7 @@ import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js"
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
-import { loadKnScans } from "./kn-scan.js";
+import { loadKnScans, createWatchResolver } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
 import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
@@ -445,6 +445,9 @@ function computeEntries(db) {
   // Skupiny (ne syrové řádky) — stejná nemovitost napříč portály se ukáže
   // jen jednou, viz group.js.
   const allGroups = groupListings(allListings);
+  // Kde plomby hlídá API katastru (kn-scan.js), ruční kontrola podle rozvrhu
+  // se nepřipomíná — bez skenů (bez klíče) vrací null a rozvrh platí celý.
+  const watchFor = createWatchResolver(db, allListings, allGroups);
 
   // Jedna náhledová fotka na inzerát (ta s nejnižším id = první stažená),
   // jedním dotazem pro všechny skupiny najednou — ne N samostatných.
@@ -495,7 +498,7 @@ function computeEntries(db) {
     const verdict = saleVerdict(g.members);
     // Fáze prodeje po rezervaci a rozvrh kontrol v katastru (kn-schedule.js);
     // `null`, když byt nemá platnou rezervaci nebo je pořád v nabídce.
-    const track = buildSaleTrack(g.members, events);
+    const track = buildSaleTrack(g.members, events, Date.now(), watchFor(g));
     // "Doba v nabídce" počítá do DNEŠKA u živých/rezervovaných nabídek,
     // u zmizelých do data zmizení — obojí je "jak dlouho byl byt na trhu",
     // jen s jiným koncovým bodem. `removedAt` je `null` u živých/
@@ -1447,7 +1450,9 @@ function renderKnQueue(db) {
   // kontrolní bod a po něm ještě nikdo nekontroloval.
   const inPipeline = entries.filter((e) => e.track && (e.track.stage === "filing" || e.track.stage === "price"));
   const dueNow = inPipeline.filter((e) => e.track.due && known(e)).sort((a, b) => a.track.dueAt - b.track.dueAt);
-  const waiting = inPipeline.filter((e) => !e.track.due && !e.track.expired && known(e)).sort((a, b) => a.track.nextAt - b.track.nextAt);
+  const waiting = inPipeline.filter((e) => !e.track.due && !e.track.watched && !e.track.expired && known(e)).sort((a, b) => a.track.nextAt - b.track.nextAt);
+  // Plomby hlídá API katastru — ruční kontrola nic nepřinese, ozve se samo.
+  const watched = inPipeline.filter((e) => e.track.watched && !e.track.expired && known(e)).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
   // Bez přesné adresy se byt v katastru dohledat nedá — takové byty jen
   // připomínáme, ať se adresa doplní, dokud je inzerát online.
   const noAddress = inPipeline.filter((e) => !e.track.expired && !known(e)).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
@@ -1586,6 +1591,18 @@ function renderKnQueue(db) {
       </details>`;
   };
 
+  const watchedItem = (e) => {
+    const encId = encodeURIComponent(e.rep.id);
+    const scan = lookupFor(e).buildingId ? knScans.get(lookupFor(e).buildingId) : null;
+    const note = e.track.unverifiable
+      ? "dům nemá v katastru jednotky (družstevní?) — nejde ověřit"
+      : `čeká na plombu; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}`;
+    return `<details class="kn-wait">
+        <summary><a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— ${esc(note)}</span></summary>
+        <div class="kn-item kn-item--wait">${cardBody(e)}</div>
+      </details>`;
+  };
+
   const noAddressRows = noAddress
     .map(
       (e) =>
@@ -1648,6 +1665,7 @@ function renderKnQueue(db) {
     </p>
     <details class="kn-done"><summary>Jak appka plánuje kontroly</summary>
       <ul>
+        <li><strong>Hlídá API katastru:</strong> u domů, které appka sama prochází přes API, se ruční kontrola nepřipomíná — ozve se, až najde plombu (a buď ji sama přiřadí k bytu, nebo tě požádá o potvrzení). Rozvrh níž platí jen tam, kam API nedosáhne: dům ještě bez kontroly, data starší než 8 dní, nebo byt bez přesné adresy.</li>
         <li><strong>Hotovostní kupec:</strong> 14. a 28. den od rezervace.</li>
         <li><strong>Hypotéka:</strong> od 45. do 100. dne jednou týdně, potom jednou měsíčně do půl roku — pak „nezjištěno“.</li>
         <li><strong>Inzerát zmizel:</strong> kontrola za 3 a za 10 dní (inzerát se stahuje často kolem podpisu smlouvy).</li>
@@ -1658,8 +1676,9 @@ function renderKnQueue(db) {
     <h2 id="kontrola">Zkontrolovat teď (${dueNow.length})</h2>
     <div class="kn-list">${
       dueNow.map(dueCard).join("") ||
-      `<p class="empty">Nic ke kontrole.${nextUp ? ` Další kontrola: ${esc(formatDateOnly(new Date(nextUp.track.nextAt).toISOString()))} — ${esc(cardTitle(nextUp.rep, nextUp.address, nextUp.priceLabel))}.` : ""}</p>`
+      `<p class="empty">Nic ke kontrole.${watched.length ? " Plomby hlídá appka sama přes API katastru (viz níž)." : ""}${nextUp ? ` Další kontrola: ${esc(formatDateOnly(new Date(nextUp.track.nextAt).toISOString()))} — ${esc(cardTitle(nextUp.rep, nextUp.address, nextUp.priceLabel))}.` : ""}</p>`
     }</div>
+    ${watched.length ? `<details class="kn-done"><summary>Hlídá appka přes API katastru (${watched.length})</summary>${watched.map(watchedItem).join("")}</details>` : ""}
     ${waiting.length ? `<details class="kn-done"><summary>Čeká na další kontrolu (${waiting.length})</summary>${waiting.map(waitingItem).join("")}</details>` : ""}
     ${
       noAddressRows

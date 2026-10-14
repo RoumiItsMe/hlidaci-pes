@@ -94,3 +94,29 @@ export function plombaHintLine(analysis) {
   const more = analysis.candidates.length > 3 ? ` (+${analysis.candidates.length - 3} dalších)` : "";
   return `🔎 V domě je podaný vklad: ${shown}${more} — jednotka bytu není zapsaná, tak to potvrď v appce.`;
 }
+
+// Sken starší než tohle už dům nehlídá (rozpočet volání nestačil, nebo API
+// přestalo odpovídat) — ruční kontroly podle rozvrhu se vrátí. Víc než cyklus
+// skenu (kn-scan.js, 5 dní), ať jeden zmeškaný den nevyvolá falešný poplach.
+export const WATCH_MAX_AGE_DAYS = 8;
+
+/**
+ * Hlídá API plomby u tohoto bytu natolik, že ruční kontrola v katastru nic
+ * nepřinese? Vrací:
+ *  - `null`: nehlídá (dům nemá sken, sken je starý, je neúplný, nebo zapsaná
+ *    jednotka v domě není) → platí ruční rozvrh kontrol;
+ *  - `{ unverifiable: true }`: dům nemá v katastru vymezené jednotky (typicky
+ *    družstevní byty) — vklad tu nevznikne a nic se nedá ověřit;
+ *  - `{ needsConfirm, confirmAt }`: dům hlídáme; `needsConfirm`, když API našlo
+ *    plombu po rezervaci, kterou appka sama k bytu nepřiřadila (kn-scan.js,
+ *    matchFilings) — tu musí potvrdit uživatel. `confirmAt` = den podání (ms).
+ */
+export function apiWatch(scan, { reservedAt, unitNumber = null, now = Date.now() }) {
+  if (!scan) return null;
+  if (now - Date.parse(scan.scannedAt) > WATCH_MAX_AGE_DAYS * DAY_MS) return null;
+  if (!scan.units.length) return { needsConfirm: false, confirmAt: null, unverifiable: true };
+  const analysis = analyzePlombas(scan, { reservedAt, unitNumber });
+  if (analysis.incomplete || analysis.unit?.missing) return null;
+  const first = analysis.candidates[0];
+  return { needsConfirm: Boolean(first), confirmAt: first ? Date.parse(first.filedAt) : null, unverifiable: false };
+}

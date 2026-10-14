@@ -7,8 +7,7 @@
 //    CYCLE_DAYS dnech a denně se vezme jen asi pětina domů (nejstarší první),
 //    aby volání rostla s počtem nabídek pomalu. Plomba trvá týdny (řízení o
 //    vkladu), takže ji pětidenní cyklus nepropásne, jen oznámí o pár dní
-//    později. Výjimky: nový byt se zkontroluje hned a byt, kterému právě nastal
-//    kontrolní bod, dostane čerstvá data, je-li sken starší než 2 dny;
+//    později. Nový byt se zkontroluje hned;
 //  - výsledek ukládá do `kn_scans` — karta Katastr a Telegram souhrn z něj čtou;
 //  - plombu po rezervaci spojí s bytem sama, když je to dost jednoznačné
 //    (viz matchFilings), jinak jen nabídne na kartě tlačítko "To je ten byt".
@@ -18,20 +17,23 @@ import { groupListings, pickOwnValue, isHidden, primaryListing } from "./group.j
 import { buildAddressContext, knInfoForGroup, resolveForGroup } from "./auto-address.js";
 import { buildSaleTrack, FILING_CHECK_DAYS } from "./kn-schedule.js";
 import { createKnClient, scanBuilding, parseUnitNumber, KnApiError } from "./kn-api.js";
-import { analyzePlombas, formatDay } from "./kn-plomba.js";
+import { analyzePlombas, apiWatch, formatDay } from "./kn-plomba.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 // Dům se znovu prochází nejdřív za tolik dní; denně se bere ~1/CYCLE_DAYS domů.
 export const CYCLE_DAYS = 5;
-// Byt s právě nastalým kontrolním bodem: sken starší než tohle se obnoví.
-export const DUE_REFRESH_HOURS = 48;
 // Kolik volání denně smí sken spotřebovat; zbytek limitu (a rezerva) zůstane.
 const DAILY_BUDGET = 350;
 const RESERVE = 100;
 // Sken starší než tohle znamená, že rozpočet nestačí na všechny domy.
 const STALE_WARN_DAYS = 10;
+// Odhad "jediná plomba v domě patří jedinému sledovanému bytu" se dělá jen v
+// malých domech. Ve velkém (panelák o devadesáti bytech) se za pár týdnů
+// prodává mimo sledovaný byt i jiný docela běžně, takže tam plomba bez
+// potvrzení uživatele k bytu nepatří.
+export const AUTO_LINK_MAX_FLATS = 30;
 
 export function loadKnScans(db) {
   const scans = new Map();
@@ -85,25 +87,25 @@ export function collectTrackedGroups(db, now = Date.now()) {
 }
 
 /**
- * Které domy se dnes projdou (v tomto pořadí): nové (ještě bez skenu), domy
- * bytů s právě nastalým kontrolním bodem a starým skenem, a pak plánovaná
- * dávka — nejstarší domy, jejichž sken je starý aspoň CYCLE_DAYS, nejvýš
- * 1/CYCLE_DAYS všech domů denně.
+ * Které domy se dnes projdou (v tomto pořadí): nové (ještě bez skenu) a pak
+ * plánovaná dávka — nejstarší domy, jejichž sken je starý aspoň CYCLE_DAYS,
+ * nejvýš 1/CYCLE_DAYS všech domů denně. (Kontrolní bod rozvrhu na pořadí
+ * vliv nemá: byt, který nikdo nikdy "nezkontroloval", je podle rozvrhu
+ * k vyřízení pořád, takže by se domy obnovovaly každé 2 dny a dávkování by
+ * přestalo fungovat.)
  *
- * @param buildings `[{ id, due }]`
+ * @param buildings `[{ id }]`
  * @param scans     Map id → poslední sken
  */
 export function selectBuildingsToScan(buildings, scans, now = Date.now()) {
   const age = (b) => (scans.has(b.id) ? now - Date.parse(scans.get(b.id).scannedAt) : Infinity);
-  const fresh = buildings.filter((b) => age(b) === Infinity).sort((a, b) => Number(b.due) - Number(a.due));
-  const due = buildings.filter((b) => b.due && age(b) !== Infinity && age(b) >= DUE_REFRESH_HOURS * HOUR_MS).sort((a, b) => age(b) - age(a));
-  const taken = new Set([...fresh, ...due].map((b) => b.id));
+  const fresh = buildings.filter((b) => age(b) === Infinity);
   const quota = Math.max(1, Math.ceil(buildings.length / CYCLE_DAYS));
   const rotation = buildings
-    .filter((b) => !taken.has(b.id) && age(b) >= CYCLE_DAYS * DAY_MS)
+    .filter((b) => age(b) !== Infinity && age(b) >= CYCLE_DAYS * DAY_MS)
     .sort((a, b) => age(b) - age(a))
     .slice(0, quota);
-  return [...fresh, ...due, ...rotation];
+  return [...fresh, ...rotation];
 }
 
 /**
@@ -114,7 +116,8 @@ export function selectBuildingsToScan(buildings, scans, now = Date.now()) {
  *    (`via: "building"`). V malé lokalitě se v domě za pár týdnů neprodávají dva
  *    byty, takže shoda je pravděpodobná, ale je to odhad — appka ho tak označí a
  *    jde vrátit. Neřeší se, když v domě jiný byt má vklad zapsaný bez jednotky
- *    (nevíme, kterou plombu už má), ani byt, kterému uživatel odhad zrušil.
+ *    (nevíme, kterou plombu už má), byt, kterému uživatel odhad zrušil, ani dům
+ *    s víc než AUTO_LINK_MAX_FLATS byty.
  * @param entries  sledované byty jednoho domu (collectTrackedGroups)
  */
 export function matchFilings(entries, scan) {
@@ -127,12 +130,32 @@ export function matchFilings(entries, scan) {
 
   const open = entries.filter((e) => unitOf(e) == null && !e.filedAt);
   const unitUnknownButFiled = entries.some((e) => e.filedAt && unitOf(e) == null);
-  if (open.length === 1 && !open[0].autoOff && !unitUnknownButFiled && scan.full) {
+  const flatCount = scan.units.filter((u) => u.use == null || u.use === "byt").length;
+  if (open.length === 1 && !open[0].autoOff && !unitUnknownButFiled && scan.full && flatCount <= AUTO_LINK_MAX_FLATS) {
     const claimed = new Set(entries.map(unitOf).filter((u) => u != null));
     const free = analyzePlombas(scan, { reservedAt: open[0].track.reservedAt }).candidates.filter((c) => !claimed.has(c.number));
     if (free.length === 1) matches.push({ entry: open[0], candidate: free[0], via: "building" });
   }
   return matches;
+}
+
+/**
+ * Pro `buildSaleTrack`: jak plombu u dané skupiny hlídá API (viz apiWatch).
+ * Bez jediného skenu (tedy bez klíče) vrací funkci, která nikdy nic nehlídá,
+ * takže se chování rozvrhu nemění. Bez přesné adresy se byt nehlídá — sken
+ * tu stejně nepoběží.
+ */
+export function createWatchResolver(db, listings, groups, now = Date.now()) {
+  const scans = loadKnScans(db);
+  if (!scans.size) return () => null;
+  const actx = buildAddressContext(db, listings, groups);
+  return (group) => (reservedAt) => {
+    if (!pickOwnValue(group.members, "exact_address")) return null;
+    const buildingId = knInfoForGroup(actx, group, resolveForGroup(actx, group))?.building?.isknId;
+    const scan = buildingId ? scans.get(buildingId) : null;
+    const unitNumber = parseUnitNumber(pickOwnValue(group.members, "unit_number")) ?? parseUnitNumber(pickOwnValue(group.members, "kn_auto_unit"));
+    return apiWatch(scan, { reservedAt, unitNumber, now });
+  };
 }
 
 function filingMessage(entry, candidate, via) {
@@ -178,12 +201,11 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
     // Jeden sken na dům: byt bez známé jednotky = projít všechny byty domu.
     const buildings = new Map();
     for (const t of tracked) {
-      const b = buildings.get(t.buildingId) ?? { id: t.buildingId, entries: [], wantUnits: new Set(), full: false, due: false };
+      const b = buildings.get(t.buildingId) ?? { id: t.buildingId, entries: [], wantUnits: new Set(), full: false };
       b.entries.push(t);
       const unit = unitOf(t);
       if (unit == null) b.full = true;
       else b.wantUnits.add(unit);
-      if (t.track.due) b.due = true;
       buildings.set(t.buildingId, b);
     }
     const todays = selectBuildingsToScan([...buildings.values()], scans, now);

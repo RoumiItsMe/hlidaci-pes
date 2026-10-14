@@ -47,6 +47,7 @@ const KIND_LABELS = {
   late: (day) => `${day}. den od rezervace — dlouhá rezervace, měsíční kontrola`,
   vanish: (day) => `${day} dní po zmizení inzerátu — kontrola`,
   price: (day) => `${day} dní po podání vkladu — zjisti kupní cenu`,
+  confirm: () => "V domě je podaný vklad — potvrď, jestli je to tenhle byt",
 };
 
 function toMs(value) {
@@ -70,12 +71,19 @@ function checkpoint(base, day, kind) {
  * @param priceBaseAt    odkdy počítat kontroly ceny, když byt je prodaný, ale
  *                       plomba se nezapsala (např. "Prodáno" z Telegramu)
  * @param lastCheckedAt  poslední kontrola v katastru (ISO), jinak null
- * @returns `{ stage, ageDays, due, dueAt, kind, reason, nextAt, expired }`
+ * @param watch          jak plombu hlídá API katastru (kn-plomba.js, apiWatch), nebo
+ *                       null, když nehlídá. Jen pro fázi "filing": kde plomby hlídá
+ *                       appka sama a žádnou nenašla, ruční kontrola podle rozvrhu
+ *                       nic nepřinese, takže se nepřipomíná (`watched: true`).
+ *                       `needsConfirm` = API našlo plombu, kterou appka nedokázala
+ *                       jednoznačně přiřadit — to je k vyřízení hned (`kind: "confirm"`),
+ *                       dokud uživatel po jejím podání neklikl na "Zatím nic".
+ * @returns `{ stage, ageDays, due, dueAt, kind, reason, nextAt, expired, watched, unverifiable }`
  */
-export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, verdict = null, priceKnown = false, priceBaseAt = null, lastCheckedAt = null, now = Date.now() }) {
+export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, verdict = null, priceKnown = false, priceBaseAt = null, lastCheckedAt = null, watch = null, now = Date.now() }) {
   const reservedMs = toMs(reservedAt);
   const ageDays = reservedMs == null ? null : Math.floor((now - reservedMs) / DAY_MS);
-  const base = { ageDays, due: false, dueAt: null, kind: null, reason: null, nextAt: null, expired: false };
+  const base = { ageDays, due: false, dueAt: null, kind: null, reason: null, nextAt: null, expired: false, watched: false, unverifiable: false };
 
   if (verdict === "withdrawn") return { ...base, stage: "withdrawn" };
   const sold = verdict === "sold" || filedAt != null;
@@ -96,6 +104,16 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
   points.sort((a, b) => a.at - b.at);
 
   const checkedMs = toMs(lastCheckedAt) ?? -Infinity;
+  if (stage === "filing" && watch) {
+    // Plomby hlídá API. Připomíná se jen plomba, kterou je potřeba potvrdit;
+    // jinak ruční kontrola v katastru nic nepřinese. Rozvrh slouží už jen k
+    // tomu, aby po půl roce byt skončil jako "nezjištěno".
+    if (watch.needsConfirm && watch.confirmAt > checkedMs) {
+      return { ...base, stage, due: true, dueAt: watch.confirmAt, kind: "confirm", reason: KIND_LABELS.confirm() };
+    }
+    const upcoming = points.find((p) => p.at > now);
+    return { ...base, stage, watched: true, unverifiable: Boolean(watch.unverifiable), nextAt: upcoming ? upcoming.at : null, expired: !upcoming };
+  }
   const pending = points.filter((p) => p.at <= now && p.at > checkedMs);
   if (pending.length) {
     const latest = pending[pending.length - 1];
@@ -110,7 +128,7 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
  * Totéž nad skupinou nabídek jednoho bytu. `null`, když byt nemá platnou
  * rezervaci (a tedy není součástí téhle fronty), nebo je pořád v nabídce.
  */
-export function buildSaleTrack(members, events, now = Date.now()) {
+export function buildSaleTrack(members, events, now = Date.now(), watchFor = null) {
   const reservedAt = reservationStart(members, events);
   if (!reservedAt) return null;
   const status = mergedStatus(members);
@@ -127,6 +145,7 @@ export function buildSaleTrack(members, events, now = Date.now()) {
     priceKnown: pickOwnValue(members, "verified_sale_price_czk") != null,
     priceBaseAt: pickOwnValue(members, "reservation_sold_at") ?? lastCheckedAt,
     lastCheckedAt,
+    watch: watchFor ? watchFor(reservedAt) : null,
     now,
   });
   return { ...track, reservedAt };

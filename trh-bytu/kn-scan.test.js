@@ -1,17 +1,17 @@
 // node --test trh-bytu/kn-scan.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectBuildingsToScan, matchFilings, CYCLE_DAYS, DUE_REFRESH_HOURS } from "./kn-scan.js";
+import { selectBuildingsToScan, matchFilings, CYCLE_DAYS } from "./kn-scan.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-10-14T06:00:00.000Z");
 const iso = (ms) => new Date(ms).toISOString();
 const scansAgo = (ages) => new Map(Object.entries(ages).map(([id, days]) => [Number(id), { scannedAt: iso(NOW - days * DAY) }]));
-const bld = (id, due = false) => ({ id, due });
+const bld = (id) => ({ id });
 
-test("nový dům (bez skenu) se projde hned, ten s kontrolním bodem dřív", () => {
-  const picked = selectBuildingsToScan([bld(1), bld(2, true), bld(3)], new Map(), NOW);
-  assert.deepEqual(picked.map((b) => b.id), [2, 1, 3]);
+test("nový dům (bez skenu) se projde hned, i když je jinak všechno čerstvé", () => {
+  const picked = selectBuildingsToScan([bld(1), bld(2), bld(3)], scansAgo({ 2: 1 }), NOW);
+  assert.deepEqual(picked.map((b) => b.id), [1, 3]);
 });
 
 test("dům zkontrolovaný před méně než 5 dny se bez důvodu nebere", () => {
@@ -25,13 +25,6 @@ test("plánovaná dávka: denně nejvýš pětina domů, nejstarší první", ()
   const picked = selectBuildingsToScan(buildings, scans, NOW);
   assert.equal(picked.length, Math.ceil(10 / CYCLE_DAYS));
   assert.deepEqual(picked.map((b) => b.id), [10, 9]);
-});
-
-test("byt s kontrolním bodem obnoví dům se skenem starším než 48 h, ne mladším", () => {
-  const old = selectBuildingsToScan([bld(1, true)], scansAgo({ 1: DUE_REFRESH_HOURS / 24 + 0.1 }), NOW);
-  assert.deepEqual(old.map((b) => b.id), [1]);
-  const young = selectBuildingsToScan([bld(1, true)], scansAgo({ 1: 1 }), NOW);
-  assert.deepEqual(young, []);
 });
 
 test("dlouhodobě: 10 domů naskenovaných naráz se rozloží a žádný dům se neprochází častěji než po 5 dnech", () => {
@@ -113,4 +106,16 @@ test("jednotka, kterou už má jiný byt (zapsaná i odhadnutá), se nepřiděl�
 test("vklad zapsaný u jiného bytu bez jednotky: nevíme, kterou plombu už má, takže se nehádá", () => {
   const filedUnknown = flat({ filedAt: "2026-09-24" });
   assert.equal(matchFilings([filedUnknown, flat()], scanOf({ plomby: [[930004, "2026-09-24"], [930005, "2026-10-01"]] })).length, 0);
+});
+
+test("velký dům: odhad podle jediné plomby se nedělá, zapsaná jednotka funguje dál", () => {
+  const manyUnits = (n) => Array.from({ length: n }, (_, i) => ({ id: 100 + i, number: 930000 + i + 1, lv: 6000 + i, use: "byt", share: "1/10" }));
+  const big = { ...scanOf(), units: [...manyUnits(30), { id: 1, number: 930004, lv: 6319, use: "byt", share: "1/10" }] }; // 31 bytů
+  const edge = { ...scanOf(), units: [...manyUnits(29), { id: 1, number: 930004, lv: 6319, use: "byt", share: "1/10" }] }; // 30 bytů
+  assert.equal(matchFilings([flat()], big).length, 0);
+  assert.equal(matchFilings([flat()], edge).length, 1);
+  assert.equal(matchFilings([flat({ unitNumber: 930004 })], big).length, 1); // jednotku zná uživatel → bez omezení
+  // Garáže se do velikosti domu nepočítají.
+  const withGarages = { ...scanOf(), units: [...manyUnits(10), ...Array.from({ length: 40 }, (_, i) => ({ id: 500 + i, number: 939000 + i, lv: 7000 + i, use: "garáž" })), { id: 1, number: 930004, lv: 6319, use: "byt", share: "1/10" }] };
+  assert.equal(matchFilings([flat()], withGarages).length, 1);
 });

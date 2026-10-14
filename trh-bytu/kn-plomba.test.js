@@ -1,7 +1,7 @@
 // node --test trh-bytu/kn-plomba.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { qualifyingProceedings, analyzePlombas, plombaHintLine, describeCandidate, FILING_GRACE_DAYS } from "./kn-plomba.js";
+import { qualifyingProceedings, analyzePlombas, plombaHintLine, describeCandidate, apiWatch, FILING_GRACE_DAYS, WATCH_MAX_AGE_DAYS } from "./kn-plomba.js";
 
 const RESERVED = "2026-09-10T08:00:00.000Z";
 const proc = (id, datumPrijeti, extra = {}) => ({ id, typ: "V", cislo: id, rok: 2026, datumPrijeti, stav: "Probíhá zpracování", operace: [], fetchedAt: null, ...extra });
@@ -94,4 +94,40 @@ test("věta pro souhrn: nápověda u neznámé jednotky vyzývá k potvrzení, u
   const unit = plombaHintLine(analyzePlombas(scanOf(), { reservedAt: RESERVED, unitNumber: 930004 }));
   assert.equal(unit, "🔖 Jednotka 93/4: vklad podán 24. 9. 2026");
   assert.equal(describeCandidate(analyzePlombas(scanOf(), { reservedAt: RESERVED }).candidates[0]).startsWith("č. 93/4"), true);
+});
+
+// --- hlídání API (apiWatch) ---
+
+const NOW = Date.parse("2026-10-14T06:00:00.000Z");
+
+test("apiWatch: bez skenu, se starým skenem nebo s neúplným skenem se nehlídá (platí ruční rozvrh)", () => {
+  assert.equal(apiWatch(null, { reservedAt: RESERVED, now: NOW }), null);
+  const stale = scanOf({ scannedAt: new Date(NOW - (WATCH_MAX_AGE_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString() });
+  assert.equal(apiWatch(stale, { reservedAt: RESERVED, now: NOW }), null);
+  assert.equal(apiWatch(scanOf({ full: false }), { reservedAt: RESERVED, now: NOW }), null); // jednotka neznámá, sken jen část domu
+  // Zapsaná jednotka, která v domě není: překlep, ruční kontrola zůstává.
+  assert.equal(apiWatch(scanOf(), { reservedAt: RESERVED, unitNumber: 930099, now: NOW }), null);
+});
+
+test("apiWatch: čerstvý sken bez plomby po rezervaci = hlídá appka, nic k potvrzení", () => {
+  const w = apiWatch(scanOf({ plomby: [] }), { reservedAt: RESERVED, now: NOW });
+  assert.deepEqual(w, { needsConfirm: false, confirmAt: null, unverifiable: false });
+  // Plomba z doby před rezervací se nepočítá.
+  const old = scanOf({ plomby: [{ unit: 930004, lv: 6319, rizeni: [proc(5000, "2026-06-01T10:00:00")] }] });
+  assert.equal(apiWatch(old, { reservedAt: RESERVED, now: NOW }).needsConfirm, false);
+  // Sken je dost čerstvý i po týdnu.
+  const week = scanOf({ plomby: [], scannedAt: new Date(NOW - 7 * 24 * 60 * 60 * 1000).toISOString() });
+  assert.equal(apiWatch(week, { reservedAt: RESERVED, now: NOW }).unverifiable, false);
+});
+
+test("apiWatch: plomba po rezervaci, kterou nikdo nepřiřadil, je k potvrzení ke dni podání", () => {
+  const w = apiWatch(scanOf(), { reservedAt: RESERVED, now: NOW });
+  assert.equal(w.needsConfirm, true);
+  assert.equal(w.confirmAt, Date.parse("2026-09-24"));
+});
+
+test("apiWatch: dům bez jednotek (družstevní) nejde ověřit", () => {
+  const w = apiWatch(scanOf({ units: [], plomby: [] }), { reservedAt: RESERVED, now: NOW });
+  assert.equal(w.unverifiable, true);
+  assert.equal(w.needsConfirm, false);
 });

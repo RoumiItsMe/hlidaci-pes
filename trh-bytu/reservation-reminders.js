@@ -27,7 +27,7 @@ import { sendTelegramMessage, getTelegramUpdates, answerTelegramCallback, editTe
 import { addressNoticeLines, buildAddressContext, resolveForGroup, knInfoForGroup, describeKn } from "./auto-address.js";
 import { assessSale } from "./sale-triage.js";
 import { buildSaleTrack } from "./kn-schedule.js";
-import { loadKnScans } from "./kn-scan.js";
+import { loadKnScans, createWatchResolver } from "./kn-scan.js";
 import { analyzePlombas, plombaHintLine } from "./kn-plomba.js";
 import { parseUnitNumber } from "./kn-api.js";
 
@@ -68,11 +68,13 @@ export async function sendKnCheckDigest(db, log, now = Date.now()) {
     eventsByListing.get(e.listing_id).push(e);
   }
 
+  // Kde plomby hlídá API katastru, ruční kontrola se nepřipomíná (kn-schedule.js).
+  const watchFor = createWatchResolver(db, listings, groups, now);
   const due = [];
   for (const group of groups) {
     if (isHidden(group.members)) continue; // "tohle mě nezajímá"
     const events = group.members.flatMap((m) => eventsByListing.get(m.id) || []);
-    const track = buildSaleTrack(group.members, events, now);
+    const track = buildSaleTrack(group.members, events, now, watchFor(group));
     if (!track?.due) continue;
     due.push({ group, track, exact: pickOwnValue(group.members, "exact_address") });
   }
@@ -98,7 +100,8 @@ export async function sendKnCheckDigest(db, log, now = Date.now()) {
     const scan = kn?.building?.isknId ? scans.get(kn.building.isknId) : null;
     const hint = scan ? plombaHintLine(analyzePlombas(scan, { reservedAt: d.track.reservedAt, unitNumber: parseUnitNumber(unit) ?? parseUnitNumber(pickOwnValue(members, "kn_auto_unit")) })) : null;
     if (hint) lines.push(`  ${hint}`);
-    lines.push(`  ⏰ ${d.track.reason}${d.track.stage === "price" ? "" : ` (rezervováno ${formatDay(d.track.reservedAt)})`}`);
+    // U plomby k potvrzení říká všechno řádek výš (🔎), obecný důvod by jen opakoval.
+    if (d.track.kind !== "confirm") lines.push(`  ⏰ ${d.track.reason}${d.track.stage === "price" ? "" : ` (rezervováno ${formatDay(d.track.reservedAt)})`}`);
   }
   const more = fresh.length - shown.length;
   const waiting = checkable.length - fresh.length;
