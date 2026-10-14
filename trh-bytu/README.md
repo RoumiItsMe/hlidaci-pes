@@ -415,6 +415,28 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
 štítek „prodáno" zmizí spolu s ní), takže jediná jistota je katastr. Stránka
 **🏛️ Katastr** ho nenahrazuje, jen práci kolem něj zkrátí:
 
+- **Údaje o prodeji jsou jedny, ať je zadáš kdekoli** (`sale-record.js`, testy
+  `sale-record.test.js`). Fronta Katastr, detail bytu (sekce **🏛️ Prodej a
+  katastr**), tabulka srovnání i Telegram zapisují přes jeden kód do týchž sloupců a
+  vždy na všechny nabídky jednoho bytu, takže se nic nerozejde:
+
+  | Údaj | Zadáš v | Vidíš v |
+  |---|---|---|
+  | prodáno / neprodáno | Katastr (tlačítka), detail (vyplývá z níž), Telegram „Prodáno“ | štítek v přehledu a tabulce, detail, statistiky, Katastr |
+  | vklad podán (datum) | Katastr, detail; automaticky z API katastru | Katastr, detail, souhrn na Telegramu |
+  | LV | Katastr, detail | Katastr, detail, Telegram |
+  | jednotka | detail („Přesná adresa“), Katastr (pole „jednotka“, „To je ten byt“); odhad appky z API je zvlášť | všude |
+  | kupní cena, datum prodeje | Katastr, detail, tabulka (Víc sloupců) | statistiky (ceny/m² prodaných bytů), Katastr (Vyřízené), detail, tabulka |
+
+  **Pravidlo, které to drží pohromadě:** cena, datum prodeje i podaný vklad
+  znamenají, že je byt **prodaný** — zapíše se i verdikt (dřív cena zadaná v detailu
+  nechala byt „zmizelý“ ve frontě a mimo „Prodáno“ ve statistikách). Prázdné pole v
+  detailu údaj smaže, ve frontě Katastr se prázdné pole ignoruje (nic nemaže).
+  **Vrátit mezi nerozhodnuté** smaže verdikt, vklad, kontrolu **i cenu a datum
+  prodeje** (cena by jinak byt hned zase označila za prodaný; tlačítko se na to
+  zeptá); LV a jednotka zůstávají, ty patří bytu. Formuláře ve frontě Katastr jsou
+  předvyplněné tím, co už je zapsané jinde. Při startu se jednorázově dopočítá
+  verdikt u starších záznamů, které mají cenu, datum nebo vklad, ale verdikt ne.
 - **Rozvrh kontrol** (nahoře na stránce, štítek **🔎 kandidát prodeje** v
   přehledu u bytů, které jsou právě k vyřízení): po rezervaci trvá, než se prodej
   v katastru vůbec ukáže — kupec s hotovostí podá návrh na vklad za 1–3 týdny,

@@ -417,6 +417,10 @@ a.addr-chip--candidate:hover { text-decoration: underline; }
 .kn-plomba > div + div { margin-top: 0.2rem; }
 .kn-plomba-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 .kn-plomba-row .kn-form { margin-top: 0; }
+/* Sekce "Prodej a katastr" v detailu bytu: stejné formuláře jako ve frontě Katastr */
+.sale-section { margin: 1rem 0; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.sale-section > summary { cursor: pointer; }
+.sale-section .kn-form { margin-top: 0.4rem; }
 .kn-btn {
   border: 1px solid var(--border);
   background: var(--card);

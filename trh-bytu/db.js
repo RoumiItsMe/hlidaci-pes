@@ -214,6 +214,14 @@ function runMigrations(db) {
       if (backfill) db.exec(backfill);
     }
   }
+  // Cena, datum prodeje nebo podaný vklad znamenají, že je byt prodaný (viz
+  // sale-record.js) — zapíše se i verdikt. Starší záznamy, kde se cena
+  // zapsala jen v detailu bytu, ho nemají a byt pak zůstával ve frontě Katastr
+  // i mimo "Prodáno". Idempotentní: bere jen řádky bez verdiktu, takže
+  // "neprodáno" (withdrawn) nikdy nepřepíše.
+  db.exec(
+    "UPDATE listings SET sale_verdict = 'sold' WHERE sale_verdict IS NULL AND (verified_sale_price_czk IS NOT NULL OR verified_sale_date IS NOT NULL OR kn_filed_at IS NOT NULL)"
+  );
 }
 
 /** Otevře (a při prvním spuštění založí) SQLite databázi + schéma. */

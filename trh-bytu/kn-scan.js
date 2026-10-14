@@ -145,10 +145,10 @@ export function matchFilings(entries, scan) {
  * takže se chování rozvrhu nemění. Bez přesné adresy se byt nehlídá — sken
  * tu stejně nepoběží.
  */
-export function createWatchResolver(db, listings, groups, now = Date.now()) {
+export function createWatchResolver(db, listings, groups, now = Date.now(), existingContext = null) {
   const scans = loadKnScans(db);
   if (!scans.size) return () => null;
-  const actx = buildAddressContext(db, listings, groups);
+  const actx = existingContext ?? buildAddressContext(db, listings, groups);
   return (group) => (reservedAt) => {
     if (!pickOwnValue(group.members, "exact_address")) return null;
     const buildingId = knInfoForGroup(actx, group, resolveForGroup(actx, group))?.building?.isknId;
