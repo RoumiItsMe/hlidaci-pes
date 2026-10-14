@@ -400,6 +400,15 @@ table.stats-table thead th { color: var(--muted); font-weight: 600; text-align: 
 }
 .kn-form button { align-self: auto; }
 .kn-form input[type="number"] { width: 15rem; max-width: 100%; }
+/* Rozvrh kontrol v katastru (/kontrola): číslo LV, "Znám rovnou cenu", rozbalovací karta čekajícího bytu */
+.kn-form .kn-lv { width: 6.5rem; }
+.kn-direct { margin-top: 0.4rem; }
+.kn-direct summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); }
+.kn-wait { margin: 0.3rem 0; }
+.kn-wait summary { cursor: pointer; }
+.kn-item--wait { margin-top: 0.4rem; }
+a.addr-chip--candidate { text-decoration: none; }
+a.addr-chip--candidate:hover { text-decoration: underline; }
 /* `form label` (výš) skládá popisek nad pole — tady má být v jedné řadě. */
 .kn-form .kn-date { flex-direction: row; align-items: center; gap: 0.35rem; }
 .kn-form .kn-date input { width: auto; }

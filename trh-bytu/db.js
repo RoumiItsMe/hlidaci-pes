@@ -178,6 +178,16 @@ const COLUMN_MIGRATIONS = [
     ddl: "TEXT",
     backfill: "UPDATE listings SET possible_sale_notified_at = COALESCE(removed_at, first_seen_at) WHERE status = 'removed'",
   },
+  // Fáze prodeje po rezervaci (viz kn-schedule.js). `kn_filed_at`: den, kdy
+  // uživatel v katastru viděl podaný návrh na vklad (plombu), YYYY-MM-DD — to
+  // už prodej potvrzuje, i když cena ještě není známá. `lv_number`: číslo LV,
+  // ať se další kontroly dělají jen podle k.ú. + LV a ne znovu podle adresy.
+  // `kn_digest_cp`: kontrolní bod, o kterém už šlo upozornění do Telegramu (ať
+  // se tentýž bod neohlašuje při každém běhu). Zapisuje se na všechny členy
+  // skupiny jako ostatní pole kolem katastru.
+  { table: "listings", column: "kn_filed_at", ddl: "TEXT" },
+  { table: "listings", column: "lv_number", ddl: "TEXT" },
+  { table: "listings", column: "kn_digest_cp", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {

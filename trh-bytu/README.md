@@ -415,15 +415,38 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
 štítek „prodáno" zmizí spolu s ní), takže jediná jistota je katastr. Stránka
 **🏛️ Katastr** ho nenahrazuje, jen práci kolem něj zkrátí:
 
-- **Kandidáti prodeje** (nahoře na stránce, štítek **🔎 kandidát prodeje** v
-  přehledu): rezervovaný byt s přesnou adresou, který je rezervovaný aspoň
-  **21 dní** (stejný práh jako Telegram připomínka „pořád rezervováno?" — objeví
-  se naráz). V té době typicky už běží řízení o vkladu v katastru a dá se
-  dohledat **kupní cena**. Karta má řádek „Do katastru" (adresa, k.ú., dům), pole
-  pro cenu a tlačítka *Prodáno* (s cenou → ověřená cena + statistiky) a *Zatím
-  nic* (na týden dolů). Rezervované byty **bez adresy** jsou pod tím zvlášť
-  jako připomínka „doplň adresu, dokud je inzerát online". Telegram připomínka
-  teď nese i adresu s jednotkou a k.ú. (nebo upozornění, že adresa chybí).
+- **Rozvrh kontrol** (nahoře na stránce, štítek **🔎 kandidát prodeje** v
+  přehledu u bytů, které jsou právě k vyřízení): po rezervaci trvá, než se prodej
+  v katastru vůbec ukáže — kupec s hotovostí podá návrh na vklad za 1–3 týdny,
+  kupec s hypotékou za 6–12 týdnů (schválení úvěru, podpis kupní smlouvy). Pevná
+  připomínka „po 21 dnech a pak každé 3 týdny“ proto chodila u hypotéky zbytečně
+  a u hotovosti pozdě. Appka teď plánuje **kontrolní body** podle dnů od
+  rezervace (`kn-schedule.js`, čistá logika s testy `kn-schedule.test.js`):
+  - **Hotovostní kupec:** 14. a 28. den od rezervace.
+  - **Hypotéka:** od 45. do 100. dne jednou týdně, potom 130., 160. a 190. den;
+    kdo se nezjistí ani pak, přesune se do „Nezjištěno“.
+  - **Inzerát zmizel:** kontrola 3 a 10 dní po zmizení (inzerát se stahuje často
+    kolem podpisu smlouvy, takže plomba bývá dny až týdny po něm).
+  - **Vklad podán (plomba v katastru):** prodej je potvrzený, zbývá cena. Ta jde
+    zjistit až po rozhodnutí o vkladu (ochranná lhůta, rozhodnutí většinou do
+    měsíce), proto první kontrola ceny **25. den po podání**, pak týdně do 90. dne.
+  Byt je „k vyřízení“, když existuje kontrolní bod v minulosti, po kterém ještě
+  nebyla kontrola. *Zatím nic* proto byt odsune **až k dalšímu bodu**, ne o pevný
+  počet dní, a vynechaný běh nic nestlačí. Sekce **Zkontrolovat teď** ukazuje jen
+  byty k vyřízení; ostatní jsou sbalené v „Čeká na další kontrolu“ (s datem další
+  kontroly). Pod rozvrhem je nenápadně vidět **medián z tvých dat** (dny od
+  rezervace k podání vkladu), ať jde konstanty časem doladit.
+  Karta bytu má řádek „Do katastru“ (adresa, k.ú., dům, jednotka) a pole
+  **LV č.** (nepovinné — příště pak stačí k.ú. + LV, bez dohledávání podle
+  adresy). Rezervované byty **bez adresy** jsou zvlášť jako připomínka „doplň
+  adresu, dokud je inzerát online“ — bez adresy je v katastru nejde najít.
+- **Telegram souhrn:** místo jedné zprávy na byt chodí **jedna souhrnná zpráva**
+  „🏛️ Kontrola v katastru (N)“ ve chvíli, kdy nějakému bytu s přesnou adresou
+  nastal kontrolní bod (adresa, jednotka, LV, k.ú., důvod „14. den od
+  rezervace…“). Každý bod se ohlásí jen jednou (sloupec `kn_digest_cp`), takže
+  zpráva nechodí při každém běhu; v jedné zprávě je max. 8 bytů, zbytek příště.
+  Výsledek se zapisuje v appce (tlačítka ve zprávě nejsou); selhání Telegramu
+  body neoznačí a zkusí se další běh.
 - **Možný prodej:** byt, který byl těsně před zmizením **rezervovaný** a do
   nabídky se nevrátil, má v přehledu štítek **Možný prodej** (a filtr se stejným
   názvem) místo obyčejného „Zmizelo z nabídky" — po rezervaci se inzerát
@@ -450,13 +473,15 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   (`sale-triage.js`, každý bod má viditelný důvod): byl rezervovaný (+3),
   zmizel z víc portálů najednou (+1), před zmizením zlevnil (+1); proti mluví,
   že se po zmizení už jednou vrátil (−2) nebo visel jen pár dní (−1).
-- **Tlačítka:** *Prodáno* (volitelně s kupní cenou a datem prodeje z katastru →
-  uloží se jako „Ověřená cena" a „Datum prodeje" a cena se započítá do
-  statistik; prázdné pole nikdy nepřepíše dřív zapsanou hodnotu), *Neprodáno* (byt je „Staženo
-  (neprodáno)" a ze statistik cen prodejů se vyřadí) a *Zatím nic* (byt se na
-  týden odsune dolů, třeba proto, že převod v katastru ještě neproběhl).
-  Vyřízené jdou vrátit do fronty. Výsledek se zapisuje na všechny portály,
-  kde byt je.
+- **Tlačítka u rezervovaného bytu:** *Vklad podán* (den podání, výchozí dnes,
+  nesmí být v budoucnu; byt je pak „Prodáno“ a plánuje se kontrola ceny),
+  *Cena zjištěna* (kupní cena a datum prodeje z katastru → uloží se jako
+  „Ověřená cena“ a „Datum prodeje“ a cena se započítá do statistik; prázdné pole
+  nikdy nepřepíše dřív zapsanou hodnotu), *Zatím nic* (odsune k dalšímu
+  kontrolnímu bodu), *Neprodáno* (byt je „Staženo (neprodáno)“ a ze statistik
+  cen prodejů se vyřadí), *Zrušit „vklad podán“* a *Vrátit do fronty* u
+  vyřízených. U zmizelých bytů **bez** rezervace jsou *Prodáno* / *Neprodáno* /
+  *Zatím nic* jako dřív. Výsledek se zapisuje na všechny portály, kde byt je.
 - „Neprodáno" platí jen do dalšího zmizení: když se byt po kontrole vrátí do
   nabídky a znovu zmizí, spadne do fronty znovu.
 - „Prodáno" z Telegram připomínky se bere jako stejný verdikt (byt je pak
@@ -568,8 +593,7 @@ iDNES čte detail i u známých inzerátů, dokud nejsou prodané.
 Prodej je **konečný stav** "Prodáno" (vlastní filtr a štítek, událost "Prodáno
 — prodejní cena X Kč" v časové ose, datum = kdy ho appka zjistila). Přebíjí
 rezervaci i "v nabídce" (stejně jako rezervace je to fakt o bytu, ne o portálu),
-zmizení z výpisu ho už nepřepíše, a Telegram připomínky "pořád rezervováno?"
-se u něj zastaví. Do statistik "ceny po rekonstrukci" se prodaný byt počítá
+zmizení z výpisu ho už nepřepíše, a souhrn kontrol v katastru se u něj zastaví. Do statistik "ceny po rekonstrukci" se prodaný byt počítá
 (se stavem "Po rekonstrukci") a jeho cena se bere jako **ověřená** — poslední
 cena inzerátu je tady skutečná prodejní, ne jen inzerovaná.
 
@@ -583,20 +607,20 @@ rezervaci na kterémkoli portálu (i u bytu, který appka zaeviduje už jako
 rezervovaný), nikdy při zrušení rezervace. Chybějící `.env.local` nebo
 výpadek Telegramu sběrný běh nezastaví, jen se zaloguje.
 
-### Opakovaná připomínka "pořád rezervováno?" (každé 3 týdny)
+### Kontrola v katastru po rezervaci (Telegram souhrn)
 
-Appka si u každé rezervace naplánuje DALŠÍ zprávu za **21 dní** — "⏰ Pořád
-rezervováno: ..., zkontroloval jsi převod v katastru?" — se dvěma tlačítky:
+Dřív appka u každé rezervace posílala za 21 dní zprávu „⏰ Pořád rezervováno?“ s
+tlačítky a pak každé 3 týdny znovu. To je pryč — nahradil to **rozvrh kontrol**
+(viz kapitola „Kontrola v katastru“ výš): ozve se jen ve chvíli, kdy má smysl se
+v katastru na byt podívat, a o všech bytech najednou jednou zprávou.
 
-- **✅ Prodáno** — appka přestane připomínat, zapíše si `reservation_sold_at`
-  (jen rychlé "ano, potvrzuju" z telefonu, NENÍ totéž jako ověřená prodejní
-  cena/datum z detailu bytu — na to pořád slouží samostatné pole).
-- **⏳ Odložit o 3 týdny** — appka naplánuje další připomínku za 21 dní od
-  TOHOTO kliknutí.
+Zprávy se posílají na konci každého sběrného běhu (`track.js`). Výsledek kontroly
+(*Vklad podán*, *Cena zjištěna*, *Zatím nic*…) se zapisuje v appce na stránce
+**🏛️ Katastr**, ne tlačítkem ve zprávě.
 
-Kdyby nikdo nikdy neklikl, appka se sama "uzdraví": po odeslání připomínky
-rovnou naplánuje další kolo za 21 dní, takže se ptá dál, dokud buď nepřijde
-"Prodáno", nebo byt nezmizí z rezervovaného stavu úplně.
+**Starší zprávy s tlačítky** (✅ Prodáno / ⏳ Odložit o 3 týdny), které už máš
+v chatu z dřívějška, appka dál zpracuje: *Prodáno* označí byt jako prodaný,
+*Odložit* ho odsune k dalšímu kontrolnímu bodu.
 
 **Zpracování kliknutí NENÍ okamžité** — appka nemá žádný server běžící na
 pozadí (na rozdíl od webhooku by to vyžadovalo appku vystavenou na
@@ -610,7 +634,7 @@ sledované portály:
 ```powershell
 $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument '"C:\Users\roman\Documents\Hlídací pes\scripts\run-hidden.vbs" "trh-bytu\process-telegram.js"'
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
-Register-ScheduledTask -TaskName "Trh bytu - telegram tlacitka" -Action $action -Trigger $trigger -Description "Kazdych 5 minut zpracuje kliknuti na Prodano/Odlozit z Telegram pripominek (Trh bytu appka)"
+Register-ScheduledTask -TaskName "Trh bytu - telegram tlacitka" -Action $action -Trigger $trigger -Description "Kazdych 5 minut zpracuje kliknuti na tlacitka ze starsich Telegram pripominek (Trh bytu appka)"
 ```
 
 (`-RepetitionDuration ([TimeSpan]::MaxValue)` tady NEJDE — Task Scheduler jeho
@@ -620,10 +644,10 @@ hodnota.)
 S během po 5 minutách se kliknutí projeví do ~5 minut (ne okamžitě, ale ne
 ani "až zítra"). Po zpracování appka: smaže tlačítka z původní zprávy (ať
 nejdou zmáčknout podruhé) a pošle novou, TRVALOU zprávu do chatu s
-potvrzením ("✅ .../⏳ ... — odloženo, příští připomínka DD.MM.RRRR.") —
-Telegramova vlastní "načítá se" bublina po kliknutí totiž zmizí po pár
-vteřinách a snadno unikne pozornosti, pokud se appka k vyřízení dostane,
-až když zrovna nekoukáš na telefon.
+potvrzením — Telegramova vlastní "načítá se" bublina po kliknutí totiž zmizí
+po pár vteřinách a snadno unikne pozornosti. Protože nové zprávy tlačítka
+nemají, je tahle úloha už jen dobíhající pojistka pro staré zprávy; jinak ji
+nepotřebuješ.
 
 ## Zvoneček (upozornění)
 

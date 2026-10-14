@@ -1,42 +1,37 @@
-// Opakované Telegram připomínky "pořád rezervováno, zkontroloval jsi
-// katastr?" — navazuje na okamžité upozornění při rezervaci (viz track.js
-// notifyReservation). Tenhle modul řeší tři věci, volané z track.js na
-// konci každého sběrného běhu:
+// Telegram upozornění kolem prodeje bytu po rezervaci. Okamžité upozornění
+// na samotnou rezervaci posílá track.js (notifyReservation); tenhle modul
+// řeší tři věci, volané z track.js na konci každého sběrného běhu:
 //
-//   1. scheduleFollowup — naplánuje DALŠÍ připomínku (voláno hned po
-//      okamžitém upozornění na novou rezervaci).
-//   2. sendDueFollowups — pošle připomínky, kterým uplynula lhůta, s
-//      inline tlačítky "Prodáno" / "Odložit o 3 týdny", a rovnou naplánuje
-//      další kolo — kdyby uživatel na tlačítko nikdy neklikl, appka se
-//      sama "uzdraví" a zeptá se znovu za další 3 týdny, místo aby
-//      navždy mlčela.
-//   3. processTelegramActions — přečte kliknutí na tlačítka (Telegram
-//      `getUpdates`) a vyřídí je: "Prodáno" připomínky ukončí, "Odložit"
-//      je posune o 3 týdny od OKAMŽIKU KLIKNUTÍ (ne od předchozí lhůty).
+//   1. sendKnCheckDigest — JEDNA souhrnná zpráva o bytech, kterým nastal
+//      kontrolní bod rozvrhu (kdy se v katastru podívat na byt po rezervaci,
+//      viz kn-schedule.js). Dřívější pevná připomínka po 21 dnech a pak každé
+//      3 týdny chodila u kupce s hypotékou zbytečně dvakrát a u hotovostního
+//      pozdě; navíc byla jedna zpráva na byt. Každý kontrolní bod se ohlásí
+//      jen jednou (`kn_digest_cp`), takže zpráva nechodí při každém běhu.
+//   2. notifyPossibleSales — okamžité upozornění, že rezervovaný byt zmizel
+//      ze všech portálů (možný prodej).
+//   3. processTelegramActions — přečte kliknutí na tlačítka ze starších
+//      připomínek (Telegram `getUpdates`) a vyřídí je. Nové zprávy tlačítka
+//      nemají — výsledek kontroly se zapisuje v appce (Katastr).
 //
 // Pracuje na úrovni SKUPINY (stejná nemovitost napříč portály, viz
 // group.js), ne jednotlivého inzerátu — jinak by byt sledovaný na 3
-// portálech dostal 3 samostatné připomínky se 3 sadami tlačítek, a
-// kliknutí na jednu by zbylé dvě nechalo viset. `callback_data` tlačítek
-// nese ID inzerátu, přes který appka při zpracování kliknutí najde AKTUÁLNÍ
-// skupinu (findGroupForListing) — robustní i kdyby se mezitím složení
+// portálech dostal 3 samostatné zprávy. `callback_data` tlačítek ze starších
+// zpráv nese ID inzerátu, přes který appka při zpracování kliknutí najde
+// AKTUÁLNÍ skupinu (findGroupForListing) — robustní i kdyby se mezitím složení
 // skupiny změnilo (přibyl/zmizel portál).
 
 import { nowIso, updateListingFields } from "./db.js";
-import { groupListings, mergedStatus, primaryListing, findGroupForListing, saleVerdict, pickOwnValue } from "./group.js";
+import { groupListings, mergedStatus, primaryListing, findGroupForListing, saleVerdict, pickOwnValue, isHidden } from "./group.js";
 import { sendTelegramMessage, getTelegramUpdates, answerTelegramCallback, editTelegramMessageReplyMarkup } from "../lib/telegram.js";
-import { addressNoticeLines } from "./auto-address.js";
+import { addressNoticeLines, buildAddressContext, resolveForGroup, knInfoForGroup, describeKn } from "./auto-address.js";
 import { assessSale } from "./sale-triage.js";
+import { buildSaleTrack } from "./kn-schedule.js";
 
-// Zároveň práh, od kdy je rezervovaný byt s adresou "kandidát prodeje" v
-// appce (viz server.js /kontrola) — připomínka a seznam se tak objeví
-// současně.
-export const FOLLOWUP_INTERVAL_DAYS = 21;
 const OFFSET_KEY = "telegram_update_offset";
-
-function addDaysIso(days) {
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-}
+// Kolik bytů se vypíše v jedné zprávě; zbytek přijde příště (nedoznačený
+// kontrolní bod se ohlásí při dalším běhu).
+const DIGEST_MAX_ITEMS = 8;
 
 function getOffset(db) {
   const row = db.prepare("SELECT value FROM app_state WHERE key = ?").get(OFFSET_KEY);
@@ -47,21 +42,6 @@ function setOffset(db, offset) {
   db.prepare("INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(OFFSET_KEY, String(offset));
 }
 
-/**
- * Naplánuje první připomínku na +21 dní pro skupinu, do které patří daný
- * inzerát — voláno hned po odeslání okamžitého upozornění na novou
- * rezervaci (viz track.js). Zapisuje na VŠECHNY členy skupiny (stejná
- * úvaha jako u own_condition apod. — ať je vidět bez ohledu na to, kdo je
- * zrovna primaryListing).
- */
-export function scheduleFollowup(db, listingId) {
-  const allListings = db.prepare("SELECT * FROM listings").all();
-  const group = findGroupForListing(allListings, listingId);
-  if (!group) return;
-  const due = addDaysIso(FOLLOWUP_INTERVAL_DAYS);
-  for (const m of group.members) updateListingFields(db, m.id, { reservation_followup_due: due });
-}
-
 function specsText(rep) {
   const specs = [rep.disposition, rep.area_m2 ? `${rep.area_m2} m²` : null].filter(Boolean).join(", ");
   const price = rep.price_czk != null ? `${rep.price_czk.toLocaleString("cs-CZ")} Kč` : "cena na vyžádání";
@@ -69,61 +49,70 @@ function specsText(rep) {
 }
 
 /**
- * Text připomínky "pořád rezervováno?" — vedle odkazu i přesná adresa a
- * katastrální údaje (nebo upozornění, že adresa chybí), ať jde rovnou
- * hledat v katastru.
+ * Pošle JEDNU zprávu o bytech, kterým nastal kontrolní bod (viz
+ * kn-schedule.js) a které se dají v katastru dohledat — mají přesnou adresu.
+ * Spouští ji jen byt, o jehož aktuálním bodu ještě nešla zpráva; ostatní
+ * čekající jen doplní počet. Byty bez přesné adresy jdou jen jako počet (bez
+ * adresy je v katastru nejde najít). Selhání odeslání (výpadek Telegramu)
+ * body neoznačí, zkusí se příští běh.
  */
-export function buildFollowupText(db, rep) {
-  const { specs, price } = specsText(rep);
-  return [
-    `⏰ Pořád rezervováno: ${specs}${rep.address ? `, ${rep.address}` : ""}`,
-    price,
-    ...addressNoticeLines(db, rep.id),
-    rep.url,
-    "",
-    "Zkontroloval jsi převod v katastru nemovitostí?",
-  ].join("\n");
-}
-
-/**
- * Pošle připomínku pro každou REZERVOVANOU skupinu, které uplynula lhůta
- * (`reservation_followup_due`), s inline tlačítky. Hned po odeslání
- * naplánuje další kolo (+21 dní) — tím appka "samo-ozdravuje" i úplné
- * mlčení uživatele (viz hlavička souboru). Selhání odeslání u JEDNÉ skupiny
- * (výpadek Telegramu) lhůtu NEPOSOUVÁ, ať se zkusí znovu příští běh — jen
- * se zaloguje a appka pokračuje dál.
- */
-export async function sendDueFollowups(db, log) {
-  const allListings = db.prepare("SELECT * FROM listings").all();
-  const groups = groupListings(allListings);
-  const now = nowIso();
-
-  for (const group of groups) {
-    if (mergedStatus(group.members) !== "reserved") continue;
-    const rep = primaryListing(group.members);
-    if (!rep.reservation_followup_due || rep.reservation_followup_due > now) continue;
-
-    const text = buildFollowupText(db, rep);
-    const replyMarkup = {
-      inline_keyboard: [
-        [
-          { text: "✅ Prodáno", callback_data: `sold:${rep.id}` },
-          { text: "⏳ Odložit o 3 týdny", callback_data: `snooze:${rep.id}` },
-        ],
-      ],
-    };
-
-    try {
-      await sendTelegramMessage(text, { replyMarkup });
-    } catch (err) {
-      log(`Telegram následná připomínka selhala (${rep.id}): ${err.message}`);
-      continue; // lhůta se neposouvá, zkusí se znovu příští běh
-    }
-
-    const nextDue = addDaysIso(FOLLOWUP_INTERVAL_DAYS);
-    for (const m of group.members) updateListingFields(db, m.id, { reservation_followup_due: nextDue });
-    log(`Telegram následná připomínka odeslána: ${rep.id} (další za ${FOLLOWUP_INTERVAL_DAYS} dní)`);
+export async function sendKnCheckDigest(db, log, now = Date.now()) {
+  const listings = db.prepare("SELECT * FROM listings").all();
+  const groups = groupListings(listings);
+  const eventsByListing = new Map();
+  for (const e of db.prepare("SELECT listing_id, event_type, occurred_at FROM events WHERE event_type IN ('reserved', 'unreserved')").all()) {
+    if (!eventsByListing.has(e.listing_id)) eventsByListing.set(e.listing_id, []);
+    eventsByListing.get(e.listing_id).push(e);
   }
+
+  const due = [];
+  for (const group of groups) {
+    if (isHidden(group.members)) continue; // "tohle mě nezajímá"
+    const events = group.members.flatMap((m) => eventsByListing.get(m.id) || []);
+    const track = buildSaleTrack(group.members, events, now);
+    if (!track?.due) continue;
+    due.push({ group, track, exact: pickOwnValue(group.members, "exact_address") });
+  }
+  const checkable = due.filter((d) => d.exact);
+  const fresh = checkable.filter((d) => pickOwnValue(d.group.members, "kn_digest_cp") !== String(d.track.dueAt));
+  if (!fresh.length) return;
+
+  const actx = buildAddressContext(db, listings, groups);
+  const shown = fresh.slice(0, DIGEST_MAX_ITEMS);
+  const lines = [`🏛️ Kontrola v katastru (${fresh.length})`, ""];
+  for (const d of shown) {
+    const members = d.group.members;
+    const rep = primaryListing(members);
+    const { specs, price } = specsText(rep);
+    const unit = pickOwnValue(members, "unit_number");
+    const lv = pickOwnValue(members, "lv_number");
+    const kn = knInfoForGroup(actx, d.group, resolveForGroup(actx, d.group));
+    lines.push(`• ${specs}${rep.address ? `, ${rep.address}` : ""} — ${price}`);
+    lines.push(`  📍 ${[d.exact, unit ? `jednotka ${unit}` : null, lv ? `LV ${lv}` : null].filter(Boolean).join(" · ")}`);
+    if (kn) lines.push(`  🏛️ ${describeKn(kn)}`);
+    lines.push(`  ⏰ ${d.track.reason}${d.track.stage === "price" ? "" : ` (rezervováno ${formatDay(d.track.reservedAt)})`}`);
+  }
+  const more = fresh.length - shown.length;
+  const waiting = checkable.length - fresh.length;
+  const noAddress = due.length - checkable.length;
+  const tail = [
+    more > 0 ? `… a ${more} dalších příště` : null,
+    waiting > 0 ? `Z minula čeká dalších ${waiting}.` : null,
+    noAddress > 0 ? `Bez přesné adresy (nejdou dohledat): ${noAddress}.` : null,
+  ].filter(Boolean);
+  if (tail.length) lines.push("", ...tail);
+  lines.push("", "Výsledek zapiš v appce (Katastr): vklad podán, nebo cena.");
+
+  try {
+    await sendTelegramMessage(lines.join("\n"));
+  } catch (err) {
+    log(`Telegram souhrn kontrol v katastru selhal: ${err.message}`);
+    return; // body zůstanou neoznačené, zkusí se příští běh
+  }
+  for (const d of shown) {
+    for (const m of d.group.members) updateListingFields(db, m.id, { kn_digest_cp: String(d.track.dueAt) });
+  }
+  log(`Telegram souhrn kontrol v katastru odeslán: ${shown.length} bytů (+${more} příště)`);
 }
 
 function formatDay(iso) {
@@ -231,10 +220,11 @@ async function handleCallbackQuery(db, cq, log) {
     confirmation = `✅ ${label} — označeno jako prodáno, další připomínky končí.`;
     log(`Telegram: ${listingId} označeno jako prodáno.`);
   } else if (action === "snooze") {
-    const nextDue = addDaysIso(FOLLOWUP_INTERVAL_DAYS);
-    for (const m of group.members) updateListingFields(db, m.id, { reservation_followup_due: nextDue });
-    confirmation = `⏳ ${label} — odloženo, příští připomínka ${new Date(nextDue).toLocaleDateString("cs-CZ")}.`;
-    log(`Telegram: ${listingId} odloženo o 3 týdny.`);
+    // Tlačítko ze starší zprávy: "odložit" = tuhle kontrolu jsem udělal, další
+    // přijde podle rozvrhu (viz kn-schedule.js), ne po pevných 3 týdnech.
+    for (const m of group.members) updateListingFields(db, m.id, { kn_checked_at: nowIso() });
+    confirmation = `⏳ ${label} — odloženo, další kontrola podle rozvrhu.`;
+    log(`Telegram: ${listingId} odloženo (kontrola podle rozvrhu).`);
   } else {
     return; // neznámá akce (např. stará verze appky) — nic nedělat
   }

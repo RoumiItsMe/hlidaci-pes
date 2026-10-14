@@ -15,6 +15,26 @@ function byTime(a, b) {
 }
 
 /**
+ * Od kdy trvá poslední rezervace bytu: nejstarší z členů skupiny, u kterých
+ * je poslední rezervační událost "reserved" (ne později zrušená). `null`,
+ * když byt žádnou platnou rezervaci nemá. Nezávisí na stavu inzerátu — platí
+ * i pro zmizelý byt, který byl před zmizením rezervovaný (od tohoto data se
+ * počítá rozvrh kontrol v katastru, viz kn-schedule.js).
+ */
+export function reservationStart(members, events) {
+  let reservedAt = null;
+  for (const m of members) {
+    const own = events.filter((e) => e.listing_id === m.id && (e.event_type === "reserved" || e.event_type === "unreserved")).sort(byTime);
+    const last = own[own.length - 1];
+    if (last && last.event_type === "reserved") {
+      const since = own.filter((e) => e.event_type === "reserved").pop().occurred_at;
+      if (!reservedAt || since < reservedAt) reservedAt = since;
+    }
+  }
+  return reservedAt;
+}
+
+/**
  * @param members  inzeráty skupiny (řádky `listings`, všechny ve stavu removed)
  * @param events   události všech členů skupiny (`listing_id`, `event_type`,
  *                 `old_price_czk`, `new_price_czk`, `occurred_at`)
@@ -28,20 +48,9 @@ export function assessSale(members, events) {
   const lastRemoved = removedTimes.length ? Math.max(...removedTimes) : null;
 
   // Rezervace těsně před zmizením — nejsilnější signál: kupec byl, byt
-  // zmizel. "Těsně před" = poslední rezervační událost je "reserved", ne
-  // později zrušená.
-  // `reservedAt` = od kdy ta rezervace trvala (nejstarší z členů, u kterých
-  // byla poslední rezervační událost "reserved") — uživateli to zúží, kdy
-  // v katastru hledat.
-  let reservedAt = null;
-  for (const m of members) {
-    const own = events.filter((e) => e.listing_id === m.id && (e.event_type === "reserved" || e.event_type === "unreserved")).sort(byTime);
-    const last = own[own.length - 1];
-    if (last && last.event_type === "reserved") {
-      const since = own.filter((e) => e.event_type === "reserved").pop().occurred_at;
-      if (!reservedAt || since < reservedAt) reservedAt = since;
-    }
-  }
+  // zmizel. `reservedAt` = od kdy ta rezervace trvala (viz reservationStart)
+  // — uživateli to zúží, kdy v katastru hledat.
+  const reservedAt = reservationStart(members, events);
   const wasReserved = reservedAt != null;
   if (wasReserved) {
     score += 3;

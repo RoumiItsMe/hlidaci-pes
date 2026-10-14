@@ -3,7 +3,7 @@
 // od track.js (jednou denně, plný sběr dat) se tenhle skript hodí spouštět
 // ČASTO (naplánovaná úloha po pár minutách), ať appka na kliknutí reaguje
 // prakticky hned, ne až při příštím dennímu sběru. Nikdy neposílá nové
-// připomínky ani nekontroluje lhůty (`sendDueFollowups`) — to zůstává
+// zprávy ani nekontroluje rozvrh kontrol v katastru (`sendKnCheckDigest`) — to zůstává
 // výhradně v track.js, ať se nová připomínka nepošle dvakrát jen proto, že
 // běží dva různé naplánované skripty.
 //

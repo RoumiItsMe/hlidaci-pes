@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { watches } from "../config.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
-import { scheduleFollowup, sendDueFollowups, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
+import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
 import { fetchSrealityAllPages } from "../sources/sreality.js";
 import { fetchBezrealitky } from "../sources/bezrealitky.js";
 import { fetchIdnes } from "../sources/idnes.js";
@@ -236,7 +236,6 @@ async function processSource(db, source, watch) {
       if (status === "reserved") {
         insertEvent(db, { listing_id: listingId, event_type: "reserved", occurred_at: now });
         await notifyReservation({ disposition, area_m2: areaM2, address, price_czk: priceCzk, url: item.url });
-        scheduleFollowup(db, listingId);
       }
 
       if (detail.photoUrls.length > 0) {
@@ -323,7 +322,6 @@ async function processSource(db, source, watch) {
           price_czk: fields.price_czk ?? existing.price_czk,
           url: item.url,
         });
-        scheduleFollowup(db, listingId);
       }
     }
     updateListingFields(db, listingId, fields);
@@ -368,12 +366,9 @@ async function run() {
       (hadError ? " (u některého zdroje selhalo stahování — zkontroluj log výše.)" : "")
   );
 
-  // Nejdřív přečíst kliknutí na tlačítka z PŘEDCHOZÍCH připomínek (ať
-  // čerstvě odložená rezervace neprotáhne další kolo zbytečně brzy), pak
-  // teprve poslat připomínky, kterým dnes uplynula lhůta. Nezávislé na
-  // výsledku sběru výš (fail-soft, viz reservation-reminders.js).
+  // Kliknutí na tlačítka ze starších zpráv (viz reservation-reminders.js).
+  // Nezávislé na výsledku sběru výš (fail-soft).
   await processTelegramActions(db, log);
-  await sendDueFollowups(db, log);
   // Rezervované byty, které při tomhle běhu zmizely z nabídky — "možný
   // prodej", teď je nejlepší chvíle začít hledat v katastru.
   try {
@@ -391,6 +386,15 @@ async function run() {
     if (assigned || revoked) log(`[geo] adresy: ${assigned} doplněno automaticky, ${revoked} odvoláno.`);
   } catch (err) {
     log(`[geo] zpracování polohy selhalo: ${err.message}`);
+  }
+
+  // Souhrn "tyhle byty je čas zkontrolovat v katastru" (rozvrh viz
+  // kn-schedule.js). Až PO doplnění adres výš — bez přesné adresy se byt v
+  // katastru dohledat nedá, takže čerstvě určená adresa musí být vidět.
+  try {
+    await sendKnCheckDigest(db, log);
+  } catch (err) {
+    log(`Souhrn kontrol v katastru selhal: ${err.message}`);
   }
 
   db.close();
