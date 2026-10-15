@@ -837,10 +837,27 @@ bere z toho, co appka už ví, a každý blok vede do pohledu, odkud pochází:
 - **Pás čísel nahoře** (každé číslo je odkaz na odpovídající filtr): v nabídce
   (+ kolik jich přibylo za týden), rezervováno, **čeká na ověření**, **prodáno**
   (s potvrzenou cenou), slevy za týden, medián Kč/m² u bytů v nabídce.
-- **Čeká na tebe** — žlutý rámeček, který se ukáže jen když je co dělat:
-  zadat cenu prodeje (vklad podán / řízení skončilo), potvrdit plombu, kterou
-  appka nepřiřadila k bytu, zkontrolovat v katastru podle rozvrhu, doplnit
-  přesnou adresu. Počty jsou stejné jako ve frontě Katastr.
+- **Čeká na tebe** — žlutý rámeček se **všemi úkoly na jednom místě**; ukáže se
+  jen když je co dělat a úkoly jsou od nejdůležitějších:
+  1. **Zadat cenu prodeje** (vklad podán / řízení skončilo),
+  2. **Potvrdit plombu**, kterou appka nepřiřadila k bytu,
+  3. **Zkontrolovat v katastru** podle rozvrhu,
+  4. **Doplnit chybějící údaje** — dispozice, plocha, vlastnictví, stav
+     (před/po rekonstrukci), pokud je appka nevyčetla z inzerátu; v úkolu je
+     vidět, co chybí nejčastěji. Vede do tabulky Srovnání s filtrem
+     **📝 Chybí údaje** (`/tabulka?chybi=udaje`), kde jsou chybějící buňky
+     žlutě zvýrazněné a vyplní se rovnou výběrem (uloží se hned, byt pak ze
+     seznamu zmizí). Sleduje se u bytů v nabídce, rezervovaných a prodaných /
+     téměř jistě prodaných (bez stavu by byt vypadl ze statistiky po
+     rekonstrukci); skryté a obyčejně zmizelé ne. Žlutá buňka se ukazuje i v
+     běžné tabulce, ne jen ve filtru.
+  5. **Doplnit přesnou adresu** (bez ní se byt v katastru nedá hledat ani
+     hlídat).
+
+  U úkolu, který se týká nejvýš čtyř bytů, jsou rovnou odkazy na ně; u delšího
+  seznamu stačí počet a odkaz. Počty katastru jsou stejné jako ve frontě
+  Katastr. Co appka dělá sama (hlídání plomb přes API, čekání na vklad), tu
+  není — ozve se, až bude na tobě řada.
 - **Aktuality** — osm nejnovějších upozornění ze zvonečku (nepřečtená
   zvýrazněná).
 - **Nejnovější nabídky** — šest naposledy objevených bytů (v nabídce nebo

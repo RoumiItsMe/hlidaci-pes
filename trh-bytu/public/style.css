@@ -291,6 +291,11 @@ form button { align-self: flex-start; padding: 0.5rem 1.2rem; background: var(--
 .attention h2 { margin: 0 0 0.4rem; font-size: 1rem; }
 .attention ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
 .attention a { color: inherit; }
+.task-flats { font-size: 0.85rem; margin-top: 0.1rem; }
+.task-flats a { color: var(--accent); text-decoration: none; }
+.task-flats a:hover { text-decoration: underline; }
+/* Základní údaj bytu, který appka nevyčetla — v tabulce srovnání zvýrazněná buňka */
+.compare td.cell-missing { background: #fef3c7; }
 .dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
 @media (max-width: 760px) {
   .dash-grid { grid-template-columns: minmax(0, 1fr); }

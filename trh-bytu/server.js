@@ -22,7 +22,7 @@ import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js";
-import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, relativeTime } from "./dashboard.js";
+import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime } from "./dashboard.js";
 import { watches } from "../config.js";
 
 // KN_API_KEY (a Telegram kvůli zprávě o nalezeném vkladu) z `.env.local` v
@@ -812,7 +812,11 @@ function compareSortHeader(current, key, label) {
  * `this.form.submit()`, stejný vzorec jako filtr Město/Vlastnictví na "/").
  */
 function renderComparisonTable(db, filters) {
-  const { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam } = filters;
+  const { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam, chybi: missingFilter } = filters;
+  // Pohled "Chybí údaje": jen byty, kterým chybí základní údaj (dispozice, plocha,
+  // vlastnictví, stav — viz dashboard.js ESSENTIAL_FIELDS); chybějící buňky jsou
+  // zvýrazněné a sloupec Stav je vidět i bez "Víc sloupců".
+  const missingView = missingFilter === "udaje";
   // Výchozí tabulka drží jen to, podle čeho se byty porovnávají; sloupce, které
   // appka vyplňuje sama nebo se do nich sahá zřídka, jsou za "Víc sloupců"
   // (a všechny jsou i v detailu bytu).
@@ -826,6 +830,8 @@ function renderComparisonTable(db, filters) {
   let filtered = entries.filter((e) => !e.hidden);
   if (statusFilter) filtered = filtered.filter((e) => matchesStatusFilter(e, statusFilter));
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
+  const missingCount = entries.filter((e) => missingEssentials(e).length > 0).length;
+  if (missingView) filtered = filtered.filter((e) => missingEssentials(e).length > 0);
 
   const [sortKey, sortDir] = (sortParam || "added_dir_desc").split("_dir_");
   const sortCol = COMPARE_SORT_COLUMNS[sortKey] || COMPARE_SORT_COLUMNS.added;
@@ -840,7 +846,7 @@ function renderComparisonTable(db, filters) {
     return dir === "asc" ? cmp : -cmp;
   });
 
-  const current = { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam };
+  const current = { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam, chybi: missingFilter };
   const filterLinks = STATUS_FILTERS
     .map((s) => {
       const label = statusFilterLabel(s);
@@ -848,6 +854,7 @@ function renderComparisonTable(db, filters) {
       return `<a class="filter ${active}" href="${buildQuery(current, { status: s }, "/tabulka")}">${esc(label)}</a>`;
     })
     .join("");
+  const missingLink = `<a class="filter ${missingView ? "active" : ""}" href="${buildQuery(current, { chybi: missingView ? null : "udaje" }, "/tabulka")}">📝 Chybí údaje (${missingCount})</a>`;
   const cityOptionsHtml = [`<option value="">Všechna města</option>`]
     .concat(cityOptions.map((c) => `<option value="${esc(c)}" ${cityFilter === c ? "selected" : ""}>${esc(c)}</option>`))
     .join("");
@@ -882,14 +889,14 @@ function renderComparisonTable(db, filters) {
         return `<td>${noteInput(encId, "address", e.address || e.city, "adresa…")}${chip ? `<div class="cell-addr">${chip}</div>` : ""}</td>`;
       },
     },
-    { head: "Dispozice", cell: (e, encId) => `<td>${noteInput(encId, "disposition", e.rep.disposition, "—")}</td>` },
-    { head: "Plocha", cell: (e, encId) => `<td>${noteInput(encId, "area_m2", e.rep.area_m2 ?? "", "m²", "number", ' step="0.1"')}</td>` },
+    { head: "Dispozice", essential: "disposition", cell: (e, encId) => `<td>${noteInput(encId, "disposition", e.rep.disposition, "—")}</td>` },
+    { head: "Plocha", essential: "area", cell: (e, encId) => `<td>${noteInput(encId, "area_m2", e.rep.area_m2 ?? "", "m²", "number", ' step="0.1"')}</td>` },
     { head: "Patro", cell: (e, encId) => `<td class="col-floor">${paramField(encId, e, "floorInfo")}</td>` },
     { head: "Výtah", cell: (e, encId) => `<td>${paramField(encId, e, "elevator")}</td>` },
     { head: "Balkón", cell: (e, encId) => `<td>${paramField(encId, e, "balcony")}</td>` },
     { head: "Sklep", cell: (e, encId) => `<td>${paramField(encId, e, "cellar")}</td>` },
-    { head: "Vlastnictví", cell: (e, encId) => `<td>${paramField(encId, e, "ownership")}</td>` },
-    { head: "Stav", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "own_condition", e.ownCondition)}</td>` },
+    { head: "Vlastnictví", essential: "ownership", cell: (e, encId) => `<td>${paramField(encId, e, "ownership")}</td>` },
+    { head: "Stav", ext: true, essential: "condition", cell: (e, encId) => `<td>${ownSelect(encId, "own_condition", e.ownCondition)}</td>` },
     { head: "Konstrukce", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "own_construction", e.ownConstruction)}</td>` },
     { head: "Revitalizace", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "own_revitalized", e.ownRevitalized)}</td>` },
     { head: "Ve statistice", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "stats_include", e.statsInclude)}</td>` },
@@ -917,14 +924,17 @@ function renderComparisonTable(db, filters) {
     { head: "Poznámka", ext: true, cell: (e, encId) => `<td>${noteInput(encId, "notes", e.notes, "poznámka…")}</td>` },
     { head: "Motivace prodávajícího", ext: true, cell: (e, encId) => `<td>${noteInput(encId, "seller_motivation", e.sellerMotivation, "motivace…")}</td>` },
   ];
-  const visibleColumns = COLUMNS.filter((c) => showAll || !c.ext);
+  const visibleColumns = COLUMNS.filter((c) => showAll || !c.ext || (missingView && c.essential));
   const extraColumnCount = COLUMNS.filter((c) => c.ext).length;
 
   const rows = filtered
     .map((e) => {
       const encId = encodeURIComponent(e.rep.id);
+      const missing = new Set(missingEssentials(e));
+      // Chybějící základní údaj je v buňce zvýrazněný (v každém pohledu, ne jen v "Chybí údaje").
+      const cell = (c) => (c.essential && missing.has(c.essential) ? c.cell(e, encId).replace("<td>", '<td class="cell-missing">') : c.cell(e, encId));
       return `<tr class="${e.hidden ? "row--hidden" : ""}">
-        ${visibleColumns.map((c) => c.cell(e, encId)).join("\n        ")}
+        ${visibleColumns.map(cell).join("\n        ")}
       </tr>`;
     })
     .join("");
@@ -938,10 +948,11 @@ function renderComparisonTable(db, filters) {
 
   return `
     <h1>Srovnání bytů (${filtered.length})</h1>
-    <div class="filters">${filterLinks}</div>
+    <div class="filters">${filterLinks}${missingLink}</div>
     <div class="toolbar">
       <form method="get" action="/tabulka" class="select-filters">
         <input type="hidden" name="status" value="${esc(statusFilter || "")}">
+        <input type="hidden" name="chybi" value="${esc(missingFilter || "")}">
         <input type="hidden" name="sort" value="${esc(sortParam || "")}">
         <input type="hidden" name="cols" value="${esc(colsParam || "")}">
         <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
@@ -1401,14 +1412,17 @@ function renderDashboard(db) {
     kpi("/stats", snap.medianPricePerM2 != null ? new Intl.NumberFormat("cs-CZ").format(snap.medianPricePerM2) : "—", "Kč/m² (medián)", "u bytů v nabídce"),
   ].join("");
 
-  const todoItems = [
-    [todo.enterPrice, "/kontrola", "Zadat cenu prodeje", "vklad je podaný nebo řízení skončilo"],
-    [todo.confirmFiling, "/kontrola", "Potvrdit plombu nalezenou v katastru", "appka ji nedokázala sama přiřadit k bytu"],
-    [todo.manualCheck, "/kontrola", "Zkontrolovat v katastru", "nastal termín kontroly"],
-    [todo.noAddress, "/?adresa=chybi", "Doplnit přesnou adresu", "bez ní se byt v katastru nedá hledat ani hlídat"],
-  ]
-    .filter(([count]) => count > 0)
-    .map(([count, href, label, why]) => `<li><a href="${href}"><strong>${esc(label)}</strong> (${count})</a> <span class="muted">— ${esc(why)}</span></li>`)
+  // Úkoly s pár byty ukážou rovnou odkazy na ně; u dlouhého seznamu (adresy,
+  // chybějící údaje) stačí počet a odkaz na filtrovaný pohled.
+  const flatName = (e) => [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null].filter(Boolean).join(" ") + (e.address ? `, ${e.address}` : "") || "Byt";
+  const todoItems = todo.tasks
+    .map((t) => {
+      const flats =
+        t.count <= 4
+          ? `<div class="task-flats">${t.entries.map((e) => `<a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(truncate(flatName(e), 52))}</a>`).join(" · ")}</div>`
+          : "";
+      return `<li><a href="${t.href}"><strong>${esc(t.label)}</strong> (${t.count})</a> <span class="muted">— ${esc(t.why)}</span>${flats}</li>`;
+    })
     .join("");
   const attentionBox = todoItems ? `<section class="attention"><h2>Čeká na tebe</h2><ul>${todoItems}</ul></section>` : "";
 
@@ -2166,6 +2180,7 @@ const server = createServer(async (req, res) => {
       city: url.searchParams.get("city") || null,
       sort: url.searchParams.get("sort") || null,
       cols: url.searchParams.get("cols") === "all" ? "all" : null,
+      chybi: url.searchParams.get("chybi") === "udaje" ? "udaje" : null,
     };
     return sendHtml(res, 200, layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
   }

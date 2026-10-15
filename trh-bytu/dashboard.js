@@ -94,25 +94,75 @@ export function marketSnapshot(entries, { now = Date.now(), weekDrops = 0 } = {}
 }
 
 /**
- * Co čeká na uživatele (stejná pravidla jako fronta Katastr, jen spočítaná):
- * zadat cenu (vklad podán / řízení skončilo), potvrdit plombu, kterou appka
- * k bytu nepřiřadila, zkontrolovat ručně podle rozvrhu a doplnit adresu — bez ní
- * se byt v katastru nedá hledat ani hlídat.
+ * Základní údaje o bytě, bez kterých se nedá porovnávat ani počítat statistika
+ * ceny po rekonstrukci. Appka je zkouší vyčíst z inzerátu sama (extract-params.js,
+ * detect-own-fields.js); co se nepodaří, zůstane k doplnění. `column` je sloupec
+ * tabulky srovnání, kde se údaj doplňuje (viz renderComparisonTable).
+ */
+export const ESSENTIAL_FIELDS = [
+  { key: "disposition", label: "dispozice", has: (e) => Boolean(e.rep?.disposition) },
+  { key: "area", label: "plocha", has: (e) => Boolean(e.rep?.area_m2) },
+  { key: "ownership", label: "vlastnictví", has: (e) => Boolean(e.params?.ownership) },
+  { key: "condition", label: "stav (před/po rekonstrukci)", has: (e) => Boolean(e.ownCondition) },
+];
+
+/** Jestli se údaje o bytě vůbec vyžadují: živá nabídka, nebo prodaný / téměř jistě prodaný byt. */
+export function needsEssentials(e) {
+  return !e.hidden && (isLive(e) || isSoldOrAlmost(e));
+}
+
+/** Klíče chybějících základních údajů bytu (prázdné pole = vše vyplněno nebo se nevyžaduje). */
+export function missingEssentials(e) {
+  return needsEssentials(e) ? ESSENTIAL_FIELDS.filter((f) => !f.has(e)).map((f) => f.key) : [];
+}
+
+/**
+ * Co čeká na uživatele — všechny úkoly na jednom místě, od nejdůležitějších.
+ * Katastr (stejná pravidla jako fronta Katastr, jen spočítaná): zadat cenu
+ * (vklad podán / řízení skončilo), potvrdit plombu, kterou appka k bytu
+ * nepřiřadila, zkontrolovat ručně podle rozvrhu. Pak údaje, které appka
+ * nevyčetla z inzerátu (viz ESSENTIAL_FIELDS), a přesná adresa — bez ní se byt
+ * v katastru nedá hledat ani hlídat.
+ *
+ * Vrací `{ tasks: [{ key, count, href, label, why, entries }], total }`; úkoly s
+ * nulou se vynechají. `entries` jsou byty, kterých se úkol týká.
  */
 export function attention(entries) {
   const shown = entries.filter((e) => !e.hidden);
   const known = (e) => e.addressInfo?.state === "known";
   const due = shown.filter((e) => e.track && (e.track.stage === "filing" || e.track.stage === "price") && e.track.due && known(e));
-  const enterPrice = due.filter((e) => e.track.kind === "price" || e.track.kind === "price-ready").length;
-  const confirmTracked = due.filter((e) => e.track.kind === "confirm").length;
+  const enterPrice = due.filter((e) => e.track.kind === "price" || e.track.kind === "price-ready");
+  const confirmTracked = due.filter((e) => e.track.kind === "confirm");
   // Zmizelý byt bez rezervace, u kterého se objevila plomba (viz renderKnQueue).
   const confirmUnreserved = shown.filter(
     (e) => !e.track && e.unreservedWatch?.needsConfirm && !(e.knCheckedAt && e.unreservedWatch.confirmAt <= Date.parse(e.knCheckedAt))
-  ).length;
-  const confirmFiling = confirmTracked + confirmUnreserved;
-  const manualCheck = due.length - enterPrice - confirmTracked;
-  const noAddress = shown.filter((e) => e.addressInfo?.state === "missing" && isLive(e)).length;
-  return { enterPrice, confirmFiling, manualCheck, noAddress, total: enterPrice + confirmFiling + manualCheck + noAddress };
+  );
+  const confirmFiling = [...confirmTracked, ...confirmUnreserved];
+  const manualCheck = due.filter((e) => !enterPrice.includes(e) && !confirmTracked.includes(e));
+  const incomplete = shown.filter((e) => missingEssentials(e).length > 0);
+  const noAddress = shown.filter((e) => e.addressInfo?.state === "missing" && isLive(e));
+
+  // Co nejčastěji chybí: "stav (12×), vlastnictví (3×)".
+  const missingCounts = ESSENTIAL_FIELDS.map((f) => ({ label: f.label, n: incomplete.filter((e) => missingEssentials(e).includes(f.key)).length }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n);
+
+  const tasks = [
+    { key: "enterPrice", entries: enterPrice, href: "/kontrola", label: "Zadat cenu prodeje", why: "vklad je podaný nebo řízení skončilo" },
+    { key: "confirmFiling", entries: confirmFiling, href: "/kontrola", label: "Potvrdit plombu nalezenou v katastru", why: "appka ji nedokázala sama přiřadit k bytu" },
+    { key: "manualCheck", entries: manualCheck, href: "/kontrola", label: "Zkontrolovat v katastru", why: "nastal termín kontroly" },
+    {
+      key: "missingData",
+      entries: incomplete,
+      href: "/tabulka?chybi=udaje",
+      label: "Doplnit chybějící údaje",
+      why: `appka je nevyčetla z inzerátu — ${missingCounts.map((x) => `${x.label} ${x.n}×`).join(", ")}`,
+    },
+    { key: "noAddress", entries: noAddress, href: "/?adresa=chybi", label: "Doplnit přesnou adresu", why: "bez ní se byt v katastru nedá hledat ani hlídat" },
+  ]
+    .filter((t) => t.entries.length > 0)
+    .map(({ entries: list, ...task }) => ({ ...task, count: list.length, entries: list }));
+  return { tasks, total: tasks.reduce((sum, t) => sum + t.count, 0) };
 }
 
 /** "před 5 min", "před 3 h", "před 2 dny" — pro údaj o posledním sběru. */

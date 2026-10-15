@@ -1,7 +1,7 @@
 // node --test trh-bytu/dashboard.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, relativeTime } from "./dashboard.js";
+import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime } from "./dashboard.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-10-15T10:00:00.000Z");
@@ -12,6 +12,10 @@ function entry(over = {}) {
   const id = `s:${++seq}`;
   return {
     g: { members: [{ id }] },
+    // Základní údaje vyplněné (viz ESSENTIAL_FIELDS), ať testy nevyrábí úkol "doplnit údaje".
+    rep: { id, disposition: "2+1", area_m2: 50 },
+    params: { ownership: "Osobní" },
+    ownCondition: "maintained",
     hidden: false,
     status: "active",
     discoveredAt: ago(1),
@@ -115,6 +119,8 @@ test("pás čísel: počty podle stavu, nové za týden, medián Kč/m² jen z b
   assert.deepEqual(snap, { active: 3, reserved: 1, newThisWeek: 2, dropsThisWeek: 4, pending: 2, confirmed: 1, medianPricePerM2: 60000 });
 });
 
+const taskCounts = (entries) => Object.fromEntries(attention(entries).tasks.map((t) => [t.key, t.count]));
+
 test("čeká na tebe: cena, plomba k potvrzení, ruční kontrola, chybějící adresa — a nic ze skrytých", () => {
   const due = (kind, over = {}) => entry({ status: "reserved", track: { stage: "filing", due: true, kind }, ...over });
   const entries = [
@@ -130,7 +136,44 @@ test("čeká na tebe: cena, plomba k potvrzení, ruční kontrola, chybějící 
     entry({ addressInfo: { state: "missing" } }),
     entry({ status: "removed", addressInfo: { state: "missing" } }), // zmizelý bez adresy se nepřipomíná
   ];
-  assert.deepEqual(attention(entries), { enterPrice: 2, confirmFiling: 2, manualCheck: 2, noAddress: 2, total: 8 });
+  const { tasks } = attention(entries);
+  assert.deepEqual(taskCounts(entries), { enterPrice: 2, confirmFiling: 2, manualCheck: 2, noAddress: 2 });
+  // Pořadí úkolů: nejdřív katastr, nakonec adresa.
+  assert.deepEqual(tasks.map((t) => t.key), ["enterPrice", "confirmFiling", "manualCheck", "noAddress"]);
+  assert.equal(tasks[0].entries.length, 2);
+});
+
+test("bez úkolů je seznam prázdný", () => {
+  assert.deepEqual(attention([entry(), entry({ status: "removed" })]), { tasks: [], total: 0 });
+});
+
+test("chybějící základní údaje: dispozice, plocha, vlastnictví, stav — jen u bytů, kde se vyžadují", () => {
+  const bare = { rep: { disposition: null, area_m2: null }, params: {}, ownCondition: null };
+  assert.deepEqual(missingEssentials(entry(bare)), ["disposition", "area", "ownership", "condition"]);
+  assert.deepEqual(missingEssentials(entry({ ownCondition: null })), ["condition"]);
+  assert.deepEqual(missingEssentials(entry({ params: {} })), ["ownership"]);
+  assert.deepEqual(missingEssentials(entry()), []);
+  // nevyžaduje se u skrytého, u obyčejně zmizelého ani u rezervace zrušené / staženého bytu
+  assert.deepEqual(missingEssentials(entry({ ...bare, hidden: true })), []);
+  assert.deepEqual(missingEssentials(entry({ ...bare, status: "removed", triage: { wasReserved: false } })), []);
+  // vyžaduje se u živé nabídky i rezervace a u prodaného / téměř jistě prodaného bytu (kvůli statistice po rekonstrukci)
+  assert.equal(missingEssentials(entry({ ...bare, status: "reserved" })).length, 4);
+  assert.equal(missingEssentials(entry({ ...bare, status: "sold" })).length, 4);
+  assert.equal(missingEssentials(entry({ ...bare, status: "removed", triage: { wasReserved: true } })).length, 4);
+});
+
+test("úkol 'doplnit údaje': počet bytů, co nejčastěji chybí, odkaz na filtr v tabulce srovnání", () => {
+  const entries = [
+    entry({ ownCondition: null }),
+    entry({ ownCondition: null }),
+    entry({ ownCondition: null, params: {} }),
+    entry({ hidden: true, ownCondition: null }),
+    entry(),
+  ];
+  const task = attention(entries).tasks.find((t) => t.key === "missingData");
+  assert.equal(task.count, 3);
+  assert.equal(task.href, "/tabulka?chybi=udaje");
+  assert.ok(task.why.includes("stav (před/po rekonstrukci) 3×, vlastnictví 1×"), task.why);
 });
 
 test("čas od posledního sběru česky", () => {
