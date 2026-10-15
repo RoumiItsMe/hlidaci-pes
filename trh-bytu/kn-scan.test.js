@@ -1,7 +1,7 @@
 // node --test trh-bytu/kn-scan.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectBuildingsToScan, matchFilings, unreservedTrack, isCooperativeOwnership, CYCLE_DAYS, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
+import { selectBuildingsToScan, matchFilings, unreservedTrack, isCooperativeOwnership, CYCLE_DAYS, UNRESERVED_HORIZON_DAYS, NO_UNITS_RECHECK_DAYS } from "./kn-scan.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-10-14T06:00:00.000Z");
@@ -174,4 +174,15 @@ test("dům, kde od posledního skenu zmizel inzerát bytu, se projde hned, i kdy
   // Po novém skenu už se nezopakuje.
   const rescanned = scansAgo({ 1: 0.1, 2: 1, 3: 1 });
   assert.deepEqual(selectBuildingsToScan(buildings, rescanned, NOW), []);
+});
+
+test("dům bez jednotek se nepřeskenovává každých 5 dní, jen výjimečně, a zmizení bytu ho nevyvolá", () => {
+  const scanOf = (days, units) => new Map([[1, { scannedAt: iso(NOW - days * DAY), units }]]);
+  const pick = (scans, building = { id: 1 }) => selectBuildingsToScan([building], scans, NOW).map((b) => b.id);
+  const someUnit = [{ id: 1, number: 930001 }];
+  assert.deepEqual(pick(scanOf(10, [])), []); // 10 dní bez jednotek je málo
+  assert.deepEqual(pick(scanOf(10, someUnit)), [1]); // běžný dům po cyklu ano
+  assert.deepEqual(pick(scanOf(NO_UNITS_RECHECK_DAYS + 1, [])), [1]); // po NO_UNITS_RECHECK_DAYS se zkusí znovu
+  assert.deepEqual(pick(scanOf(3, []), { id: 1, changedAt: NOW - 1 * DAY }), []); // zmizení bytu v domě bez jednotek sken nevyvolá
+  assert.deepEqual(pick(scanOf(3, someUnit), { id: 1, changedAt: NOW - 1 * DAY }), [1]); // v běžném domě ano
 });

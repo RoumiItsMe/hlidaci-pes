@@ -1034,8 +1034,13 @@ function renderDetail(db, id) {
   const latest = latestChange(events);
   const updates = updatesChips(earliestListedAt(members), latest, changeSources(members, events, latest));
   // Prodej a katastr: tytéž údaje a stejné hlídání plomb jako ve frontě Katastr.
-  const saleTrack = buildSaleTrack(members, events, Date.now(), createWatchResolver(db, allListings, actx.groups, Date.now(), actx)(agroup));
+  const watchFor = createWatchResolver(db, allListings, actx.groups, Date.now(), actx);
+  const saleTrack = buildSaleTrack(members, events, Date.now(), watchFor(agroup));
+  // Zmizelý byt bez rezervace nemá rozvrh, ale jde u něj poznat, že se v katastru ověřit nedá.
+  const goneRemovedAt = !saleTrack && status === "removed" && !verdict ? latestRemovedAt(members) : null;
+  const goneWatch = goneRemovedAt ? watchFor(agroup)(goneRemovedAt) : null;
   const saleSectionHtml = renderSaleSection({
+    unverifiable: Boolean(saleTrack?.unverifiable || goneWatch?.unverifiable),
     rep,
     members,
     status,
@@ -1538,10 +1543,11 @@ function renderPlombaBlock(e, scan) {
 
 // Stav prodeje jednou větou — v detailu bytu. Čte stejné údaje jako fronta
 // Katastr a statistiky (sale-record.js), takže se nemůžou rozejít.
-function saleStageText({ verdict, track, price, saleDate, filed, portalSold = false, lastPrice = null }) {
+function saleStageText({ verdict, track, price, saleDate, filed, portalSold = false, lastPrice = null, unverifiable = false }) {
   if (verdict === "withdrawn") return "Neprodáno — ověřeno v katastru";
   if (price != null) return `Prodáno za ${formatCzk(price)}${saleDate ? ` (${formatDateOnly(saleDate)})` : ""}`;
   if (track?.priceAssumed) return `Prodáno podle portálu — poslední cena ${formatCzk(lastPrice)}, v katastru ji nejde ověřit; do statistik se počítá snížená o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (${formatCzk(assumedSalePrice(lastPrice))})`;
+  if (unverifiable && !verdict) return "Nejde ověřit v katastru (družstevní byt, nebo dům bez vymezených jednotek) — appka ho nehlídá";
   if (portalSold && !filed && lastPrice != null) return `Prodáno podle portálu — cena z inzerátu ${formatCzk(lastPrice)} zatím není ověřená v katastru`;
   if (verdict === "sold" || portalSold) return filed ? `Prodáno — vklad podán ${formatDateOnly(filed)}, cena se dohledá po rozhodnutí o vkladu` : "Prodáno — cena zatím neznámá";
   if (track) {
@@ -1556,16 +1562,16 @@ function saleStageText({ verdict, track, price, saleDate, filed, portalSold = fa
 // formulář se všemi údaji o prodeji. Zapisuje přes stejný endpoint jako fronta
 // Katastr (action "record"), takže cokoli se tu doplní, je hned vidět tam i ve
 // statistikách — a naopak.
-function renderSaleSection({ rep, members, status, verdict, track, addressInfo: ai, scan }) {
+function renderSaleSection({ rep, members, status, verdict, track, addressInfo: ai, scan, unverifiable = false }) {
   const price = pickOwnValue(members, "verified_sale_price_czk");
   const saleDate = pickOwnValue(members, "verified_sale_date");
   const filed = pickOwnValue(members, "kn_filed_at");
   const lv = pickOwnValue(members, "lv_number");
   const autoUnit = pickOwnValue(members, "kn_auto_unit");
   const encId = encodeURIComponent(rep.id);
-  const hasData = Boolean(verdict || price != null || saleDate || filed || lv || track || members.some((m) => m.status === "sold"));
+  const hasData = Boolean(verdict || price != null || saleDate || filed || lv || track || unverifiable || members.some((m) => m.status === "sold"));
   const soldListing = members.find((m) => m.status === "sold");
-  const stage = saleStageText({ verdict, track, price, saleDate, filed, portalSold: Boolean(soldListing), lastPrice: soldListing?.price_czk ?? null });
+  const stage = saleStageText({ verdict, track, price, saleDate, filed, portalSold: Boolean(soldListing), lastPrice: soldListing?.price_czk ?? null, unverifiable });
   const unitLine = ai.unit
     ? `Jednotka: <strong>${esc(ai.unit)}</strong> (mění se výš v „Přesná adresa“).`
     : autoUnit
@@ -1630,11 +1636,11 @@ function renderKnQueue(db) {
   // zrovna o něm mohla přijít zpráva "možný prodej" a uživatel ho v Katastru hledá.
   const freshlyGone = (e) => Boolean(e.removedAt) && Date.now() - Date.parse(e.removedAt) < 7 * DAY;
   const watched = inPipeline
-    .filter((e) => e.track.watched && !e.track.expired && (known(e) || e.track.unverifiable))
+    .filter((e) => e.track.watched && !e.track.expired && known(e))
     .sort((a, b) => Number(freshlyGone(b)) - Number(freshlyGone(a)) || a.track.reservedAt.localeCompare(b.track.reservedAt));
   // Bez přesné adresy se byt v katastru dohledat nedá — takové byty jen
   // připomínáme, ať se adresa doplní, dokud je inzerát online.
-  const noAddress = inPipeline.filter((e) => !e.track.expired && !known(e) && !e.track.unverifiable).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
+  const noAddress = inPipeline.filter((e) => !e.track.expired && !known(e)).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
   const expired = inPipeline.filter((e) => e.track.expired).sort((a, b) => b.track.reservedAt.localeCompare(a.track.reservedAt));
   // Zmizelé byty BEZ rezervace — o prodeji nic nenaznačuje, řadí je odhad
   // pravděpodobnosti (sale-triage.js). Do rozvrhu nepatří.
@@ -1653,11 +1659,15 @@ function renderKnQueue(db) {
   // Dům se hlídá a nic se nenašlo: ruční kontrola nic nepřinese. Dům bez
   // jednotek (družstevní) hlídat nejde, ten zůstává mezi ručními.
   const otherWatched = otherRemoved.filter((e) => e.unreservedWatch && !e.unreservedWatch.unverifiable && !confirmNeeded(e));
-  const otherManual = otherRemoved.filter((e) => !otherWatched.includes(e)).sort((a, b) => Number(confirmNeeded(b)) - Number(confirmNeeded(a)));
+  const otherManual = otherRemoved.filter((e) => !otherWatched.includes(e) && !e.unreservedWatch?.unverifiable).sort((a, b) => Number(confirmNeeded(b)) - Number(confirmNeeded(a)));
   // Jen výsledky zapsané touhle frontou — "Prodáno" z Telegramu se tu
   // zobrazovat nemá. Byt ve fázi "cena" (vklad podán) ještě hotový není.
+  // Byt, který v katastru nejde ověřit (družstevní, nebo dům bez vymezených
+  // jednotek): vklad tu nevznikne, nic se nedá dohledat, takže nemá smysl ho
+  // hlídat ani připomínat — je vyřízený.
+  const notVerifiable = (e) => Boolean(e.track?.stage === "done" && e.track.unverifiable && !e.track.priceAssumed) || Boolean(e.unreservedWatch?.unverifiable);
   const done = entries
-    .filter((e) => e.track?.priceAssumed || (e.saleVerdict && e.g.members.some((m) => m.sale_verdict) && e.track?.stage !== "price"))
+    .filter((e) => notVerifiable(e) || e.track?.priceAssumed || (e.saleVerdict && e.g.members.some((m) => m.sale_verdict) && e.track?.stage !== "price"))
     .sort((a, b) => (b.knCheckedAt || "").localeCompare(a.knCheckedAt || ""));
 
   // Údaje, podle kterých se byt v katastru hledá: přesná adresa zapsaná
@@ -1799,8 +1809,14 @@ function renderKnQueue(db) {
   const doneRows = done
     .map((e) => {
       const encId = encodeURIComponent(e.rep.id);
-      const verdictText = e.saleVerdict === "withdrawn" ? "Neprodáno" : "Prodáno";
-      const facts = [
+      const unverifiableOnly = notVerifiable(e);
+      const verdictText = unverifiableOnly ? "Nejde ověřit v katastru" : e.saleVerdict === "withdrawn" ? "Neprodáno" : "Prodáno";
+      const facts = unverifiableOnly
+        ? [
+            e.removedAt ? `inzerát zmizel ${formatDateOnly(e.removedAt)}` : e.status === "reserved" ? "rezervováno" : null,
+            "dům nemá v katastru jednotky nebo je byt družstevní — prodej ani cenu z katastru nezjistíme",
+          ].filter(Boolean)
+        : [
         e.verifiedSalePrice != null ? formatCzk(e.verifiedSalePrice) : null,
         e.track?.priceAssumed && e.verifiedSalePrice == null ? `poslední cena z portálu ${formatCzk(e.price)}, v katastru nejde ověřit — ve statistikách −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (${formatCzk(assumedSalePrice(e.price))})` : null,
         e.verifiedSaleDate ? `prodáno ${formatDateOnly(e.verifiedSaleDate)}` : null,
@@ -1810,7 +1826,7 @@ function renderKnQueue(db) {
       ].filter(Boolean);
       return `<li><a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> — ${esc(verdictText)}${
         facts.length ? ` <span class="muted">(${esc(facts.join(" · "))})</span>` : ""
-      } ${e.track?.priceAssumed ? "" : actionForm(encId, btn("reset", "Vrátit do fronty", "kn-btn--later", e.verifiedSalePrice != null || e.verifiedSaleDate ? RESET_CONFIRM : null))}</li>`;
+      } ${e.track?.priceAssumed || unverifiableOnly ? "" : actionForm(encId, btn("reset", "Vrátit do fronty", "kn-btn--later", e.verifiedSalePrice != null || e.verifiedSaleDate ? RESET_CONFIRM : null))}</li>`;
     })
     .join("");
 

@@ -542,9 +542,16 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   - **Družstevní byty** v katastru žádný vklad nemají (převádí se členský
     podíl), API u nich nic nenajde: dům Křib 1807 je družstevní a API u něj nevrací
     žádné jednotky. Karta to napíše („Dům nemá v katastru vymezené jednotky“);
-    cena ani prodej se tu ověřit nedají. Takový byt se v „Hlídá appka“ označí
-    („dům nemá v katastru jednotky — nejde ověřit“) a ruční kontrola se
-    nepřipomíná.
+    cena ani prodej se tu ověřit nedají. Takový byt proto **jde rovnou do
+    „Vyřízených“** jako „Nejde ověřit v katastru“ (s důvodem a datem zmizení) a
+    nikde se nehlídá ani nepřipomíná. Týká se to bytů, které jsou družstevní podle
+    portálu (nebo ručně opraveného vlastnictví), i bytů v domě, který API nezná s
+    jednotkami; platí pro rezervované i zmizelé, s rezervací i bez ní. Dům bez
+    jednotek se přestane prohledávat (znovu jen jednou za 60 dní,
+    `NO_UNITS_RECHECK_DAYS`), ať se nepálí volání zbytečně. Stav se nemění, když
+    uživatel byt ručně označí jako prodaný (vklad podán / cena) — pak platí jeho
+    údaj. Portálem prodaný družstevní byt je vyřízený s poslední cenou −10 %
+    (viz výš).
   - Výsledky skenu leží v tabulce `kn_scans` (jeden řádek na dům).
 - **Možný prodej:** byt, který byl těsně před zmizením **rezervovaný** a do
   nabídky se nevrátil, má v přehledu štítek **Možný prodej** (a filtr se stejným

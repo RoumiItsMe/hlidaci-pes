@@ -24,6 +24,9 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 // Dům se znovu prochází nejdřív za tolik dní; denně se bere ~1/CYCLE_DAYS domů.
 export const CYCLE_DAYS = 5;
+// Dům, který v katastru nemá žádné jednotky (družstevní byty), se nemění —
+// prohledává se jen výjimečně, kdyby se v katastru jednotky přece jen objevily.
+export const NO_UNITS_RECHECK_DAYS = 60;
 // Kolik volání denně smí sken spotřebovat; zbytek limitu (a rezerva) zůstane.
 const DAILY_BUDGET = 350;
 const RESERVE = 100;
@@ -122,12 +125,14 @@ export function collectTrackedGroups(db, now = Date.now()) {
  */
 export function selectBuildingsToScan(buildings, scans, now = Date.now()) {
   const age = (b) => (scans.has(b.id) ? now - Date.parse(scans.get(b.id).scannedAt) : Infinity);
-  const changedSinceScan = (b) => scans.has(b.id) && b.changedAt != null && b.changedAt > Date.parse(scans.get(b.id).scannedAt);
+  const noUnits = (b) => scans.get(b.id)?.units?.length === 0;
+  const cycleDays = (b) => (noUnits(b) ? NO_UNITS_RECHECK_DAYS : CYCLE_DAYS);
+  const changedSinceScan = (b) => scans.has(b.id) && !noUnits(b) && b.changedAt != null && b.changedAt > Date.parse(scans.get(b.id).scannedAt);
   const fresh = buildings.filter((b) => age(b) === Infinity || changedSinceScan(b));
   const taken = new Set(fresh.map((b) => b.id));
   const quota = Math.max(1, Math.ceil(buildings.length / CYCLE_DAYS));
   const rotation = buildings
-    .filter((b) => !taken.has(b.id) && age(b) >= CYCLE_DAYS * DAY_MS)
+    .filter((b) => !taken.has(b.id) && age(b) >= cycleDays(b) * DAY_MS)
     .sort((a, b) => age(b) - age(a))
     .slice(0, quota);
   return [...fresh, ...rotation];

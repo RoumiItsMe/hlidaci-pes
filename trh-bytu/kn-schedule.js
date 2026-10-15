@@ -111,6 +111,10 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
   points.sort((a, b) => a.at - b.at);
 
   const checkedMs = toMs(lastCheckedAt) ?? -Infinity;
+  // Dům bez jednotek v katastru (družstevní byty): vklad tu nevznikne a nic se
+  // nedá ověřit, takže byt nemá smysl hlídat ani připomínat — je vyřízený
+  // ("nejde ověřit"). Prodej ani cenu z katastru nezjistíme.
+  if (stage === "filing" && watch?.unverifiable) return { ...base, stage: "done", unverifiable: true };
   if (stage === "filing" && watch) {
     // Plomby hlídá API. Připomíná se jen plomba, kterou je potřeba potvrdit;
     // jinak ruční kontrola v katastru nic nepřinese. Rozvrh slouží už jen k

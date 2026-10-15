@@ -278,3 +278,32 @@ test("hlídání API ovlivňuje jen fázi vkladu: prodaný byt v domě s jednotk
   assert.equal(t.stage, "price");
   assert.equal(t.due, true);
 });
+
+// --- dům bez jednotek v katastru: nejde ověřit, takže je byt vyřízený ---
+
+test("rezervovaný byt v domě bez jednotek je vyřízený: nic se nehlídá ani nepřipomíná", () => {
+  const unverifiable = () => ({ needsConfirm: false, confirmAt: null, unverifiable: true });
+  const events = [{ listing_id: "a", event_type: "reserved", occurred_at: iso(T0) }];
+  const t = buildSaleTrack([listing("a")], events, at(40), unverifiable);
+  assert.equal(t.stage, "done");
+  assert.equal(t.unverifiable, true);
+  assert.equal(t.priceAssumed, false); // prodej neznáme, jen ho nejde ověřit
+  assert.equal(t.due, false);
+  assert.equal(t.watched, false);
+});
+
+test("totéž platí po zmizení inzerátu, i když rozvrh ještě běží", () => {
+  const unverifiable = () => ({ needsConfirm: false, confirmAt: null, unverifiable: true });
+  const events = [{ listing_id: "a", event_type: "reserved", occurred_at: iso(T0) }];
+  const gone = listing("a", { status: "removed", removed_at: iso(at(30)) });
+  const t = buildSaleTrack([gone], events, at(34), unverifiable);
+  assert.equal(t.stage, "done");
+  assert.equal(t.unverifiable, true);
+  assert.equal(buildSaleTrack([gone], events, at(34)).stage, "filing"); // bez informace o domě se chová jako dřív
+});
+
+test("ručně označený prodej (vklad podán) se neověřitelností neukončí — cenu si uživatel může zjistit jinak", () => {
+  const unverifiable = () => ({ needsConfirm: false, confirmAt: null, unverifiable: true });
+  const manual = listing("a", { status: "removed", removed_at: iso(at(10)), sale_verdict: "sold", kn_filed_at: "2026-08-12" });
+  assert.equal(buildSaleTrack([manual], [], at(40), unverifiable).stage, "price");
+});
