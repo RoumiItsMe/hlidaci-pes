@@ -108,22 +108,26 @@ export function collectTrackedGroups(db, now = Date.now()) {
 }
 
 /**
- * Které domy se dnes projdou (v tomto pořadí): nové (ještě bez skenu) a pak
- * plánovaná dávka — nejstarší domy, jejichž sken je starý aspoň CYCLE_DAYS,
- * nejvýš 1/CYCLE_DAYS všech domů denně. (Kontrolní bod rozvrhu na pořadí
+ * Které domy se dnes projdou (v tomto pořadí): nové (ještě bez skenu) a domy,
+ * kde od posledního skenu zmizel inzerát sledovaného bytu (`changedAt` — po
+ * zmizení se vklad čeká, tak nesmí čekat na pětidenní cyklus), a pak plánovaná
+ * dávka — nejstarší domy, jejichž sken je starý aspoň CYCLE_DAYS, nejvýš
+ * 1/CYCLE_DAYS všech domů denně. (Kontrolní bod rozvrhu na pořadí
  * vliv nemá: byt, který nikdo nikdy "nezkontroloval", je podle rozvrhu
  * k vyřízení pořád, takže by se domy obnovovaly každé 2 dny a dávkování by
  * přestalo fungovat.)
  *
- * @param buildings `[{ id }]`
+ * @param buildings `[{ id, changedAt? }]` (changedAt = kdy naposledy zmizel inzerát některého bytu, ms)
  * @param scans     Map id → poslední sken
  */
 export function selectBuildingsToScan(buildings, scans, now = Date.now()) {
   const age = (b) => (scans.has(b.id) ? now - Date.parse(scans.get(b.id).scannedAt) : Infinity);
-  const fresh = buildings.filter((b) => age(b) === Infinity);
+  const changedSinceScan = (b) => scans.has(b.id) && b.changedAt != null && b.changedAt > Date.parse(scans.get(b.id).scannedAt);
+  const fresh = buildings.filter((b) => age(b) === Infinity || changedSinceScan(b));
+  const taken = new Set(fresh.map((b) => b.id));
   const quota = Math.max(1, Math.ceil(buildings.length / CYCLE_DAYS));
   const rotation = buildings
-    .filter((b) => age(b) !== Infinity && age(b) >= CYCLE_DAYS * DAY_MS)
+    .filter((b) => !taken.has(b.id) && age(b) >= CYCLE_DAYS * DAY_MS)
     .sort((a, b) => age(b) - age(a))
     .slice(0, quota);
   return [...fresh, ...rotation];
@@ -167,6 +171,29 @@ export function matchFilings(entries, scan) {
  */
 export function isCooperativeOwnership(members) {
   return /družstev/i.test(mergeParams(members).ownership ?? "");
+}
+
+/**
+ * Jak se k bytu chová kontrola v katastru — pro text upozornění "možný prodej":
+ *  - `watched`: dům má sken, appka plomby hlídá;
+ *  - `pending-scan`: má adresu i dům, jen ještě nebyl prohledán (stane se při
+ *    tomhle sběru);
+ *  - `unverifiable`: družstevní byt nebo dům bez jednotek, v katastru nejde ověřit;
+ *  - `no-address`: bez přesné adresy (nebo domu v ISKN) se nedá zkontrolovat.
+ */
+export function knWatchState(db, group) {
+  if (isCooperativeOwnership(group.members)) return "unverifiable";
+  if (!pickOwnValue(group.members, "exact_address")) return "no-address";
+  const listings = db.prepare("SELECT * FROM listings").all();
+  const groups = groupListings(listings);
+  const same = groups.find((g) => g.members.some((m) => group.members.some((x) => x.id === m.id)));
+  if (!same) return "no-address";
+  const actx = buildAddressContext(db, listings, groups);
+  const buildingId = knInfoForGroup(actx, same, resolveForGroup(actx, same))?.building?.isknId;
+  if (!buildingId) return "no-address";
+  const scan = loadKnScans(db).get(buildingId);
+  if (!scan) return "pending-scan";
+  return scan.units.length ? "watched" : "unverifiable";
 }
 
 const UNVERIFIABLE_WATCH = { needsConfirm: false, confirmAt: null, unverifiable: true };
@@ -234,8 +261,10 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
     // Jeden sken na dům: byt bez známé jednotky = projít všechny byty domu.
     const buildings = new Map();
     for (const t of tracked) {
-      const b = buildings.get(t.buildingId) ?? { id: t.buildingId, entries: [], wantUnits: new Set(), full: false };
+      const b = buildings.get(t.buildingId) ?? { id: t.buildingId, entries: [], wantUnits: new Set(), full: false, changedAt: null };
       b.entries.push(t);
+      const removedAt = latestRemovedAt(t.group.members);
+      if (removedAt) b.changedAt = Math.max(b.changedAt ?? 0, Date.parse(removedAt));
       const unit = unitOf(t);
       if (unit == null) b.full = true;
       else b.wantUnits.add(unit);

@@ -162,3 +162,16 @@ test("družstevní vlastnictví se pozná z inzerátu i z ruční opravy, ručn�
   // Stačí, že to říká kterákoli nabídka bytu.
   assert.equal(isCooperativeOwnership([{ source: "sreality", params_json: params({}) }, { source: "bazos", params_json: params({ ownership: "Družstevní" }) }]), true);
 });
+
+test("dům, kde od posledního skenu zmizel inzerát bytu, se projde hned, i když je sken čerstvý", () => {
+  const scans = scansAgo({ 1: 1, 2: 1, 3: 1 });
+  const buildings = [
+    { id: 1, changedAt: NOW - 0.5 * DAY }, // zmizel po skenu (před 12 hodinami, sken je starý den)
+    { id: 2, changedAt: NOW - 2 * DAY }, // zmizel před skenem — už ho sken viděl
+    { id: 3, changedAt: null }, // nic nezmizelo
+  ];
+  assert.deepEqual(selectBuildingsToScan(buildings, scans, NOW).map((b) => b.id), [1]);
+  // Po novém skenu už se nezopakuje.
+  const rescanned = scansAgo({ 1: 0.1, 2: 1, 3: 1 });
+  assert.deepEqual(selectBuildingsToScan(buildings, rescanned, NOW), []);
+});

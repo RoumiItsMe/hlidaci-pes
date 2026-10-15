@@ -27,7 +27,7 @@ import { sendTelegramMessage, getTelegramUpdates, answerTelegramCallback, editTe
 import { addressNoticeLines, buildAddressContext, resolveForGroup, knInfoForGroup, describeKn } from "./auto-address.js";
 import { assessSale } from "./sale-triage.js";
 import { buildSaleTrack } from "./kn-schedule.js";
-import { loadKnScans, createWatchResolver } from "./kn-scan.js";
+import { loadKnScans, createWatchResolver, knWatchState } from "./kn-scan.js";
 import { analyzePlombas, plombaHintLine } from "./kn-plomba.js";
 import { parseUnitNumber } from "./kn-api.js";
 
@@ -135,6 +135,21 @@ function formatDay(iso) {
  * rady jako "doplň adresu, dokud je online" už neplatí — uživatel potřebuje
  * vědět, jestli má adresu pro katastr, a kdy byt rezervovaný byl.
  */
+// Co s bytem dál podle toho, jestli ho umí hlídat API katastru (knWatchState).
+// Dřív zpráva vždycky radila hledat v katastru ručně — jenže u bytu, který
+// appka hlídá sama, to není co dělat, a byt se v seznamu "Zkontrolovat teď"
+// nikdy neobjevil.
+const POSSIBLE_SALE_NEXT_STEP = {
+  watched:
+    "Plomby (podané vklady) v domě hlídá appka sama přes API katastru a ozve se, jakmile nějakou najde. Byt je v Katastr → „Hlídá appka přes API katastru“. Kupní cenu jde v katastru zjistit až po rozhodnutí o vkladu.",
+  "pending-scan":
+    "Dům se prohledá při tomhle sběru a plomby (podané vklady) pak hlídá appka sama přes API katastru — ozve se, jakmile nějakou najde. Byt bude v Katastr → „Hlídá appka přes API katastru“.",
+  unverifiable:
+    "Tenhle byt jde v katastru těžko ověřit (družstevní byt, nebo dům bez vymezených jednotek) — vklad tu nevznikne, takže appka nic dalšího nehlídá.",
+  "no-address":
+    "Bez přesné adresy se v katastru nedá hlídat. Doplň ji v detailu bytu — appka pak dům prohledá hned a podaný vklad ohlásí.",
+};
+
 export function buildPossibleSaleText(db, group, triage) {
   const rep = primaryListing(group.members);
   const { specs, price } = specsText(rep);
@@ -150,7 +165,7 @@ export function buildPossibleSaleText(db, group, triage) {
     `Rezervováno od ${formatDay(triage.reservedAt)} → zmizelo ${formatDay(triage.removedAt)}`,
     ...addressLines,
     "",
-    "Zkus v katastru dohledat kupní cenu a datum prodeje a zapiš je v appce (Katastr → Zmizelé byty).",
+    POSSIBLE_SALE_NEXT_STEP[knWatchState(db, group)],
   ].join("\n");
 }
 

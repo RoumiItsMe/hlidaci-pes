@@ -559,7 +559,14 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
 - **Telegram upozornění na zmizení:** když rezervovaný byt zmizí ze **všech**
   portálů, ve stejném běhu přijde zpráva „Zmizel z nabídky po rezervaci — možný
   prodej" s adresou (nebo upozorněním, že chybí), k.ú. a obdobím „rezervováno od
-  → zmizelo" — to je nejlepší chvíle začít hledat v katastru. Jednou na zmizení
+  → zmizelo". Poslední řádek zprávy říká, co dál, podle toho, jestli byt umí
+  hlídat API katastru: **hlídá se** (dům má sken) → „Plomby v domě hlídá appka
+  sama a ozve se; byt je v Katastr → Hlídá appka přes API katastru“; **dům se
+  prohledá při tomhle sběru** (nový dům); **nejde ověřit** (družstevní byt, dům
+  bez jednotek) → appka nic nehlídá; **bez přesné adresy** → „doplň ji v detailu,
+  appka pak dům prohledá hned“. Zmizení bytu navíc dům **přeskenuje hned** (ne až
+  za 5 dní): vklad se čeká právě teď. Zpráva přichází, až byt zmizí ze všech
+  portálů, takže může přijít o pár dní později než zmizení prvního inzerátu. Jednou na zmizení
   (`possible_sale_notified_at`); vrátí-li se byt do nabídky a znovu zmizí, přijde
   nové upozornění. Byty, které zmizely před zavedením upozornění, se
   neupozorňují zpětně, a byt s verdiktem z katastru taky ne. Neodešle-li se

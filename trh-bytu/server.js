@@ -1626,7 +1626,12 @@ function renderKnQueue(db) {
   const dueNow = inPipeline.filter((e) => e.track.due && known(e)).sort((a, b) => a.track.dueAt - b.track.dueAt);
   const waiting = inPipeline.filter((e) => !e.track.due && !e.track.watched && !e.track.expired && known(e)).sort((a, b) => a.track.nextAt - b.track.nextAt);
   // Plomby hlídá API katastru — ruční kontrola nic nepřinese, ozve se samo.
-  const watched = inPipeline.filter((e) => e.track.watched && !e.track.expired && (known(e) || e.track.unverifiable)).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
+  // Čerstvě zmizelý byt (do týdne) je nahoře a skupina je kvůli němu rozbalená:
+  // zrovna o něm mohla přijít zpráva "možný prodej" a uživatel ho v Katastru hledá.
+  const freshlyGone = (e) => Boolean(e.removedAt) && Date.now() - Date.parse(e.removedAt) < 7 * DAY;
+  const watched = inPipeline
+    .filter((e) => e.track.watched && !e.track.expired && (known(e) || e.track.unverifiable))
+    .sort((a, b) => Number(freshlyGone(b)) - Number(freshlyGone(a)) || a.track.reservedAt.localeCompare(b.track.reservedAt));
   // Bez přesné adresy se byt v katastru dohledat nedá — takové byty jen
   // připomínáme, ať se adresa doplní, dokud je inzerát online.
   const noAddress = inPipeline.filter((e) => !e.track.expired && !known(e) && !e.track.unverifiable).sort((a, b) => a.track.reservedAt.localeCompare(b.track.reservedAt));
@@ -1735,7 +1740,7 @@ function renderKnQueue(db) {
     const scan = lookupFor(e).buildingId ? knScans.get(lookupFor(e).buildingId) : null;
     const note = e.track.unverifiable
       ? "dům nemá v katastru jednotky (družstevní?) — nejde ověřit"
-      : `čeká na plombu; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}`;
+      : `${e.removedAt ? `inzerát zmizel ${formatDateOnly(e.removedAt)}; ` : ""}čeká na plombu; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}`;
     return `<details class="kn-wait">
         <summary><a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— ${esc(note)}</span></summary>
         <div class="kn-item kn-item--wait">${cardBody(e)}</div>
@@ -1838,7 +1843,7 @@ function renderKnQueue(db) {
       dueNow.map(dueCard).join("") ||
       `<p class="empty">Nic ke kontrole.${watched.length ? " Plomby hlídá appka sama přes API katastru (viz níž)." : ""}${nextUp ? ` Další kontrola: ${esc(formatDateOnly(new Date(nextUp.track.nextAt).toISOString()))} — ${esc(cardTitle(nextUp.rep, nextUp.address, nextUp.priceLabel))}.` : ""}</p>`
     }</div>
-    ${watched.length ? `<details class="kn-done"><summary>Hlídá appka přes API katastru (${watched.length})</summary>${watched.map(watchedItem).join("")}</details>` : ""}
+    ${watched.length ? `<details class="kn-done"${watched.some(freshlyGone) ? " open" : ""}><summary>Hlídá appka přes API katastru (${watched.length})</summary>${watched.map(watchedItem).join("")}</details>` : ""}
     ${waiting.length ? `<details class="kn-done"><summary>Čeká na další kontrolu (${waiting.length})</summary>${waiting.map(waitingItem).join("")}</details>` : ""}
     ${
       noAddressRows
