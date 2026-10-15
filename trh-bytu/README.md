@@ -584,27 +584,38 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     sekce „Ceny po rekonstrukci“ zůstává, jen užší.
   - Výsledky skenu leží v tabulce `kn_scans` (jeden řádek na dům).
 - **Možný prodej:** byt, který byl těsně před zmizením **rezervovaný** a do
-  nabídky se nevrátil, má v přehledu štítek **Možný prodej** (a filtr se stejným
-  názvem) místo obyčejného „Zmizelo z nabídky" — po rezervaci se inzerát
+  nabídky se nevrátil, má v přehledu štítek **Možný prodej** (a ve filtru „Čeká na ověření“) místo obyčejného „Zmizelo z nabídky" — po rezervaci se inzerát
   typicky stahuje, takže poslední známá informace je „rezervováno". Vrátí-li se
   inzerát do nabídky, byt je zase „V nabídce" a štítek zmizí sám; zadáš-li
   výsledek z katastru, štítek nahradí „Prodáno" / „Staženo (neprodáno)". Filtr
   „Zmizelo z nabídky" dál ukazuje všechny zmizelé včetně možných prodejů.
   Když se byt **30 dní** (`PROBABLE_SALE_AFTER_DAYS` v `sale-triage.js`) nevrátil,
-  štítek se změní na **Pravděpodobně prodáno** (filtr „Možný prodej" ukazuje obojí).
+  štítek se změní na **Pravděpodobně prodáno** (oba jsou ve filtru „Čeká na ověření“).
   Verdikt dál dává jen katastr.
-- **Rychlý přehled prodaných bytů: filtr „Prodáno (i téměř jistě)“** na úvodní
-  stránce i v tabulce srovnání. Ukáže byty prodané určitě (podle katastru, nebo
-  podle portálu) **i** téměř jistě (po rezervaci zmizelé z nabídky); mezi sebou se
-  liší štítkem („Prodáno“ / „Možný prodej“ / „Pravděpodobně prodáno“). Každý řádek
-  má navíc údaj **💰 cena prodeje**: ověřená („2 850 000 Kč (ověřeno)“), nebo odhad
-  („~3 420 000 Kč (odhad −10 %, čeká na ověření)“ / „nejde ověřit“), k tomu stav
-  vkladu („vklad podán …“, „plomba do …“). V tabulce je sloupec **Cena prodeje**
-  — u filtrů Prodáno a Možný prodej rovnou vidět, jinak za „Víc sloupců“. Je to
-  tentýž soubor bytů a stejné ceny jako ve statistikách („Prodané a téměř jistě
-  prodané byty“), jen bez bytů, které jsou zatím jen rezervované (ty mají vlastní
-  filtr „Rezervováno“). Filtr „Možný prodej“ zůstává jako užší pohled (jen
-  zmizelé po rezervaci, bez potvrzení).
+- **Rychlý přehled prodaných bytů: dva filtry na úvodní stránce i v tabulce
+  srovnání.**
+  - **Prodáno** je přísné: jen byty s **potvrzenou cenou** — cena z katastru
+    (nebo zadaná ručně) a družstevní byty, které se v katastru ověřit nedají a
+    portál je označil za prodané (platí poslední cena, ve statistice −10 %).
+  - **Čeká na ověření** je všechno ostatní, co má šanci být prodané: byty
+    zmizelé po rezervaci („Možný prodej“ / „Pravděpodobně prodáno“) a byty
+    prodané podle portálu nebo s podaným vkladem, kterým zatím chybí potvrzená
+    cena. Jakmile cenu potvrdíš (z katastru, nebo ručně v detailu / ve frontě
+    Katastr / ve statistikách), byt do filtru **Prodáno** **přeskočí sám**.
+  - Každý řádek má údaj **💰 cena prodeje**: ověřená („2 850 000 Kč (ověřeno)“),
+    nebo odhad („~3 420 000 Kč (odhad −10 %, čeká na ověření)“ / „nejde
+    ověřit“), k tomu stav vkladu („vklad podán …“, „plomba do …“). V tabulce je
+    sloupec **Cena prodeje** (u filtrů Prodáno a Čeká na ověření rovnou vidět,
+    jinak za „Víc sloupců“). Je to tentýž soubor bytů a stejné ceny jako ve
+    statistikách („Prodané a téměř jistě prodané byty“), jen bez bytů, které
+    jsou zatím jen rezervované (ty mají vlastní filtr „Rezervováno“).
+  - **Byt nezapadne, ani když řízení na katastru trvá měsíce.** Po podání
+    vkladu se na cenu ptá plán kontrol (25.–90. den) a pak **dál každých 30 dní
+    (`PRICE_TAIL_DAYS`), dokud cenu nezjistíš** — fáze ceny nikdy neskončí jako
+    „Nezjištěno“. Dům se hlídá přes API katastru ještě 400 dní
+    (`SCAN_HORIZON_DAYS`) i po konci kalendářních kontrol, takže se plomba a
+    vklad zachytí i s velkým zpožděním. Do té doby je byt vidět ve filtru
+    „Čeká na ověření“ (a ve frontě Katastr, i ve skupině „Nezjištěno“).
 - **Telegram upozornění na zmizení:** když rezervovaný byt zmizí ze **všech**
   portálů, ve stejném běhu přijde zpráva „Zmizel z nabídky po rezervaci — možný
   prodej" s adresou (nebo upozorněním, že chybí), k.ú. a obdobím „rezervováno od

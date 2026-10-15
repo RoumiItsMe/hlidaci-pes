@@ -36,6 +36,8 @@ export const RESERVATION_CHECK_DAYS = [14, 28, 45, 52, 59, 66, 73, 80, 87, 94, 1
 export const VANISH_CHECK_DAYS = [3, 10];
 // Dny po podání návrhu na vklad — kontrola ceny.
 export const FILING_CHECK_DAYS = [25, 32, 39, 46, 53, 60, 75, 90];
+// Po posledním bodu výš se na cenu ptá dál, každých tolik dní, dokud se nezjistí.
+export const PRICE_TAIL_DAYS = 30;
 
 function reservationKind(day) {
   return day <= 28 ? "cash" : day <= 100 ? "mortgage" : "late";
@@ -108,6 +110,15 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
     stage = "price";
     const filedMs = toMs(filedAt) ?? toMs(priceBaseAt) ?? reservedMs ?? now;
     points = FILING_CHECK_DAYS.map((day) => checkpoint(filedMs, day, "price"));
+    // Cena nesmí zapadnout: řízení o vkladu může trvat měsíce a byt s podaným
+    // vkladem je téměř jistě prodaný. Po posledním plánovaném bodu proto
+    // připomínky pokračují měsíčně dál, dokud se cena nezjistí — fáze ceny nikdy
+    // neskončí jako "nezjištěno".
+    let last = points[points.length - 1].at;
+    while (last <= now) {
+      last += PRICE_TAIL_DAYS * DAY_MS;
+      points.push(checkpoint(filedMs, Math.round((last - filedMs) / DAY_MS), "price"));
+    }
   } else {
     stage = "filing";
     points = RESERVATION_CHECK_DAYS.map((day) => checkpoint(reservedMs ?? now, day, reservationKind(day)));

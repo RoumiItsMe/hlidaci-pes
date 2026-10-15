@@ -36,6 +36,16 @@ const STALE_WARN_DAYS = 10;
 // prodej objeví za týdny až měsíce; kdo se do ~4 měsíců neprodal, nejspíš byl
 // jen stažený, a širší okno by hlídalo i zbytečně staré případy.
 export const UNRESERVED_HORIZON_DAYS = 120;
+// Plomba se může objevit i po půl roce (pomalá transakce, odložený prodej).
+// Byt, kterému kalendářní rozvrh kontrol už skončil ("nezjištěno"), se proto
+// přes API hlídá dál, aby nezapadl; po tolika dnech od rezervace už ne.
+export const SCAN_HORIZON_DAYS = 400;
+
+/** Stojí byt s touhle fází za skenování domu? (fáze vkladu / ceny, vč. dohlídání po konci rozvrhu) */
+export function worthScanning(track) {
+  if (!track || (track.stage !== "filing" && track.stage !== "price")) return false;
+  return !track.expired || (track.ageDays ?? 0) <= SCAN_HORIZON_DAYS;
+}
 // Odhad "jediná plomba v domě patří jedinému sledovanému bytu" se dělá jen v
 // malých domech. Ve velkém (panelák o devadesáti bytech) se za pár týdnů
 // prodává mimo sledovaný byt i jiný docela běžně, takže tam plomba bez
@@ -92,7 +102,7 @@ export function collectTrackedGroups(db, now = Date.now()) {
     if (isCooperativeOwnership(group.members)) continue; // v katastru nemá vklad, sken by byl zbytečný
     const track =
       buildSaleTrack(group.members, group.members.flatMap((m) => eventsByListing.get(m.id) || []), now) ?? unreservedTrack(group.members, now);
-    if (!track || track.expired || (track.stage !== "filing" && track.stage !== "price")) continue;
+    if (!worthScanning(track)) continue;
     if (!pickOwnValue(group.members, "exact_address")) continue;
     const kn = knInfoForGroup(actx, group, resolveForGroup(actx, group));
     const buildingId = kn?.building?.isknId;

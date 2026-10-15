@@ -1,7 +1,7 @@
 // node --test trh-bytu/kn-schedule.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessSaleTrack, buildSaleTrack, filingLagDays, median, RESERVATION_CHECK_DAYS, FILING_CHECK_DAYS } from "./kn-schedule.js";
+import { assessSaleTrack, buildSaleTrack, filingLagDays, median, RESERVATION_CHECK_DAYS, FILING_CHECK_DAYS, PRICE_TAIL_DAYS } from "./kn-schedule.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const T0 = Date.parse("2026-08-01T08:00:00.000Z"); // začátek rezervace
@@ -372,4 +372,29 @@ test('"Zatím nic" po skončení řízení připomínku odloží; cena zjištěn
   assert.equal(snoozed.due, false);
   assert.equal(snoozed.kind, null);
   assert.equal(assessSaleTrack({ ...base, priceKnown: true }).stage, "done");
+});
+
+// --- fáze ceny nesmí zapadnout ---
+
+test("fáze ceny nikdy neskončí jako 'nezjištěno': po 90. dni se na cenu ptá dál měsíčně", () => {
+  const base = { reservedAt: iso(T0), filedAt: iso(at(10)).slice(0, 10), verdict: "sold" };
+  for (const daysAfterFiling of [100, 150, 400, 900]) {
+    const t = assessSaleTrack({ ...base, now: at(10 + daysAfterFiling) });
+    assert.equal(t.stage, "price");
+    assert.equal(t.expired, false, `po ${daysAfterFiling} dnech`);
+    assert.equal(t.due, true);
+  }
+  // Po "Zatím nic" se další připomínka naplánuje, nikdy ne "nikdy".
+  const snoozed = assessSaleTrack({ ...base, lastCheckedAt: iso(at(10 + 400)), now: at(10 + 401) });
+  assert.equal(snoozed.due, false);
+  assert.equal(snoozed.expired, false);
+  assert.ok(snoozed.nextAt > at(10 + 401));
+  assert.ok(snoozed.nextAt - at(10 + 401) <= PRICE_TAIL_DAYS * DAY);
+});
+
+test("fáze ceny: zjištěná cena je pořád hotovo, byt ve fázi vkladu se po půl roce chová jako dřív (nezjištěno)", () => {
+  assert.equal(assessSaleTrack({ reservedAt: iso(T0), filedAt: iso(at(10)).slice(0, 10), verdict: "sold", priceKnown: true, now: at(900) }).stage, "done");
+  const filing = assessSaleTrack({ reservedAt: iso(T0), now: at(400), lastCheckedAt: iso(at(399)) });
+  assert.equal(filing.stage, "filing");
+  assert.equal(filing.expired, true);
 });

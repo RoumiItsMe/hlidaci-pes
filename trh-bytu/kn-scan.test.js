@@ -1,7 +1,7 @@
 // node --test trh-bytu/kn-scan.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectBuildingsToScan, matchFilings, unreservedTrack, isCooperativeOwnership, CYCLE_DAYS, UNRESERVED_HORIZON_DAYS, NO_UNITS_RECHECK_DAYS } from "./kn-scan.js";
+import { selectBuildingsToScan, matchFilings, unreservedTrack, isCooperativeOwnership, worthScanning, SCAN_HORIZON_DAYS, CYCLE_DAYS, UNRESERVED_HORIZON_DAYS, NO_UNITS_RECHECK_DAYS } from "./kn-scan.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-10-14T06:00:00.000Z");
@@ -185,4 +185,14 @@ test("dům bez jednotek se nepřeskenovává každých 5 dní, jen výjimečně,
   assert.deepEqual(pick(scanOf(NO_UNITS_RECHECK_DAYS + 1, [])), [1]); // po NO_UNITS_RECHECK_DAYS se zkusí znovu
   assert.deepEqual(pick(scanOf(3, []), { id: 1, changedAt: NOW - 1 * DAY }), []); // zmizení bytu v domě bez jednotek sken nevyvolá
   assert.deepEqual(pick(scanOf(3, someUnit), { id: 1, changedAt: NOW - 1 * DAY }), [1]); // v běžném domě ano
+});
+
+test("skenování pokračuje i po konci rozvrhu kontrol (nezjištěno), dokud nepřejde SCAN_HORIZON_DAYS", () => {
+  assert.equal(worthScanning({ stage: "filing", expired: false, ageDays: 50 }), true);
+  assert.equal(worthScanning({ stage: "price", expired: false, ageDays: 500 }), true); // fáze ceny nikdy neexpiruje
+  assert.equal(worthScanning({ stage: "filing", expired: true, ageDays: 200 }), true); // rozvrh skončil, ale plomba se ještě může objevit
+  assert.equal(worthScanning({ stage: "filing", expired: true, ageDays: SCAN_HORIZON_DAYS + 1 }), false);
+  assert.equal(worthScanning({ stage: "done", expired: false, ageDays: 10 }), false);
+  assert.equal(worthScanning({ stage: "withdrawn" }), false);
+  assert.equal(worthScanning(null), false);
 });

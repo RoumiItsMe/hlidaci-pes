@@ -103,24 +103,41 @@ const STATUS_FILTERS = ["", "active", "reserved", "possible", "sold", "removed"]
 // "Možný prodej" není stav v DB, ale podmnožina zmizelých — "Zmizelo z
 // nabídky" proto zůstává filtrem všech zmizelých (i těch možných prodejů),
 // jinak by byt po rezervaci z přehledu úplně zmizel.
-// Filtr "Prodáno" ukazuje všechno, co je prodané určitě (katastr, portál) i
-// téměř jistě (po rezervaci zmizelé) — to, o co v appce hlavně jde. Řádky se
-// liší štítkem ("Prodáno" / "Možný prodej" / "Pravděpodobně prodáno") a údajem
-// o ceně prodeje, viz saleInfoLine.
+// Cena prodeje je potvrzená: zadaná z katastru (nebo ručně), nebo ji v katastru
+// ověřit nejde a portál byt označil jako prodaný (poslední cena platí, viz
+// kn-schedule.js, priceAssumed).
+function isPriceConfirmed(e) {
+  return e.verifiedSalePrice != null || Boolean(e.track?.priceAssumed);
+}
+
+// Filtr "Prodáno" je PŘÍSNÝ: jen prodané byty s potvrzenou cenou. Co teprve
+// čeká na ověření (po rezervaci zmizelé; prodané, ale cenu v katastru ještě
+// nikdo nepotvrdil), je ve filtru "Čeká na ověření" — jakmile se cena potvrdí,
+// byt do "Prodáno" přeskočí sám. Nikam nezapadne: ve filtru "Čeká na ověření"
+// zůstává, dokud se nerozhodne (rozvrh kontrol ani skenování ho z něj nevyřadí).
+function isConfirmedSale(e) {
+  return e.status === "sold" && isPriceConfirmed(e);
+}
+
+function isPendingSale(e) {
+  return (e.status === "sold" && !isPriceConfirmed(e)) || isPossibleSale(e);
+}
+
+// Prodané potvrzeně i nepotvrzeně — pro řádky a sloupce s cenou prodeje.
 function isSoldOrAlmost(e) {
-  return e.status === "sold" || isPossibleSale(e);
+  return isConfirmedSale(e) || isPendingSale(e);
 }
 
 function matchesStatusFilter(e, filter) {
-  if (filter === "possible") return isPossibleSale(e);
-  if (filter === "sold") return isSoldOrAlmost(e);
+  if (filter === "possible") return isPendingSale(e);
+  if (filter === "sold") return isConfirmedSale(e);
   return e.status === filter;
 }
 
-// Popisek stavového filtru ("Prodáno" je širší než stav sold, viz výš).
+// Popisek stavového filtru ("Čeká na ověření" = klíč "possible" v odkazech).
 function statusFilterLabel(s) {
   if (!s) return "Vše";
-  return s === "sold" ? "Prodáno (i téměř jistě)" : STATUS_LABELS[s].text;
+  return s === "possible" ? "Čeká na ověření" : STATUS_LABELS[s].text;
 }
 
 // Co víme o ceně prodeje bytu: kolik, odkud ta cena je a jak je to s vkladem.
@@ -1961,7 +1978,7 @@ function renderKnQueue(db) {
         ? `<details class="kn-done" open><summary>Bez přesné adresy (${noAddress.length})</summary><p class="muted">Bez adresy je v katastru nejde dohledat — doplň ji, dokud je inzerát online.</p><ul>${noAddressRows}</ul></details>`
         : ""
     }
-    ${expiredRows ? `<details class="kn-done"><summary>Nezjištěno (${expired.length})</summary><ul>${expiredRows}</ul></details>` : ""}
+    ${expiredRows ? `<details class="kn-done"><summary>Nezjištěno (${expired.length})</summary><p class="muted">Kalendářní kontroly skončily, ale dům se dál hlídá přes API katastru (až ~13 měsíců od rezervace) a byt zůstává ve filtru „Čeká na ověření“ — nezapadne. Cena po podaném vkladu se připomíná, dokud ji nezadáš.</p><ul>${expiredRows}</ul></details>` : ""}
     ${lagNote}
 
     <h2>Zmizelé byty bez rezervace (${otherManual.length})</h2>
