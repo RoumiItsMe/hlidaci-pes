@@ -18,6 +18,7 @@ import { buildAddressContext, knInfoForGroup, resolveForGroup } from "./auto-add
 import { buildSaleTrack, FILING_CHECK_DAYS } from "./kn-schedule.js";
 import { createKnClient, scanBuilding, parseUnitNumber, KnApiError } from "./kn-api.js";
 import { analyzePlombas, apiWatch, formatDay } from "./kn-plomba.js";
+import { diffKnScan, saveKnEvents } from "./kn-events.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -233,6 +234,35 @@ export function createWatchResolver(db, listings, groups, now = Date.now(), exis
   };
 }
 
+/**
+ * Zapíše změny, které sken přinesl, do kn_events (zvoneček a přehled, viz
+ * kn-events.js). Zvoneček je vedlejší produkt — selhání zápisu nesmí shodit
+ * kontrolu plomb ani zprávu o podaném vkladu.
+ */
+function recordKnChanges(db, log, prev, scan, entries, matches) {
+  try {
+    const mapped = entries.map((e) => ({
+      listingId: primaryListing(e.group.members).id,
+      unit: unitOf(e),
+      address: pickOwnValue(e.group.members, "exact_address") ?? null,
+    }));
+    const events = diffKnScan(prev, scan, {
+      entries: mapped,
+      matches: matches.map(({ entry, candidate, via }) => ({
+        listingId: primaryListing(entry.group.members).id,
+        filedAt: candidate.filedAt,
+        unit: candidate.number,
+        lv: candidate.lv,
+        via,
+        proceedingIds: candidate.proceedings.map((r) => r.id),
+      })),
+    });
+    saveKnEvents(db, events);
+  } catch (err) {
+    log(`KN API: změny v katastru se nepodařilo zapsat do zvonečku: ${err.message}`);
+  }
+}
+
 function filingMessage(entry, candidate, via) {
   const rep = primaryListing(entry.group.members);
   const specs = [rep.disposition, rep.area_m2 ? `${rep.area_m2} m²` : null].filter(Boolean).join(", ") || "byt";
@@ -294,8 +324,9 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
     for (const b of todays) {
       if (budget - used < 1) break;
       let scan;
+      const prev = scans.get(b.id) ?? null;
       try {
-        scan = await scanBuilding(client, b.id, { prev: scans.get(b.id) ?? null, wantUnits: b.full ? null : b.wantUnits, now, budget: budget - used });
+        scan = await scanBuilding(client, b.id, { prev, wantUnits: b.full ? null : b.wantUnits, now, budget: budget - used });
       } catch (err) {
         log(`KN API: dům ${b.id} se nepodařilo zkontrolovat: ${err.message}`);
         // Neplatný klíč / vyčerpaný limit — další domy by dopadly stejně.
@@ -311,7 +342,10 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
       saveKnScan(db, scan);
       scans.set(b.id, scan);
 
-      for (const { entry, candidate, via } of matchFilings(b.entries, scan)) {
+      const matches = matchFilings(b.entries, scan);
+      recordKnChanges(db, log, prev, scan, b.entries, matches);
+
+      for (const { entry, candidate, via } of matches) {
         const updates = { sale_verdict: "sold", kn_filed_at: candidate.filedAt, kn_checked_at: nowIso() };
         if (via === "building") updates.kn_auto_unit = candidate.label;
         if (candidate.lv && !pickOwnValue(entry.group.members, "lv_number")) updates.lv_number = String(candidate.lv);

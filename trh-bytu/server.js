@@ -21,6 +21,8 @@ import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
+import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js";
+import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, relativeTime } from "./dashboard.js";
 import { watches } from "../config.js";
 
 // KN_API_KEY (a Telegram kvůli zprávě o nalezeném vkladu) z `.env.local` v
@@ -89,45 +91,12 @@ function addressInfo(members) {
   };
 }
 
-// Zmizelý byt, který byl před zmizením rezervovaný, a nikdo zatím nezjistil,
-// jak to dopadlo: po rezervaci se nabídka typicky stahuje, takže je to
-// "možný prodej" (a ne jen "zmizelo"). Když se nabídka vrátí, byt přestane
-// být zmizelý a štítek zmizí sám. Pro filtr "Možný prodej" i štítek.
-function isPossibleSale(e) {
-  return e.status === "removed" && !e.saleVerdict && Boolean(e.triage?.wasReserved);
-}
-
 // Pořadí a hodnoty stavových filtrů v přehledu i v srovnávací tabulce.
 const STATUS_FILTERS = ["", "active", "reserved", "possible", "sold", "removed"];
 
 // "Možný prodej" není stav v DB, ale podmnožina zmizelých — "Zmizelo z
 // nabídky" proto zůstává filtrem všech zmizelých (i těch možných prodejů),
 // jinak by byt po rezervaci z přehledu úplně zmizel.
-// Cena prodeje je potvrzená: zadaná z katastru (nebo ručně), nebo ji v katastru
-// ověřit nejde a portál byt označil jako prodaný (poslední cena platí, viz
-// kn-schedule.js, priceAssumed).
-function isPriceConfirmed(e) {
-  return e.verifiedSalePrice != null || Boolean(e.track?.priceAssumed);
-}
-
-// Filtr "Prodáno" je PŘÍSNÝ: jen prodané byty s potvrzenou cenou. Co teprve
-// čeká na ověření (po rezervaci zmizelé; prodané, ale cenu v katastru ještě
-// nikdo nepotvrdil), je ve filtru "Čeká na ověření" — jakmile se cena potvrdí,
-// byt do "Prodáno" přeskočí sám. Nikam nezapadne: ve filtru "Čeká na ověření"
-// zůstává, dokud se nerozhodne (rozvrh kontrol ani skenování ho z něj nevyřadí).
-function isConfirmedSale(e) {
-  return e.status === "sold" && isPriceConfirmed(e);
-}
-
-function isPendingSale(e) {
-  return (e.status === "sold" && !isPriceConfirmed(e)) || isPossibleSale(e);
-}
-
-// Prodané potvrzeně i nepotvrzeně — pro řádky a sloupce s cenou prodeje.
-function isSoldOrAlmost(e) {
-  return isConfirmedSale(e) || isPendingSale(e);
-}
-
 function matchesStatusFilter(e, filter) {
   if (filter === "possible") return isPendingSale(e);
   if (filter === "sold") return isConfirmedSale(e);
@@ -378,7 +347,7 @@ function layout(title, body, { wide = false } = {}) {
   // Zvoneček: počet nepřečtených upozornění — rezervace, změny cen, nové
   // nabídky (viz notifications.js).
   const unread = countUnread(getNotifications(db), getNotificationsSeenAt(db));
-  const bell = `<a href="/upozorneni" class="bell" title="${unread ? `Nepřečtená upozornění: ${unread}` : "Upozornění (rezervace, změny cen, nové nabídky)"}">🔔${unread ? `<span class="bell-badge">${unread}</span>` : ""}</a>`;
+  const bell = `<a href="/upozorneni" class="bell" title="${unread ? `Nepřečtená upozornění: ${unread}` : "Upozornění (rezervace, změny cen, nové nabídky, katastr)"}">🔔${unread ? `<span class="bell-badge">${unread}</span>` : ""}</a>`;
   // Srovnávací tabulka má hodně sloupců a potřebuje co nejvíc vodorovného
   // místa — na rozdíl od ostatních stránek (karty, detail), kterým sedí
   // úzký čitelný sloupec uprostřed, viz main.wide v CSS.
@@ -392,7 +361,7 @@ function layout(title, body, { wide = false } = {}) {
 <script src="/app.js" defer></script>
 </head>
 <body>
-<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a>${bell}</header>
+<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/prehled">📊 Přehled</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a>${bell}</header>
 <main${wide ? ' class="wide"' : ""}>${body}</main>
 </body>
 </html>`;
@@ -1292,9 +1261,16 @@ function renderFlipCalculator(rep, inputs, result) {
 
 const NOTIFICATION_TYPES = {
   reserved: { icon: "🔒", label: "Rezervace", empty: "Zatím žádná rezervace nebyla zaznamenána." },
+  gone: { icon: "🚪", label: "Zmizelo po rezervaci", empty: "Zatím žádný rezervovaný byt nezmizel z nabídky." },
+  kn: { icon: "🏛️", label: "Katastr", empty: "Zatím žádná změna v katastru (sleduje se při kontrole domů přes API katastru)." },
   price: { icon: "💰", label: "Změny cen", empty: "Zatím žádná změna ceny nebyla zaznamenána." },
   new: { icon: "🆕", label: "Nové nabídky", empty: "Zatím žádná nová nabídka (sledují se od zapnutí upozornění)." },
 };
+
+// Jednotka v katastru slovy: "jednotka 412/12 (LV 6319)".
+function knUnitText(d) {
+  return `jednotka ${d.unit}${d.lv ? ` (LV ${d.lv})` : ""}`;
+}
 
 // Věta o tom, co se stalo (druhá řádka upozornění).
 function notificationHeadline(n) {
@@ -1306,7 +1282,45 @@ function notificationHeadline(n) {
         : "";
     return `Změna ceny: ${priceText(oldPrice)} → ${priceText(newPrice)}${diff}`;
   }
+  if (n.type === "gone") return "Zmizelo z nabídky po rezervaci — možný prodej";
+  if (n.type === "kn") {
+    const d = n.detail;
+    if (n.kind === "filing") return `Vklad podán v katastru — ${knUnitText(d)}, návrh přijat ${formatKnDay(d.filedAt)}${d.via === "building" ? " (odhad)" : ""}`;
+    if (n.kind === "plomba") return `Nová plomba v domě — ${knUnitText(d)}, podáno ${formatKnDay(d.filedAt)}`;
+    if (n.kind === "ended")
+      return n.group
+        ? `Řízení o vkladu skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}; teď jde zjistit kupní cenu`
+        : `Řízení o vkladu v domě skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}`;
+  }
   return n.type === "reserved" ? "Rezervováno" : "Nová nabídka";
+}
+
+// Jedno upozornění jako odkaz — na zvoneček i na přehled. Událost domu v
+// katastru nemusí patřit k žádnému bytu, pak vede do fronty Katastr.
+function notificationItemHtml(n, seenAt) {
+  const sources = [...n.sources].map((s) => SOURCE_LABELS[s] || s).join(" + ");
+  const isNew = n.occurredAt > seenAt ? " notif--new" : "";
+  const meta = (extra = "") => [notificationHeadline(n), formatDate(n.occurredAt), sources].filter(Boolean).map(esc).join(" · ") + extra;
+  if (!n.group) {
+    const place = n.detail?.address || "Dům ve sledovaném okolí";
+    return `<a class="notif${isNew}" href="/kontrola">
+        <span class="notif-title">${NOTIFICATION_TYPES[n.type].icon} ${esc(place)}</span>
+        <span class="notif-meta">${meta()}</span>
+      </a>`;
+  }
+  const members = n.group.members;
+  const rep = primaryListing(members);
+  const title = cardTitle(rep, bestAddress(members), priceLabel(members));
+  const status = mergedStatus(members);
+  // Rezervace mohla mezitím skončit (zrušená, byt prodán/stažen) — ať to
+  // upozornění neklame. Stejně tak zmizení po rezervaci, když se byt vrátil.
+  const stale =
+    (n.type === "reserved" && status !== "reserved") || (n.type === "gone" && status !== "removed" && status !== "sold");
+  const now = stale ? ` · <em>nyní: ${esc((STATUS_LABELS[status] || { text: status }).text)}</em>` : "";
+  return `<a class="notif${isNew}" href="/byt/${encodeURIComponent(rep.id)}">
+        <span class="notif-title">${NOTIFICATION_TYPES[n.type].icon} ${esc(title)}</span>
+        <span class="notif-meta">${meta(now)}</span>
+      </a>`;
 }
 
 // Stránka zvonečku: rezervace, změny cen a nové nabídky, nepřečtená
@@ -1318,22 +1332,7 @@ function renderNotifications(db, typeFilter) {
   const unread = countUnread(all, seenAt);
   const notifications = typeFilter && NOTIFICATION_TYPES[typeFilter] ? all.filter((n) => n.type === typeFilter) : all;
 
-  const items = notifications
-    .map((n) => {
-      const members = n.group.members;
-      const rep = primaryListing(members);
-      const title = cardTitle(rep, bestAddress(members), priceLabel(members));
-      const status = mergedStatus(members);
-      const sources = [...n.sources].map((s) => SOURCE_LABELS[s] || s).join(" + ");
-      // Rezervace mohla mezitím skončit (zrušená, byt prodán/stažen) — ať to
-      // upozornění neklame.
-      const now = n.type === "reserved" && status !== "reserved" ? ` · <em>nyní: ${esc((STATUS_LABELS[status] || { text: status }).text)}</em>` : "";
-      return `<a class="notif${n.occurredAt > seenAt ? " notif--new" : ""}" href="/byt/${encodeURIComponent(rep.id)}">
-        <span class="notif-title">${NOTIFICATION_TYPES[n.type].icon} ${esc(title)}</span>
-        <span class="notif-meta">${esc(notificationHeadline(n))} · ${esc(formatDate(n.occurredAt))} · ${esc(sources)}${now}</span>
-      </a>`;
-    })
-    .join("");
+  const items = notifications.map((n) => notificationItemHtml(n, seenAt)).join("");
 
   const pills = [["", "Vše"], ...Object.entries(NOTIFICATION_TYPES).map(([key, t]) => [key, t.label])]
     .map(([key, label]) => {
@@ -1352,6 +1351,100 @@ function renderNotifications(db, typeFilter) {
         : ""
     }
     <div class="notifs">${items || `<p class="empty">${esc(empty)}</p>`}</div>`;
+}
+
+// Malá karta bytu pro přehled (fotka, kde, za kolik, jedna poznámka).
+function miniCardHtml(e, noteHtml = "") {
+  const photo = e.thumb ? `<img src="/photos/${encodeURIComponent(e.thumb.replace(/^photos[\\/]/, ""))}" loading="lazy" alt="" onerror="this.remove()">` : "";
+  const specs = [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null].filter(Boolean).join(", ");
+  return `<a class="mini" href="/byt/${encodeURIComponent(e.rep.id)}">
+      <div class="mini-photo">${photo}</div>
+      <div class="mini-body">
+        <div class="mini-title">${esc(specs ? `Byt ${specs}` : "Byt")}</div>
+        <div class="mini-place">${esc(e.address || "")}</div>
+        <div class="mini-price">${esc(e.priceLabel)}</div>
+        ${noteHtml}
+      </div>
+    </a>`;
+}
+
+// Přehled (/prehled): co je nového a co čeká na rozhodnutí. Počty a výběry
+// počítá dashboard.js, tady se jen skládá HTML. Všechno vede do existujících
+// pohledů (filtry přehledu bytů, zvoneček, fronta Katastr) — žádná nová data.
+function renderDashboard(db) {
+  const now = Date.now();
+  const entries = computeEntries(db);
+  const notifications = getNotifications(db);
+  const seenAt = getNotificationsSeenAt(db);
+  const byListing = indexEntriesByListing(entries);
+
+  const weekDrops = recentPriceDrops(notifications, byListing, { now, days: 7, limit: Infinity }).length;
+  const snap = marketSnapshot(entries, { now, weekDrops });
+  const todo = attention(entries);
+  const offers = recentOffers(entries);
+  const sales = recentSales(entries);
+  const drops = recentPriceDrops(notifications, byListing, { now });
+  const unread = countUnread(notifications, seenAt);
+
+  const lastRun = relativeTime(db.prepare("SELECT MAX(last_seen_at) AS t FROM listings").get()?.t, now);
+  const lastScan = relativeTime(db.prepare("SELECT MAX(scanned_at) AS t FROM kn_scans").get()?.t, now);
+  const sub = [lastRun ? `Poslední sběr nabídek: ${lastRun}` : null, lastScan ? `poslední kontrola katastru: ${lastScan}` : null].filter(Boolean).join(" · ");
+
+  const kpi = (href, num, label, note = "") =>
+    `<a class="kpi" href="${href}"><span class="kpi-num">${esc(num)}</span><span class="kpi-label">${esc(label)}</span>${note ? `<span class="kpi-note">${esc(note)}</span>` : ""}</a>`;
+  const kpis = [
+    kpi("/?status=active", String(snap.active), "v nabídce", snap.newThisWeek ? `+${snap.newThisWeek} nových za týden` : "žádné nové za týden"),
+    kpi("/?status=reserved", String(snap.reserved), "rezervováno"),
+    kpi("/?status=possible", String(snap.pending), "čeká na ověření", "prodané bez potvrzené ceny"),
+    kpi("/?status=sold", String(snap.confirmed), "prodáno", "s potvrzenou cenou"),
+    kpi("/upozorneni?typ=price", String(snap.dropsThisWeek), "slev za týden"),
+    kpi("/stats", snap.medianPricePerM2 != null ? new Intl.NumberFormat("cs-CZ").format(snap.medianPricePerM2) : "—", "Kč/m² (medián)", "u bytů v nabídce"),
+  ].join("");
+
+  const todoItems = [
+    [todo.enterPrice, "/kontrola", "Zadat cenu prodeje", "vklad je podaný nebo řízení skončilo"],
+    [todo.confirmFiling, "/kontrola", "Potvrdit plombu nalezenou v katastru", "appka ji nedokázala sama přiřadit k bytu"],
+    [todo.manualCheck, "/kontrola", "Zkontrolovat v katastru", "nastal termín kontroly"],
+    [todo.noAddress, "/?adresa=chybi", "Doplnit přesnou adresu", "bez ní se byt v katastru nedá hledat ani hlídat"],
+  ]
+    .filter(([count]) => count > 0)
+    .map(([count, href, label, why]) => `<li><a href="${href}"><strong>${esc(label)}</strong> (${count})</a> <span class="muted">— ${esc(why)}</span></li>`)
+    .join("");
+  const attentionBox = todoItems ? `<section class="attention"><h2>Čeká na tebe</h2><ul>${todoItems}</ul></section>` : "";
+
+  const feed = notifications.slice(0, 8).map((n) => notificationItemHtml(n, seenAt)).join("");
+  const offerCards = offers
+    .map((e) => miniCardHtml(e, `<div class="mini-note">${e.status === "reserved" ? "🔒 rezervováno · " : ""}objeveno ${esc(relativeTime(e.discoveredAt, now))}</div>`))
+    .join("");
+  const saleCards = sales
+    .map((e) => {
+      const at = saleMoment(e);
+      const info = saleInfoLine(e);
+      return miniCardHtml(e, `<div class="mini-note">${at ? `${esc(formatDateOnly(at))} · ` : ""}💰 ${esc(info)}</div>`);
+    })
+    .join("");
+  const dropCards = drops
+    .map(({ entry, oldPrice, newPrice, pct }) =>
+      miniCardHtml(entry, `<div class="mini-note">−${Math.round(pct * 100)} % · ${esc(formatCzk(oldPrice))} → ${esc(formatCzk(newPrice))}</div>`)
+    )
+    .join("");
+
+  const card = (title, bodyHtml, emptyText, moreHref, moreLabel, badge = "") =>
+    `<section class="dash-card"><h2><span>${esc(title)}</span>${badge}</h2>${bodyHtml || `<p class="empty">${esc(emptyText)}</p>`}<a class="dash-more" href="${moreHref}">${esc(moreLabel)} →</a></section>`;
+
+  return `
+    <h1>Přehled</h1>
+    ${sub ? `<p class="muted dash-sub">${esc(sub)}</p>` : ""}
+    <div class="kpis">${kpis}</div>
+    ${attentionBox}
+    <div class="dash-grid">
+      ${card("Aktuality", feed ? `<div class="notifs">${feed}</div>` : "", "Zatím žádná upozornění.", "/upozorneni", "Všechna upozornění", unread ? `<span class="dash-count">${unread} nepřečtených</span>` : "")}
+      ${card("Nejnovější nabídky", offerCards ? `<div class="minis">${offerCards}</div>` : "", "Zatím žádné nabídky.", "/?status=active", "Všechny nabídky")}
+    </div>
+    <div class="dash-grid">
+      ${card("Nejnovější prodeje", saleCards ? `<div class="minis">${saleCards}</div>` : "", "Zatím žádný prodaný byt.", "/?status=possible", "Všechny prodeje a ověřování")}
+      ${card("Největší slevy (30 dní)", dropCards ? `<div class="minis">${dropCards}</div>` : "", "Za posledních 30 dní žádný byt nezlevnil.", "/upozorneni?typ=price", "Všechny změny cen")}
+    </div>`;
 }
 
 // Byt patří do statistiky "ceny po rekonstrukci", pokud to uživatel vědomě
@@ -2075,6 +2168,10 @@ const server = createServer(async (req, res) => {
       cols: url.searchParams.get("cols") === "all" ? "all" : null,
     };
     return sendHtml(res, 200, layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
+  }
+
+  if (url.pathname === "/prehled" && req.method === "GET") {
+    return sendHtml(res, 200, layout("Přehled — Trh bytů", renderDashboard(db)));
   }
 
   if (url.pathname === "/upozorneni" && req.method === "GET") {

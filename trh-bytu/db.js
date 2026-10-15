@@ -11,6 +11,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { KN_EVENTS_DDL } from "./kn-events.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = path.join(__dirname, "data");
@@ -88,7 +89,7 @@ CREATE TABLE IF NOT EXISTS app_state (
   key TEXT PRIMARY KEY,
   value TEXT
 );
-`;
+${KN_EVENTS_DDL}`;
 
 let db;
 

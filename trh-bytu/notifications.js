@@ -20,12 +20,19 @@
 //  - nová nabídka: byt, který appka dřív neznala (nejstarší inzerát skupiny
 //    je zaevidovaný po zapnutí této funkce — jinak by 100 bytů z prvního
 //    sběru bylo "nových").
-// Skryté byty (uživatel je vyřadil) hlásí rezervace a pohyb ceny — to jsou
-// informace o trhu, které chce vidět i u vyřazeného bytu — ale ne nové
+//  - zmizelo po rezervaci: poslední inzerát bytu zmizel, ačkoli byl rezervovaný
+//    — "možný prodej" (kdo to dopadlo, rozhoduje katastr, viz kn-schedule.js);
+//  - katastr: změna zjištěná kontrolou domů přes API katastru (kn-events.js) —
+//    podaný vklad u bytu, nová plomba v domě, konec řízení. Vznikají jen při
+//    skenu, takže je tu nese tabulka kn_events (ne historie inzerátů); událost
+//    domu nemusí patřit k žádnému sledovanému bytu.
+// Skryté byty (uživatel je vyřadil) hlásí rezervace, zmizení a pohyb ceny — to
+// jsou informace o trhu, které chce vidět i u vyřazeného bytu — ale ne nové
 // nabídky (skrýt jde jen byt, který už uživatel viděl).
 
 import { groupListings, isHidden } from "./group.js";
 import { nowIso } from "./db.js";
+import { loadKnEvents } from "./kn-events.js";
 
 const CLUSTER_WINDOW_MS = 10 * 60 * 1000;
 const SEEN_KEY = "notifications_seen_at";
@@ -57,6 +64,36 @@ function reservedNotifications(group, events) {
       out.push(current);
     }
     reservedMembers.add(e.memberId);
+  }
+  return out;
+}
+
+// Zmizel poslední aktivní inzerát bytu a byt byl těsně předtím rezervovaný.
+// Aktivní inzeráty se počítají z událostí (created / relisted / reactivated
+// přidávají, removed ubírá); inzerát bez události "created" (starší data) se
+// bere za aktivní od začátku, ať jeho kolega nevyvolá falešné "zmizelo".
+function goneNotifications(group, events) {
+  const out = [];
+  const created = new Set(events.filter((e) => e.type === "created" || e.type === "relisted").map((e) => e.memberId));
+  const active = new Set(group.members.filter((m) => !created.has(m.id)).map((m) => m.id));
+  const reserved = new Set();
+  for (const e of events) {
+    if (e.type === "created") active.add(e.memberId);
+    // Návrat inzerátu (znovu vložený / znovu aktivní) rezervaci ukončuje, stejně
+    // jako její zrušení — i rezervaci staršího, mezitím zmizelého inzerátu téhož
+    // bytu. Zmizení inzerátu samo NE: rezervovaný inzerát se typicky stahuje, a
+    // byt je tím pořád "po rezervaci".
+    if (e.type === "relisted" || e.type === "reactivated") {
+      active.add(e.memberId);
+      for (const m of reserved) if (!active.has(m) || m === e.memberId) reserved.delete(m);
+    }
+    if (e.type === "reserved") reserved.add(e.memberId);
+    if (e.type === "unreserved") reserved.delete(e.memberId);
+    if (e.type !== "removed") continue;
+    active.delete(e.memberId);
+    if (active.size === 0 && reserved.size > 0) {
+      out.push({ type: "gone", group, occurredAt: e.at, lastAt: e.at, sources: new Set([e.source]) });
+    }
   }
   return out;
 }
@@ -104,7 +141,7 @@ function newOfferNotification(group, events, newSince) {
  * old_price_czk, new_price_czk, occurred_at }`) poskládá upozornění, nejnovější
  * první: `{ type, group, occurredAt, sources, detail? }`.
  */
-export function buildNotifications(groups, events, { newSince }) {
+export function buildNotifications(groups, events, { newSince, knEvents = [] }) {
   const eventsByListing = new Map();
   for (const e of events) {
     if (!eventsByListing.has(e.listing_id)) eventsByListing.set(e.listing_id, []);
@@ -127,10 +164,26 @@ export function buildNotifications(groups, events, { newSince }) {
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 
     notifications.push(...reservedNotifications(group, groupEvents));
+    notifications.push(...goneNotifications(group, groupEvents));
     notifications.push(...priceNotifications(group, groupEvents));
     if (isHidden(group.members)) continue;
     const newOffer = newOfferNotification(group, groupEvents, newSince);
     if (newOffer) notifications.push(newOffer);
+  }
+  // Změny v katastru: byt najdeme podle inzerátu uloženého u události (dnes už
+  // může patřit do jiné skupiny než při zápisu); bez bytu je to událost domu.
+  const groupOfListing = new Map();
+  for (const group of groups) for (const m of group.members) groupOfListing.set(m.id, group);
+  for (const k of knEvents) {
+    notifications.push({
+      type: "kn",
+      kind: k.kind,
+      group: (k.listing_id && groupOfListing.get(k.listing_id)) || null,
+      occurredAt: k.occurred_at,
+      lastAt: k.occurred_at,
+      sources: new Set(),
+      detail: k.detail ?? {},
+    });
   }
   return notifications.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : a.occurredAt > b.occurredAt ? -1 : 0));
 }
@@ -142,7 +195,7 @@ export function getNotifications(db) {
   const events = db
     .prepare(`SELECT listing_id, event_type, old_price_czk, new_price_czk, occurred_at FROM events WHERE event_type IN (${placeholders})`)
     .all(...EVENT_TYPES);
-  return buildNotifications(groups, events, { newSince: getStateTimestamp(db, NEW_SINCE_KEY) });
+  return buildNotifications(groups, events, { newSince: getStateTimestamp(db, NEW_SINCE_KEY), knEvents: loadKnEvents(db) });
 }
 
 // Časový údaj z app_state; když ještě není, uloží se "teď" — historie před

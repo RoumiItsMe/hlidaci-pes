@@ -828,6 +828,33 @@ po pár vteřinách a snadno unikne pozornosti. Protože nové zprávy tlačítk
 nemají, je tahle úloha už jen dobíhající pojistka pro staré zprávy; jinak ji
 nepotřebuješ.
 
+## Přehled (`/prehled`) — co je nového na jedné stránce
+
+V hlavičce první odkaz **📊 Přehled**. Je to nástěnka, na které za pár vteřin
+uvidíš, co se od posledně stalo a co čeká na tebe. Nemá vlastní data — všechno
+bere z toho, co appka už ví, a každý blok vede do pohledu, odkud pochází:
+
+- **Pás čísel nahoře** (každé číslo je odkaz na odpovídající filtr): v nabídce
+  (+ kolik jich přibylo za týden), rezervováno, **čeká na ověření**, **prodáno**
+  (s potvrzenou cenou), slevy za týden, medián Kč/m² u bytů v nabídce.
+- **Čeká na tebe** — žlutý rámeček, který se ukáže jen když je co dělat:
+  zadat cenu prodeje (vklad podán / řízení skončilo), potvrdit plombu, kterou
+  appka nepřiřadila k bytu, zkontrolovat v katastru podle rozvrhu, doplnit
+  přesnou adresu. Počty jsou stejné jako ve frontě Katastr.
+- **Aktuality** — osm nejnovějších upozornění ze zvonečku (nepřečtená
+  zvýrazněná).
+- **Nejnovější nabídky** — šest naposledy objevených bytů (v nabídce nebo
+  rezervovaných), s fotkou a stářím objevu.
+- **Nejnovější prodeje** — prodané a téměř jistě prodané byty od nejnovějšího
+  (podle data prodeje z katastru, jinak podle podání vkladu, jinak podle
+  zmizení inzerátu) s cenou prodeje a stavem ověření. Skryté byty se tu
+  neukazují, stejně jako jinde.
+- **Největší slevy (30 dní)** — byty, které jsou pořád na trhu, podle procenta
+  slevy; víc změn ceny jednoho bytu se spojí do jedné slevy (zlevnění, po kterém
+  cena zase vyrostla na původní, slevou není).
+- Pod nadpisem je, kdy naposledy proběhl sběr nabídek a kontrola katastru — ať
+  je vidět, jestli appka běží.
+
 ## Zvoneček (upozornění)
 
 V hlavičce appky je **🔔** — červené číslo u něj říká, kolik upozornění
@@ -839,13 +866,24 @@ filtrují podle druhu. Tlačítko **"Označit vše jako přečtené"** zvoneček
 vynuluje — samotné otevření stránky upozornění nepřečte, ať žádné nezmizí
 omylem.
 
-Tři druhy upozornění:
+Pět druhů upozornění:
 
 | | Kdy vznikne |
 |---|---|
 | 🔒 **Rezervace** | byt přešel z "nerezervovaný" na "rezervovaný" (na kterémkoli portálu) |
+| 🚪 **Zmizelo po rezervaci** | poslední inzerát bytu zmizel, ačkoli byl rezervovaný (nevrátil se mezitím do nabídky) — "možný prodej" |
+| 🏛️ **Katastr** | změna zjištěná kontrolou domů přes API katastru: **vklad podán** u bytu, **nová plomba** v domě, **konec řízení** o vkladu (→ jde zjistit cena) |
 | 💰 **Změna ceny** | byt má novou cenu — "3 900 000 Kč → 3 800 000 Kč (−100 000 Kč)"; i "cena → na vyžádání" u znovu vloženého inzerátu |
 | 🆕 **Nová nabídka** | byt, který appka dřív neznala |
+
+**Katastr ve zvonečku.** Sken domu (denní dávka, viz Kontrola v katastru) drží
+jen aktuální stav, proto appka každý nový sken porovná s předchozím a změny
+zapíše do tabulky `kn_events`. Událost, která patří k bytu (podaný vklad,
+plomba na jeho jednotce), vede na detail bytu; událost domu (plomba na jiné
+jednotce, než sledujeme) vede do fronty Katastr a ukáže adresu domu. První sken
+domu nic nehlásí (nemáme s čím porovnat) a plomba podaná dávno před minulým
+skenem se za novou nepočítá. Historie z doby před touhle funkcí se zpětně
+nedoplňuje — vklady, které jsi zapsal ručně, ve zvonečku nejsou (o těch víš).
 
 Pravidla, ať zvoneček nezahltí šumem:
 
