@@ -1,7 +1,7 @@
 // node --test trh-bytu/sale-record.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSaleRecordUpdates, currentSaleState, assumedSalePrice, statsSalePrice, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
+import { buildSaleRecordUpdates, currentSaleState, assumedSalePrice, statsSalePrice, isAlmostSold, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
 
 const NOW = "2026-10-14T10:00:00.000Z";
 const none = { verdict: null, filedAt: null, autoUnit: null };
@@ -117,4 +117,19 @@ test("cena pro statistiky: ověřená má vždy přednost, snížená jen u neov
   assert.deepEqual(statsSalePrice({ verified: null, price: 3000000, assumed: true }), { price: 2700000, basis: "assumed" });
   assert.deepEqual(statsSalePrice({ verified: null, price: 3000000, assumed: false }), { price: 3000000, basis: "asking" });
   assert.deepEqual(statsSalePrice({ verified: null, price: null, assumed: true }), { price: null, basis: "asking" });
+});
+
+test("aspoň částečně prodaný: prodaný, rezervovaný, nebo po rezervaci zmizelý; zmizelý bez rezervace a neprodaný ne", () => {
+  assert.equal(isAlmostSold({ status: "sold", verdict: null, wasReserved: false }), true); // portál říká prodáno
+  assert.equal(isAlmostSold({ status: "removed", verdict: null, wasReserved: true }), true); // rezervace → zmizelo
+  assert.equal(isAlmostSold({ status: "sold", verdict: "sold", wasReserved: false }), true); // verdikt "prodáno" dává stav sold (group.js)
+  assert.equal(isAlmostSold({ status: "removed", verdict: null, wasReserved: false }), false); // jen možný prodej
+  assert.equal(isAlmostSold({ status: "removed", verdict: "withdrawn", wasReserved: true }), false); // ověřeno: neprodáno
+  assert.equal(isAlmostSold({ status: "sold", verdict: "withdrawn", wasReserved: true }), false);
+  assert.equal(isAlmostSold({ status: "reserved", verdict: null, wasReserved: true }), true); // rezervace = aspoň částečný prodej
+  assert.equal(isAlmostSold({ status: "reserved", verdict: "withdrawn", wasReserved: true }), false);
+  assert.equal(saleEvidence("sold"), "sold");
+  assert.equal(saleEvidence("reserved"), "reserved");
+  assert.equal(saleEvidence("removed"), "gone");
+  assert.equal(isAlmostSold({ status: "active", verdict: null, wasReserved: false }), false);
 });

@@ -128,3 +128,21 @@ export function statsSalePrice({ verified, price, assumed }) {
   if (assumed && price != null) return { price: assumedSalePrice(price), basis: "assumed" };
   return { price: price ?? null, basis: "asking" };
 }
+
+/**
+ * "Aspoň částečně prodaný" byt — to, o co v appce hlavně jde: je prodaný
+ * (verdikt z katastru, nebo to říká portál), po rezervaci zmizel ze všech
+ * portálů (inzerát se po rezervaci stahuje), nebo je zatím rezervovaný.
+ * Zmizelý byt BEZ rezervace sem nepatří, je to jen "možný prodej".
+ * "Neprodáno" z katastru tohle vylučuje. Rezervace, která padne, byt vrátí do
+ * nabídky, takže z přehledu sama zmizí.
+ */
+export function isAlmostSold({ status, verdict, wasReserved }) {
+  if (verdict === "withdrawn") return false;
+  return status === "sold" || status === "reserved" || (status === "removed" && Boolean(wasReserved));
+}
+
+/** Na čem prodej bytu stojí: "sold" (prodáno) | "gone" (po rezervaci zmizelo) | "reserved" (rezervováno). */
+export function saleEvidence(status) {
+  return status === "sold" ? "sold" : status === "reserved" ? "reserved" : "gone";
+}

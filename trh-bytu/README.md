@@ -552,6 +552,24 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     uživatel byt ručně označí jako prodaný (vklad podán / cena) — pak platí jeho
     údaj. Portálem prodaný družstevní byt je vyřízený s poslední cenou −10 %
     (viz výš).
+  - **Neověřitelný byt se nezahazuje — jde o aspoň částečně prodaný byt.** Hlavní
+    účel appky je přehled o prodaných a téměř jistě prodaných bytech, takže i byt,
+    který v katastru nejde ověřit, má cenu a počítá se (`isAlmostSold`,
+    `statsSalePrice` v `sale-record.js`): **poslední cena −10 %**, označená „nejde
+    ověřit“. Ve „Vyřízených“ řádek říká, kolik se ve statistikách počítá, a má
+    formulář **Znám skutečnou cenu** — zadáš-li ji (od makléře, z družstva…), byt je
+    „Prodáno“ s ověřenou cenou a koeficient se přestane používat. Stejně se dá cena
+    zadat v detailu bytu.
+  - **Statistiky: „Prodané a téměř jistě prodané byty“** (bez ohledu na stav
+    bytu, po městech a dispozicích): prodané (z katastru, nebo podle portálu), **po
+    rezervaci zmizelé** (téměř jistý prodej) a **zatím jen rezervované** (kupec už
+    je, ale rezervace může padnout; pak byt z přehledu sám zmizí). U každého bytu je
+    vidět, na čem prodej stojí („prodáno“ / „zmizelo po rezervaci“ /
+    „rezervováno“) a odkud je cena („ověřeno“ / „nejde ověřit — poslední cena −10 %“ /
+    „poslední cena, zatím neověřeno“). Zmizelý byt **bez** rezervace sem nepatří
+    (je to jen možný prodej), byt bez ceny v inzerátu („cena na vyžádání“) taky ne,
+    dokud nezadáš skutečnou, a ručně skrytý byt (křížek) se nepočítá nikdy. Starší
+    sekce „Ceny po rekonstrukci“ zůstává, jen užší.
   - Výsledky skenu leží v tabulce `kn_scans` (jeden řádek na dům).
 - **Možný prodej:** byt, který byl těsně před zmizením **rezervovaný** a do
   nabídky se nevrátil, má v přehledu štítek **Možný prodej** (a filtr se stejným
