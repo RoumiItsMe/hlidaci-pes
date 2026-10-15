@@ -593,6 +593,18 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   Když se byt **30 dní** (`PROBABLE_SALE_AFTER_DAYS` v `sale-triage.js`) nevrátil,
   štítek se změní na **Pravděpodobně prodáno** (filtr „Možný prodej" ukazuje obojí).
   Verdikt dál dává jen katastr.
+- **Rychlý přehled prodaných bytů: filtr „Prodáno (i téměř jistě)“** na úvodní
+  stránce i v tabulce srovnání. Ukáže byty prodané určitě (podle katastru, nebo
+  podle portálu) **i** téměř jistě (po rezervaci zmizelé z nabídky); mezi sebou se
+  liší štítkem („Prodáno“ / „Možný prodej“ / „Pravděpodobně prodáno“). Každý řádek
+  má navíc údaj **💰 cena prodeje**: ověřená („2 850 000 Kč (ověřeno)“), nebo odhad
+  („~3 420 000 Kč (odhad −10 %, čeká na ověření)“ / „nejde ověřit“), k tomu stav
+  vkladu („vklad podán …“, „plomba do …“). V tabulce je sloupec **Cena prodeje**
+  — u filtrů Prodáno a Možný prodej rovnou vidět, jinak za „Víc sloupců“. Je to
+  tentýž soubor bytů a stejné ceny jako ve statistikách („Prodané a téměř jistě
+  prodané byty“), jen bez bytů, které jsou zatím jen rezervované (ty mají vlastní
+  filtr „Rezervováno“). Filtr „Možný prodej“ zůstává jako užší pohled (jen
+  zmizelé po rezervaci, bez potvrzení).
 - **Telegram upozornění na zmizení:** když rezervovaný byt zmizí ze **všech**
   portálů, ve stejném běhu přijde zpráva „Zmizel z nabídky po rezervaci — možný
   prodej" s adresou (nebo upozorněním, že chybí), k.ú. a obdobím „rezervováno od

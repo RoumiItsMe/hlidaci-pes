@@ -103,8 +103,41 @@ const STATUS_FILTERS = ["", "active", "reserved", "possible", "sold", "removed"]
 // "Možný prodej" není stav v DB, ale podmnožina zmizelých — "Zmizelo z
 // nabídky" proto zůstává filtrem všech zmizelých (i těch možných prodejů),
 // jinak by byt po rezervaci z přehledu úplně zmizel.
+// Filtr "Prodáno" ukazuje všechno, co je prodané určitě (katastr, portál) i
+// téměř jistě (po rezervaci zmizelé) — to, o co v appce hlavně jde. Řádky se
+// liší štítkem ("Prodáno" / "Možný prodej" / "Pravděpodobně prodáno") a údajem
+// o ceně prodeje, viz saleInfoLine.
+function isSoldOrAlmost(e) {
+  return e.status === "sold" || isPossibleSale(e);
+}
+
 function matchesStatusFilter(e, filter) {
-  return filter === "possible" ? isPossibleSale(e) : e.status === filter;
+  if (filter === "possible") return isPossibleSale(e);
+  if (filter === "sold") return isSoldOrAlmost(e);
+  return e.status === filter;
+}
+
+// Popisek stavového filtru ("Prodáno" je širší než stav sold, viz výš).
+function statusFilterLabel(s) {
+  if (!s) return "Vše";
+  return s === "sold" ? "Prodáno (i téměř jistě)" : STATUS_LABELS[s].text;
+}
+
+// Co víme o ceně prodeje bytu: kolik, odkud ta cena je a jak je to s vkladem.
+// Jen pro prodané a téměř jistě prodané byty (jinak null).
+function saleInfoLine(e) {
+  if (!isSoldOrAlmost(e)) return null;
+  const { price, basis } = effectivePriceForStats(e);
+  const parts = [];
+  if (price == null) parts.push("cena neznámá");
+  else if (basis === "verified") parts.push(`${formatCzk(price)} (ověřeno)`);
+  else
+    parts.push(
+      `~${formatCzk(price)} (odhad −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %, ${basis === "assumed" ? "nejde ověřit" : "čeká na ověření"})`
+    );
+  if (e.knFiledAt) parts.push(`vklad podán ${formatDateOnly(e.knFiledAt)}`);
+  if (e.plombaEnd) parts.push(`plomba ${Date.parse(e.plombaEnd) <= Date.now() ? "skončila" : "do"} ${formatDateOnly(e.plombaEnd)}`);
+  return parts.join(" · ");
 }
 
 // Štítek s PŘESNOU adresou (viz addressInfo) — v přehledu i v tabulce
@@ -647,7 +680,7 @@ function renderTable(db, filters) {
 
   const filterLinks = STATUS_FILTERS
     .map((s) => {
-      const label = s ? STATUS_LABELS[s].text : "Vše";
+      const label = statusFilterLabel(s);
       const active = !showHidden && (statusFilter === s || (!statusFilter && !s)) ? "active" : "";
       // Klik na stavový filtr vždy opustí pohled "Skryté" — kombinace by
       // neměla smysl (skryté položky appka stavem netřídí).
@@ -671,7 +704,10 @@ function renderTable(db, filters) {
     .join("");
 
   const rows = filtered
-    .map(({ g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, triage, track, addressInfo: ai, saleCandidate, firstSeenAt, change, changeWhere, starred, hidden, thumb }) => {
+    .map((entry) => {
+      const { g, rep, params, address, priceLabel: priceText_, status, saleVerdict: verdict, triage, track, addressInfo: ai, saleCandidate, firstSeenAt, change, changeWhere, starred, hidden, thumb } = entry;
+      const saleInfo = saleInfoLine(entry);
+      const saleChip = saleInfo ? ` <span class="sale-chip" title="Cena prodeje a stav v katastru (záložka Katastr)">💰 ${esc(saleInfo)}</span>` : "";
       // Přesná adresa (viz addressInfo): zapsaná se ukáže, nevyplněná u
       // nabídky, která ještě má šanci, upozorní, "neznámá" jen připomene,
       // že se na ni už koukalo. U zmizelých bytů bez adresy se nic neukazuje —
@@ -714,7 +750,7 @@ function renderTable(db, filters) {
             ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
             <div class="row-updates">${updates}</div>
             <div class="row-meta">
-              <span class="badge" style="background:${st.color}">${esc(st.text)}</span>
+              <span class="badge" style="background:${st.color}">${esc(st.text)}</span>${saleChip}
               <span class="muted">${esc(sourceLabel)}${linkBadge}${reservedNote}${goneNote}${hiddenNote}</span>
               ${addressChip}${candidateChip}
             </div>
@@ -821,7 +857,7 @@ function renderComparisonTable(db, filters) {
   const current = { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam };
   const filterLinks = STATUS_FILTERS
     .map((s) => {
-      const label = s ? STATUS_LABELS[s].text : "Vše";
+      const label = statusFilterLabel(s);
       const active = statusFilter === s || (!statusFilter && !s) ? "active" : "";
       return `<a class="filter ${active}" href="${buildQuery(current, { status: s }, "/tabulka")}">${esc(label)}</a>`;
     })
@@ -872,6 +908,9 @@ function renderComparisonTable(db, filters) {
     { head: "Revitalizace", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "own_revitalized", e.ownRevitalized)}</td>` },
     { head: "Ve statistice", ext: true, cell: (e, encId) => `<td>${ownSelect(encId, "stats_include", e.statsInclude)}</td>` },
     { head: "Cena", sort: "price", cell: (e) => `<td>${esc(e.priceLabel)}</td>` },
+    // Prodejní cena a stav vkladu u prodaných a téměř jistě prodaných bytů; u
+    // filtrů Prodáno / Možný prodej je rovnou vidět, jinak za "Víc sloupců".
+    { head: "Cena prodeje", ext: !(statusFilter === "sold" || statusFilter === "possible"), cell: (e) => `<td>${esc(saleInfoLine(e) ?? "—")}</td>` },
     { head: "Cena/m²", sort: "price_m2", cell: (e) => `<td>${esc(formatPricePerM2(e.pricePerM2))}</td>` },
     { head: "Sleva", sort: "discount", cell: (e) => `<td>${esc(priceDropLabel(e))}</td>` },
     { head: "Přidáno", sort: "added", cell: (e) => `<td>${esc(formatDateOnly(e.firstSeenAt))}</td>` },

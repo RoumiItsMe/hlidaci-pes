@@ -440,6 +440,17 @@ a.addr-chip--candidate:hover { text-decoration: underline; }
 .kn-done li { margin: 0.35rem 0; }
 .kn-done .kn-form { display: inline-flex; margin: 0 0 0 0.4rem; }
 
+/* Cena prodeje a stav vkladu u prodaného / téměř jistě prodaného bytu (přehled) */
+.sale-chip {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 0.8rem;
+}
+
 /* Přesná adresa bytu (detail + štítek v přehledu) */
 .address-form { max-width: 520px; }
 .address-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
