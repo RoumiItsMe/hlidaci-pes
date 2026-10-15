@@ -84,6 +84,7 @@ test("vrácení mezi nerozhodnuté smaže verdikt, vklad, cenu i datum prodeje; 
     kn_digest_cp: null,
     verified_sale_price_czk: null,
     verified_sale_date: null,
+    kn_plomba_end: null,
   });
   const guessed = build({ reset: true }, { verdict: "sold", filedAt: "2026-10-09", autoUnit: "412/5" });
   assert.equal(guessed.kn_auto_unit, null);
@@ -99,9 +100,9 @@ test("fronta Katastr: 'Vklad podán' s prázdnými poli nic dalšího nepřepí�
   assert.deepEqual(u, { kn_filed_at: "2026-10-09", sale_verdict: "sold", kn_checked_at: NOW });
 });
 
-test("currentSaleState čte verdikt, vklad a odhad ze skupiny nabídek", () => {
-  const members = [{ id: "a", sale_verdict: null }, { id: "b", sale_verdict: "sold", kn_filed_at: "2026-10-09", kn_auto_unit: "412/5" }];
-  assert.deepEqual(currentSaleState(members), { verdict: "sold", filedAt: "2026-10-09", autoUnit: "412/5" });
+test("currentSaleState čte verdikt, vklad, odhad a konec plomby ze skupiny nabídek", () => {
+  const members = [{ id: "a", sale_verdict: null }, { id: "b", sale_verdict: "sold", kn_filed_at: "2026-10-09", kn_auto_unit: "412/5", kn_plomba_end: "2026-10-30" }];
+  assert.deepEqual(currentSaleState(members), { verdict: "sold", filedAt: "2026-10-09", autoUnit: "412/5", plombaEnd: "2026-10-30" });
 });
 
 test("družstevní byt: poslední inzerovaná cena se do statistik počítá snížená o 10 %", () => {
@@ -112,11 +113,13 @@ test("družstevní byt: poslední inzerovaná cena se do statistik počítá sn�
   assert.equal(assumedSalePrice(null), null);
 });
 
-test("cena pro statistiky: ověřená má vždy přednost, snížená jen u neověřitelného družstevního bytu, jinak inzerovaná", () => {
+test("cena pro statistiky: ověřená vždy vyhrává; neověřená poslední cena je −10 % (nejde ověřit / čeká na ověření)", () => {
   assert.deepEqual(statsSalePrice({ verified: 2850000, price: 3100000, assumed: true }), { price: 2850000, basis: "verified" }); // Spořitelní: ruční cena zůstává
+  assert.deepEqual(statsSalePrice({ verified: 3300000, price: 3800000, assumed: false }), { price: 3300000, basis: "verified" });
   assert.deepEqual(statsSalePrice({ verified: null, price: 3000000, assumed: true }), { price: 2700000, basis: "assumed" });
-  assert.deepEqual(statsSalePrice({ verified: null, price: 3000000, assumed: false }), { price: 3000000, basis: "asking" });
-  assert.deepEqual(statsSalePrice({ verified: null, price: null, assumed: true }), { price: null, basis: "asking" });
+  assert.deepEqual(statsSalePrice({ verified: null, price: 3800000, assumed: false }), { price: 3420000, basis: "pending" }); // např. Lukesova
+  assert.deepEqual(statsSalePrice({ verified: null, price: null, assumed: true }), { price: null, basis: "none" });
+  assert.deepEqual(statsSalePrice({ verified: null, price: null, assumed: false }), { price: null, basis: "none" });
 });
 
 test("aspoň částečně prodaný: prodaný, rezervovaný, nebo po rezervaci zmizelý; zmizelý bez rezervace a neprodaný ne", () => {
@@ -132,4 +135,23 @@ test("aspoň částečně prodaný: prodaný, rezervovaný, nebo po rezervaci zm
   assert.equal(saleEvidence("reserved"), "reserved");
   assert.equal(saleEvidence("removed"), "gone");
   assert.equal(isAlmostSold({ status: "active", verdict: null, wasReserved: false }), false);
+});
+
+test("konec plomby: platné datum (i budoucí) se uloží, prázdné ho smaže, neplatné ignoruje; prodej sám neimplikuje", () => {
+  assert.deepEqual(build({ plombaEnd: "2026-11-20" }), { kn_plomba_end: "2026-11-20", kn_checked_at: null }); // i v budoucnu, bez verdiktu; nový konec ruší dřívější odložení
+  assert.deepEqual(build({ plombaEnd: "" }, { ...sold, plombaEnd: "2026-11-20" }), { kn_plomba_end: null, kn_checked_at: null });
+  assert.deepEqual(build({ plombaEnd: "" }, sold), { kn_plomba_end: null }); // nebylo co mazat
+  assert.deepEqual(build({ plombaEnd: "brzy" }), {});
+  assert.deepEqual(build({ plombaEnd: undefined }), {});
+  // Vrácení mezi nerozhodnuté konec plomby smaže spolu s vkladem.
+  assert.equal(build({ reset: true }, sold).kn_plomba_end, null);
+});
+
+test("změna konce plomby zruší dřívější odložení; stejná hodnota při dalším uložení ne", () => {
+  const withCheck = { verdict: "sold", filedAt: "2026-10-09", autoUnit: null, plombaEnd: null };
+  assert.equal(build({ plombaEnd: "2026-10-13" }, withCheck).kn_checked_at, null); // nový konec → připomínky znovu
+  const same = { ...withCheck, plombaEnd: "2026-10-13" };
+  assert.equal("kn_checked_at" in build({ plombaEnd: "2026-10-13" }, same), false); // totéž pole z formuláře → "Zatím nic" platí dál
+  assert.equal(build({ plombaEnd: "" }, same).kn_checked_at, null); // smazání je taky změna
+  assert.equal("kn_checked_at" in build({ price: "3000000" }, same), false); // jiná pole to neovlivní
 });

@@ -45,6 +45,8 @@ function field(value, normalize) {
  *   - `unit`      číslo jednotky ("412/12" se sjednotí s číslem z API)
  *   - `price`     kupní cena v Kč (kladná)
  *   - `saleDate`  datum prodeje (YYYY-MM-DD)
+ *   - `plombaEnd` konec plomby / řízení o vkladu (YYYY-MM-DD, i budoucí) — po něm
+ *                 jde zjistit kupní cenu
  *   - `checked`   jen zapsat, že se kontrolovalo ("Zatím nic")
  *   - `reset`     vrátit byt mezi nerozhodnuté (smaže verdikt, vklad, kontrolu, cenu a datum prodeje)
  * @param current  stav bytu před zápisem: `{ verdict, filedAt, autoUnit }`
@@ -58,7 +60,7 @@ export function buildSaleRecordUpdates({ input, current, now }) {
     // Smaže i cenu a datum prodeje: cena znamená prodáno, takže byt, který se
     // vrací mezi nerozhodnuté, ji mít nesmí (jinak by ho příští start appky
     // zase označil jako prodaný). LV a jednotka zůstávají — patří bytu.
-    const updates = { sale_verdict: null, kn_checked_at: null, kn_filed_at: null, kn_digest_cp: null, verified_sale_price_czk: null, verified_sale_date: null };
+    const updates = { sale_verdict: null, kn_checked_at: null, kn_filed_at: null, kn_digest_cp: null, verified_sale_price_czk: null, verified_sale_date: null, kn_plomba_end: null };
     // Vrací-li uživatel odhad appky ("není to ten byt"), appka mu už automaticky
     // nic nepřiřadí (kn-scan.js, matchFilings).
     if (current.autoUnit) Object.assign(updates, { kn_auto_unit: null, kn_auto_off: 1 });
@@ -73,6 +75,7 @@ export function buildSaleRecordUpdates({ input, current, now }) {
   const saleDate = field(input.saleDate, (t) => (isDay(t) ? t : null));
   const filedAt = field(input.filedAt, (t) => (isDay(t) ? (t <= today ? t : today) : null));
   const lv = field(input.lv, (t) => (LV_RE.test(t) ? t : null));
+  const plombaEnd = field(input.plombaEnd, (t) => (isDay(t) ? t : null));
   const unit = field(input.unit, (t) => {
     const clipped = t.slice(0, 60);
     const parsed = parseUnitNumber(clipped);
@@ -83,6 +86,7 @@ export function buildSaleRecordUpdates({ input, current, now }) {
   if (saleDate !== undefined) updates.verified_sale_date = saleDate;
   if (filedAt !== undefined) updates.kn_filed_at = filedAt;
   if (lv !== undefined) updates.lv_number = lv;
+  if (plombaEnd !== undefined) updates.kn_plomba_end = plombaEnd; // sám o sobě prodej neimplikuje
   if (unit !== undefined) {
     updates.unit_number = unit;
     // Ručně zapsaná jednotka nahrazuje odhad appky.
@@ -94,6 +98,10 @@ export function buildSaleRecordUpdates({ input, current, now }) {
   else if (impliesSale && current.verdict !== "sold") updates.sale_verdict = "sold";
 
   if (updates.sale_verdict || input.checked) updates.kn_checked_at = now;
+  // Nový nebo změněný konec plomby je nová informace: dřívější "Zatím nic" /
+  // kontrola se zruší, ať se cena po konci plomby opravdu připomene (jinak by
+  // starší čas kontroly zadaný konec plomby v minulosti "přehlasoval").
+  if (plombaEnd !== undefined && plombaEnd !== (current.plombaEnd ?? null)) updates.kn_checked_at = null;
   return updates;
 }
 
@@ -103,14 +111,15 @@ export function currentSaleState(members) {
     verdict: saleVerdict(members),
     filedAt: pickOwnValue(members, "kn_filed_at"),
     autoUnit: pickOwnValue(members, "kn_auto_unit"),
+    plombaEnd: pickOwnValue(members, "kn_plomba_end"),
   };
 }
 
-// Družstevní byt prodaný podle portálu se v katastru ověřit nedá, takže se
-// bere poslední INZEROVANÁ cena. Ta ale bývá o pár procent vyšší než kupní (po
-// vyjednávání se byt prodá níž), proto se do statistik počítá snížená o tohle.
-// Cena se nikam neukládá, počítá se při čtení: jakmile uživatel zadá skutečnou
-// cenu, platí ta.
+// Dokud kupní cenu neznáme (nejde ověřit, nebo ještě čeká na ověření v
+// katastru), bere se poslední INZEROVANÁ cena. Ta ale bývá o pár procent vyšší
+// než kupní (po vyjednávání se byt prodá níž), proto se do statistik počítá
+// snížená o tohle. Cena se nikam neukládá, počítá se při čtení: jakmile
+// uživatel zadá skutečnou cenu (nebo se ověří v katastru), platí ta.
 export const ASSUMED_PRICE_DISCOUNT = 0.1;
 
 export function assumedSalePrice(lastPrice) {
@@ -119,14 +128,17 @@ export function assumedSalePrice(lastPrice) {
 
 /**
  * Cena bytu pro statistiky a její původ:
- *  - `verified`: kupní cena zadaná z katastru;
- *  - `assumed`: družstevní byt, poslední inzerovaná cena snížená o ASSUMED_PRICE_DISCOUNT;
- *  - `asking`: poslední inzerovaná cena beze změny (zatím neověřená).
+ *  - `verified`: kupní cena (z katastru, nebo zadaná ručně) — platí vždy;
+ *  - `assumed`: v katastru se ověřit nedá (družstevní, dům bez jednotek) —
+ *    poslední inzerovaná cena snížená o ASSUMED_PRICE_DISCOUNT;
+ *  - `pending`: jde ověřit, jen se to ještě nestalo — totéž snížení, dokud se
+ *    cena neověří;
+ *  - `none`: žádná cena není (inzerát jen "na vyžádání").
  */
 export function statsSalePrice({ verified, price, assumed }) {
   if (verified != null) return { price: verified, basis: "verified" };
-  if (assumed && price != null) return { price: assumedSalePrice(price), basis: "assumed" };
-  return { price: price ?? null, basis: "asking" };
+  if (price == null) return { price: null, basis: "none" };
+  return { price: assumedSalePrice(price), basis: assumed ? "assumed" : "pending" };
 }
 
 /**

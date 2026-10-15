@@ -111,7 +111,7 @@ test("apiWatch: bez skenu, se starým skenem nebo s neúplným skenem se nehlíd
 
 test("apiWatch: čerstvý sken bez plomby po rezervaci = hlídá appka, nic k potvrzení", () => {
   const w = apiWatch(scanOf({ plomby: [] }), { reservedAt: RESERVED, now: NOW });
-  assert.deepEqual(w, { needsConfirm: false, confirmAt: null, unverifiable: false });
+  assert.deepEqual(w, { needsConfirm: false, confirmAt: null, unverifiable: false, plombaActive: false, priceReadyAt: null });
   // Plomba z doby před rezervací se nepočítá.
   const old = scanOf({ plomby: [{ unit: 930004, lv: 6319, rizeni: [proc(5000, "2026-06-01T10:00:00")] }] });
   assert.equal(apiWatch(old, { reservedAt: RESERVED, now: NOW }).needsConfirm, false);
@@ -130,4 +130,30 @@ test("apiWatch: dům bez jednotek (družstevní) nejde ověřit", () => {
   const w = apiWatch(scanOf({ units: [], plomby: [] }), { reservedAt: RESERVED, now: NOW });
   assert.equal(w.unverifiable, true);
   assert.equal(w.needsConfirm, false);
+});
+
+// --- fáze ceny: běží řízení, nebo už skončilo? ---
+
+test("apiWatch se známou jednotkou: plomba na ní = řízení běží, cenu zatím nejde zjistit", () => {
+  const w = apiWatch(scanOf(), { reservedAt: RESERVED, unitNumber: 930004, now: NOW });
+  assert.equal(w.plombaActive, true);
+  assert.equal(w.priceReadyAt, null);
+  // Bez známé jednotky se o běhu řízení nic tvrdit nedá.
+  assert.equal(apiWatch(scanOf(), { reservedAt: RESERVED, now: NOW }).plombaActive, false);
+});
+
+test("apiWatch se známou jednotkou: plomba zmizela a appka to zaznamenala = cenu už jde zjistit", () => {
+  const seen = "2026-10-13T06:00:00.000Z";
+  const scan = scanOf({
+    plomby: [],
+    closed: [{ unit: 930004, lv: 6319, proceeding: proc(7900, "2026-09-24T16:08:46", { stav: "Řízení ukončeno" }), closedSeenAt: seen }],
+  });
+  const w = apiWatch(scan, { reservedAt: RESERVED, unitNumber: 930004, now: NOW });
+  assert.equal(w.plombaActive, false);
+  assert.equal(w.priceReadyAt, Date.parse(seen));
+  // Skončené řízení u jiné jednotky se nepočítá.
+  assert.equal(apiWatch(scan, { reservedAt: RESERVED, unitNumber: 930001, now: NOW }).priceReadyAt, null);
+  // A kdyby na jednotce byla ještě jiná plomba, cena čeká dál.
+  const stillRunning = scanOf({ closed: scan.closed });
+  assert.equal(apiWatch(stillRunning, { reservedAt: RESERVED, unitNumber: 930004, now: NOW }).plombaActive, true);
 });

@@ -48,6 +48,7 @@ const KIND_LABELS = {
   vanish: (day) => `${day} dní po zmizení inzerátu — kontrola`,
   price: (day) => `${day} dní po podání vkladu — zjisti kupní cenu`,
   confirm: () => "V domě je podaný vklad — potvrď, jestli je to tenhle byt",
+  "price-ready": (plombaEnd) => (plombaEnd ? `Plomba skončila ${new Date(plombaEnd).toLocaleDateString("cs-CZ")} — zjisti kupní cenu` : "Řízení o vkladu skončilo — zjisti kupní cenu"),
 };
 
 function toMs(value) {
@@ -75,6 +76,11 @@ function checkpoint(base, day, kind) {
  *                       družstevní), bere se poslední cena jako potvrzená (`priceAssumed`).
  * @param priceBaseAt    odkdy počítat kontroly ceny, když byt je prodaný, ale
  *                       plomba se nezapsala (např. "Prodáno" z Telegramu)
+ * @param plombaEnd      konec plomby (řízení o vkladu), YYYY-MM-DD, jak ho uživatel zná z
+ *                       katastru — i budoucí. Kupní cenu jde zjistit až po něm, takže
+ *                       cena se připomene od tohohle dne (dřív, než by přišel kalendářní
+ *                       kontrolní bod, i později); do té doby se nepřipomíná. Bez
+ *                       něj platí kalendář (25. den po podání a dál).
  * @param lastCheckedAt  poslední kontrola v katastru (ISO), jinak null
  * @param watch          jak plombu hlídá API katastru (kn-plomba.js, apiWatch), nebo
  *                       null, když nehlídá. Jen pro fázi "filing": kde plomby hlídá
@@ -85,7 +91,7 @@ function checkpoint(base, day, kind) {
  *                       dokud uživatel po jejím podání neklikl na "Zatím nic".
  * @returns `{ stage, ageDays, due, dueAt, kind, reason, nextAt, expired, watched, unverifiable }`
  */
-export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, verdict = null, priceKnown = false, portalPrice = false, priceBaseAt = null, lastCheckedAt = null, watch = null, now = Date.now() }) {
+export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, verdict = null, priceKnown = false, portalPrice = false, priceBaseAt = null, plombaEnd = null, lastCheckedAt = null, watch = null, now = Date.now() }) {
   const reservedMs = toMs(reservedAt);
   const ageDays = reservedMs == null ? null : Math.floor((now - reservedMs) / DAY_MS);
   const base = { ageDays, due: false, dueAt: null, kind: null, reason: null, nextAt: null, expired: false, watched: false, unverifiable: false, priceAssumed: false };
@@ -111,6 +117,22 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
   points.sort((a, b) => a.at - b.at);
 
   const checkedMs = toMs(lastCheckedAt) ?? -Infinity;
+  // Fáze ceny: kupní cenu jde v katastru zjistit až po rozhodnutí o vkladu, tedy
+  // po konci plomby. Ten zná uživatel (zapíše ho) nebo ho pozná API (plomba na
+  // jednotce zmizela). Jakmile nastal a po něm se ještě nekontrolovalo, cena je
+  // k vyřízení hned. Zapsaný konec plomby v budoucnu naopak připomínky odloží až
+  // na něj (do té doby by se na cenu zbytečně připomínalo).
+  if (stage === "price" && !priceKnown) {
+    const endMs = toMs(plombaEnd);
+    const apiEnd = watch && !watch.unverifiable ? watch.priceReadyAt : null;
+    const ended = [apiEnd, endMs != null && endMs <= now ? endMs : null].filter((v) => v != null);
+    const readyAt = ended.length ? Math.min(...ended) : null;
+    if (readyAt != null && readyAt > checkedMs) {
+      const shownEnd = endMs != null && endMs <= now ? plombaEnd : null;
+      return { ...base, stage, due: true, dueAt: readyAt, kind: "price-ready", reason: KIND_LABELS["price-ready"](shownEnd) };
+    }
+    if (endMs != null && endMs > now) return { ...base, stage, nextAt: endMs };
+  }
   // Dům bez jednotek v katastru (družstevní byty): vklad tu nevznikne a nic se
   // nedá ověřit, takže byt nemá smysl hlídat ani připomínat — je vyřízený
   // ("nejde ověřit"). Prodej ani cenu z katastru nezjistíme.
@@ -172,6 +194,7 @@ export function buildSaleTrack(members, events, now = Date.now(), watchFor = nul
     // "Prodáno", u portálu zmizení prodaného inzerátu, jinak poslední kontrola.
     priceBaseAt: pickOwnValue(members, "reservation_sold_at") ?? (soldMembers.length ? latestRemovedAt(members) : null) ?? lastCheckedAt,
     lastCheckedAt,
+    plombaEnd: pickOwnValue(members, "kn_plomba_end"),
     watch: watchFor ? watchFor(reservedAt) : null,
     now,
   });

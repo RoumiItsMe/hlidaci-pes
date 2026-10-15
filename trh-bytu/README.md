@@ -497,6 +497,16 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     plomba po rezervaci na ní je silný důkaz → appka sama zapíše „Vklad podán“
     s datem z řízení (i LV), pošle zprávu na Telegram a byt přejde do fáze ceny
     (první kontrola ceny 25. den po podání).
+  - **Cena po podání vkladu a konec plomby.** Kupní cenu jde v katastru zjistit až
+    po rozhodnutí o vkladu, tedy po konci plomby. Byt s podaným vkladem proto
+    zůstává v Katastru v evidenci (skupina „Čeká na další kontrolu“, rozbalená) i
+    **během** plomby a připomene se podle kalendáře (25., 32., 39. den po podání…).
+    U karty (i v detailu bytu) je pole **konec plomby**: zadáš datum, které vidíš v
+    katastru — i budoucí — a cena se pak připomene **až od něj** („Plomba skončila
+    D. M. — zjisti kupní cenu“); dřívější připomínky se do té doby odloží. Zadání
+    nebo změna konce plomby ruší dřívější „Zatím nic“. Když plomba na známé
+    jednotce zmizí a API to zachytí, cena je k vyřízení hned i bez zadaného data. Po
+    zjištění ceny je byt „Prodáno“ s ověřenou cenou (tu pak statistiky použijí).
   - **Jednotka neznámá → shoda na úrovni domu.** V malé lokalitě se v domě za pár
     týdnů neprodávají dva byty, proto se plomba spojí s bytem **sama**, když je
     jasno: dům má právě **jeden** sledovaný byt (rezervovaný nebo zmizelý) bez
@@ -566,7 +576,9 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     je, ale rezervace může padnout; pak byt z přehledu sám zmizí). U každého bytu je
     vidět, na čem prodej stojí („prodáno“ / „zmizelo po rezervaci“ /
     „rezervováno“) a odkud je cena („ověřeno“ / „nejde ověřit — poslední cena −10 %“ /
-    „poslední cena, zatím neověřeno“). Zmizelý byt **bez** rezervace sem nepatří
+    „čeká na ověření v katastru — poslední cena −10 %“; neověřená cena se tedy
+    počítá −10 % vždy, dokud ji neověříš — skutečná cena pak odhad nahradí).
+    Zmizelý byt **bez** rezervace sem nepatří
     (je to jen možný prodej), byt bez ceny v inzerátu („cena na vyžádání“) taky ne,
     dokud nezadáš skutečnou, a ručně skrytý byt (křížek) se nepočítá nikdy. Starší
     sekce „Ceny po rekonstrukci“ zůstává, jen užší.

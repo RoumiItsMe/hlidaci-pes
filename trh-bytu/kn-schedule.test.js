@@ -307,3 +307,69 @@ test("ručně označený prodej (vklad podán) se neověřitelností neukončí 
   const manual = listing("a", { status: "removed", removed_at: iso(at(10)), sale_verdict: "sold", kn_filed_at: "2026-08-12" });
   assert.equal(buildSaleTrack([manual], [], at(40), unverifiable).stage, "price");
 });
+
+// --- fáze ceny: řízení o vkladu běží / skončilo ---
+
+test("fáze ceny: plomba na jednotce cenu NEskrývá — připomíná se podle kalendáře (25. den po podání) jako dřív", () => {
+  const running = () => ({ needsConfirm: false, confirmAt: null, unverifiable: false, plombaActive: true, priceReadyAt: null });
+  const filed = iso(at(10)).slice(0, 10);
+  const t = assessSaleTrack({ reservedAt: iso(T0), filedAt: filed, verdict: "sold", watch: running(), now: at(10 + 30) });
+  assert.equal(t.stage, "price");
+  assert.equal(t.due, true);
+  assert.equal(t.kind, "price");
+});
+
+test("konec plomby zadaný v budoucnu: cena se do té doby nepřipomíná, od něj ano", () => {
+  const base = { reservedAt: iso(T0), filedAt: iso(at(10)).slice(0, 10), verdict: "sold" };
+  const end = iso(at(10 + 40)).slice(0, 10); // konec plomby až 40 dní po podání
+  const before = assessSaleTrack({ ...base, plombaEnd: end, now: at(10 + 30) }); // kalendář by už připomínal (30. den)
+  assert.equal(before.due, false);
+  assert.equal(before.stage, "price");
+  assert.equal(before.nextAt, Date.parse(end));
+  const after = assessSaleTrack({ ...base, plombaEnd: end, now: Date.parse(end) + 3600000 });
+  assert.equal(after.due, true);
+  assert.equal(after.kind, "price-ready");
+  assert.equal(after.dueAt, Date.parse(end));
+  assert.match(after.reason, /Plomba skončila/);
+});
+
+test("konec plomby zadaný v minulosti: cena je k vyřízení hned, i před 25. dnem; odložení platí", () => {
+  const base = { reservedAt: iso(T0), filedAt: iso(at(10)).slice(0, 10), verdict: "sold" };
+  const end = iso(at(10 + 12)).slice(0, 10);
+  const t = assessSaleTrack({ ...base, plombaEnd: end, now: at(10 + 13) });
+  assert.equal(t.due, true);
+  assert.equal(t.kind, "price-ready");
+  const snoozed = assessSaleTrack({ ...base, plombaEnd: end, lastCheckedAt: iso(at(10 + 13)), now: at(10 + 14) });
+  assert.equal(snoozed.due, false);
+  // Cena zjištěná je hotovo bez ohledu na konec plomby.
+  assert.equal(assessSaleTrack({ ...base, plombaEnd: end, priceKnown: true, now: at(10 + 14) }).stage, "done");
+});
+
+test("API ohlásí konec plomby dřív než uživatel: cena je k vyřízení při prvním z obou", () => {
+  const apiEnd = at(10 + 12);
+  const watch = { needsConfirm: false, confirmAt: null, unverifiable: false, plombaActive: false, priceReadyAt: apiEnd };
+  const manualLater = iso(at(10 + 20)).slice(0, 10);
+  const t = assessSaleTrack({ reservedAt: iso(T0), filedAt: iso(at(10)).slice(0, 10), verdict: "sold", plombaEnd: manualLater, watch, now: at(10 + 13) });
+  assert.equal(t.due, true);
+  assert.equal(t.dueAt, apiEnd);
+});
+
+test("fáze ceny: jakmile řízení skončí, cena je k vyřízení hned (i dřív než 25. den)", () => {
+  const endedAt = at(10 + 12);
+  const ended = () => ({ needsConfirm: false, confirmAt: null, unverifiable: false, plombaActive: false, priceReadyAt: endedAt });
+  const t = assessSaleTrack({ reservedAt: iso(T0), filedAt: iso(at(10)).slice(0, 10), verdict: "sold", watch: ended(), now: at(10 + 13) });
+  assert.equal(t.due, true);
+  assert.equal(t.kind, "price-ready");
+  assert.equal(t.dueAt, endedAt);
+  assert.match(t.reason, /Řízení o vkladu skončilo/);
+});
+
+test('"Zatím nic" po skončení řízení připomínku odloží; cena zjištěná = hotovo', () => {
+  const endedAt = at(22);
+  const ended = () => ({ needsConfirm: false, confirmAt: null, unverifiable: false, plombaActive: false, priceReadyAt: endedAt });
+  const base = { reservedAt: iso(T0), filedAt: iso(at(10)).slice(0, 10), verdict: "sold", watch: ended(), now: at(23) };
+  const snoozed = assessSaleTrack({ ...base, lastCheckedAt: iso(at(22) + 3600000) });
+  assert.equal(snoozed.due, false);
+  assert.equal(snoozed.kind, null);
+  assert.equal(assessSaleTrack({ ...base, priceKnown: true }).stage, "done");
+});

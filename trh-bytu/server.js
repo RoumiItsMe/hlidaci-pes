@@ -570,6 +570,7 @@ function computeEntries(db) {
       // ještě nekontrolovalo (viz kn-schedule.js).
       saleCandidate: Boolean(track?.due),
       knFiledAt: pickOwnValue(g.members, "kn_filed_at"),
+      plombaEnd: pickOwnValue(g.members, "kn_plomba_end"),
       knAutoUnit: pickOwnValue(g.members, "kn_auto_unit"),
       lvNumber: pickOwnValue(g.members, "lv_number"),
       saleVerdict: verdict,
@@ -1375,7 +1376,7 @@ function soldSaleStats(entries, isEligible) {
       count: rows.length,
       verifiedCount: rows.filter((r) => r.basis === "verified").length,
       assumedCount: rows.filter((r) => r.basis === "assumed").length,
-      askingCount: rows.filter((r) => r.basis === "asking").length,
+      pendingCount: rows.filter((r) => r.basis === "pending").length,
       avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
       min: Math.round(Math.min(...values)),
       max: Math.round(Math.max(...values)),
@@ -1417,7 +1418,9 @@ function renderStatsItemsList(items) {
           ? ` <span class="muted">(ověřeno)</span>`
           : it.basis === "assumed"
           ? ` <span class="muted">(nejde ověřit — poslední cena −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %)</span>`
-          : ` <span class="muted">(poslední cena, zatím neověřeno)</span>`;
+          : it.basis === "pending"
+          ? ` <span class="muted">(čeká na ověření v katastru — poslední cena −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %)</span>`
+          : "";
       const areaLabel = it.areaM2 ? `, ${it.areaM2} m²` : "";
       const evidenceLabel = { sold: "prodáno", gone: "zmizelo po rezervaci", reserved: "rezervováno" }[it.evidence];
       return `<li><a href="/byt/${encodeURIComponent(it.id)}">${esc(it.address)}${areaLabel}</a> — ${formatCzk(Math.round(it.pricePerM2))}/m²${verifiedBadge}${evidenceLabel ? ` <span class="muted">· ${evidenceLabel}</span>` : ""}</li>`;
@@ -1431,7 +1434,7 @@ function renderCityStatsTable(cityStats) {
     .map(
       (d) => `<tr>
         <td>${esc(d.disposition)}</td>
-        <td>${renderStatsItemsList(d.items)}${d.verifiedCount ? ` <span class="muted">(${d.verifiedCount}× ověřeno)</span>` : ""}${d.assumedCount ? ` <span class="muted">(${d.assumedCount}× nejde ověřit −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %)</span>` : ""}${d.askingCount ? ` <span class="muted">(${d.askingCount}× neověřeno)</span>` : ""}</td>
+        <td>${renderStatsItemsList(d.items)}${d.verifiedCount ? ` <span class="muted">(${d.verifiedCount}× ověřeno)</span>` : ""}${d.assumedCount ? ` <span class="muted">(${d.assumedCount}× nejde ověřit −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %)</span>` : ""}${d.pendingCount ? ` <span class="muted">(${d.pendingCount}× čeká na ověření −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %)</span>` : ""}</td>
         <td>${formatCzk(d.avg)}/m²</td>
         <td class="muted">${formatCzk(d.min)}–${formatCzk(d.max)}/m²</td>
       </tr>`
@@ -1454,12 +1457,13 @@ function renderStats(db) {
   const counts = { active: 0, reserved: 0, sold: 0, removed: 0 };
   for (const e of entries) counts[e.status]++;
   const soldVerified = entries.filter((e) => e.status === "sold" && e.verifiedSalePrice != null).length;
-  const soldAssumed = entries.filter((e) => e.status === "sold" && e.verifiedSalePrice == null && effectivePriceForStats(e).basis === "assumed").length;
+  const soldAssumed = entries.filter((e) => e.status === "sold" && effectivePriceForStats(e).basis === "assumed").length;
+  const soldPending = entries.filter((e) => e.status === "sold" && effectivePriceForStats(e).basis === "pending").length;
   const countRows = Object.entries(counts)
     .map(
       ([k, n]) =>
         `<li>${esc(STATUS_LABELS[k].text)}: <strong>${n}</strong>${
-          k === "sold" && n ? ` <span class="muted">(ověřená cena ${soldVerified}, odhad z poslední ceny −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (nejde ověřit) ${soldAssumed}, zatím neověřeno ${n - soldVerified - soldAssumed})</span>` : ""
+          k === "sold" && n ? ` <span class="muted">(ověřená cena ${soldVerified}; odhad −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % z poslední ceny: čeká na ověření ${soldPending}, nejde ověřit ${soldAssumed})</span>` : ""
         }</li>`
     )
     .join("");
@@ -1501,8 +1505,9 @@ function renderStats(db) {
       Byty, které jsou aspoň částečně prodané: prodané (podle katastru, nebo podle portálu), po rezervaci zmizelé z nabídky
       (${goneAfterReservation}× — téměř jistý prodej) a zatím jen rezervované (${justReserved}× — kupec už je, rezervace ale ještě může
       padnout; pak byt z přehledu sám zmizí). U každého bytu je vidět, na čem prodej stojí. Bez ohledu na stav bytu. Cena: ověřená
-      z katastru; jinak poslední inzerovaná cena, a ta se u bytů, které se v katastru ověřit nedají (družstevní, dům bez
-      jednotek), snižuje o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (kupní cena bývá nižší než inzerovaná). Zmizelé byty bez rezervace sem
+      z katastru (nebo zadaná ručně); dokud není, počítá se poslední inzerovaná cena snížená o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (kupní cena
+      bývá nižší než inzerovaná) — „čeká na ověření v katastru“, a u bytů, které se v katastru ověřit nedají (družstevní, dům bez
+      jednotek), „nejde ověřit“. Jakmile cenu ověříš, nahradí odhad. Zmizelé byty bez rezervace sem
       nepatří, to je jen možný prodej. Skutečnou cenu můžeš zadat u bytu (Katastr → Vyřízené → Znám cenu, nebo v detailu).
       Celkem ${soldStats.totalEligible} bytů se známou cenou/m².
     </p>
@@ -1512,10 +1517,9 @@ function renderStats(db) {
     <p class="muted">
       Byty zmizelé z nabídky nebo označené jako prodané, se stavem „Po rekonstrukci", případně ručně
       přehlasované přes sloupec „Ve statistice" v tabulce srovnání. Cena je ověřená prodejní, pokud ji máš dohledanou
-      v katastru. Družstevní byt označený portálem jako „prodáno" se v katastru ověřit nedá — počítá se poslední cena z inzerátu
-      snížená o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (kupní cena bývá nižší než inzerovaná) a je označený jako odhad. Jinak je to poslední
-      inzerovaná cena před zmizením nebo u prodaného bytu, kterou jde v katastru ještě ověřit — u ní počítej s návodovým odečtem
-      cca 5 % pro konzervativní odhad. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
+      v katastru (nebo zadanou ručně). Jinak je to poslední inzerovaná cena před zmizením nebo u prodaného bytu snížená o
+      ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (kupní cena bývá nižší než inzerovaná), označená „čeká na ověření v katastru“, případně „nejde ověřit“
+      u družstevních bytů a domů bez jednotek. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
     </p>
     ${renoStats.cities.length ? renoStats.cities.map(renderCityStatsTable).join("") : `<p class="muted">Zatím žádná data.</p>`}`;
 }
@@ -1608,6 +1612,7 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
   const price = pickOwnValue(members, "verified_sale_price_czk");
   const saleDate = pickOwnValue(members, "verified_sale_date");
   const filed = pickOwnValue(members, "kn_filed_at");
+  const plombaEnd = pickOwnValue(members, "kn_plomba_end");
   const lv = pickOwnValue(members, "lv_number");
   const autoUnit = pickOwnValue(members, "kn_auto_unit");
   const encId = encodeURIComponent(rep.id);
@@ -1623,6 +1628,7 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
   const form = knActionForm(
     encId,
     `<label class="kn-date">vklad podán <input type="date" name="kn_filed_at" value="${esc(filed ?? "")}" title="Den, kdy byl v katastru podán návrh na vklad (plomba)"></label>
+      <label class="kn-date">konec plomby <input type="date" name="kn_plomba_end" value="${esc(plombaEnd ?? "")}" title="Kdy plomba (řízení o vkladu) končí nebo skončila — po něm jde v katastru zjistit kupní cenu. Můžeš zadat i budoucí termín; prázdné pole ho smaže."></label>
       <input type="text" name="lv_number" value="${esc(lv ?? "")}" placeholder="LV č." class="kn-lv" maxlength="20" title="Číslo listu vlastnictví">
       <input type="number" name="verified_sale_price_czk" min="0" step="1" value="${price ?? ""}" placeholder="kupní cena v Kč">
       <label class="kn-date">datum prodeje <input type="date" name="verified_sale_date" value="${esc(saleDate ?? "")}" title="Datum podpisu smlouvy nebo vkladu do katastru"></label>
@@ -1740,6 +1746,7 @@ function renderKnQueue(db) {
     const parts = [t.unreserved ? "Bez rezervace" : `Rezervováno od ${formatDateOnly(t.reservedAt)} (${t.ageDays} dní)`];
     if (e.removedAt) parts.push(`inzerát zmizel ${formatDateOnly(e.removedAt)}`);
     if (e.knFiledAt) parts.push(`vklad podán ${formatDateOnly(e.knFiledAt)}`);
+    if (e.plombaEnd) parts.push(`plomba ${Date.parse(e.plombaEnd) <= Date.now() ? "skončila" : "do"} ${formatDateOnly(e.plombaEnd)}`);
     if (e.knCheckedAt) parts.push(`naposledy zkontrolováno ${formatDateOnly(e.knCheckedAt)}`);
     return esc(parts.join(" · "));
   };
@@ -1755,7 +1762,7 @@ function renderKnQueue(db) {
     const { lookup, houseFacts, buildingId } = lookupFor(e);
     const forms =
       t.stage === "price"
-        ? actionForm(encId, `${lvInput(e)}${unitInput(e)}<label class="kn-date">vklad podán <input type="date" name="kn_filed_at" value="${esc(e.knFiledAt ?? "")}" title="Den podání vkladu — jde opravit"></label>${saleFields(e)}${btn("sold", "Cena zjištěna", "kn-btn--sold")}${btn("check", "Zatím nic", "kn-btn--later")}${btn("reset", "Zrušit „vklad podán“", "kn-btn--later")}`)
+        ? actionForm(encId, `${lvInput(e)}${unitInput(e)}<label class="kn-date">vklad podán <input type="date" name="kn_filed_at" value="${esc(e.knFiledAt ?? "")}" title="Den podání vkladu — jde opravit"></label><label class="kn-date">konec plomby <input type="date" name="kn_plomba_end" value="${esc(e.plombaEnd ?? "")}" title="Kdy plomba (řízení o vkladu) končí nebo skončila — po něm jde v katastru zjistit kupní cenu. Můžeš zadat i budoucí termín; prázdné pole ho smaže."></label>${btn("plomba", "Uložit konec plomby", "kn-btn--later")}${saleFields(e)}${btn("sold", "Cena zjištěna", "kn-btn--sold")}${btn("check", "Zatím nic", "kn-btn--later")}${btn("reset", "Zrušit „vklad podán“", "kn-btn--later")}`)
         : actionForm(
             encId,
             `${lvInput(e)}${unitInput(e)}<label class="kn-date">vklad podán <input type="date" name="kn_filed_at" value="${todayLocal}" title="Den, kdy byl v katastru podán návrh na vklad — plomba (nepovinné, výchozí dnes)"></label>${btn("filed", "Vklad podán", "kn-btn--sold")}${btn("check", "Zatím nic", "kn-btn--later")}${btn("withdrawn", "Neprodáno", "")}`
@@ -1780,7 +1787,7 @@ function renderKnQueue(db) {
 
   const waitingItem = (e) => {
     const encId = encodeURIComponent(e.rep.id);
-    const stage = e.track.stage === "price" ? "vklad podán, čeká na cenu" : "čeká na vklad";
+    const stage = e.track.stage === "price" ? `vklad podán, čeká na cenu${e.plombaEnd ? `; plomba ${Date.parse(e.plombaEnd) <= Date.now() ? "skončila" : "do"} ${formatDateOnly(e.plombaEnd)}` : ""}` : "čeká na vklad";
     return `<details class="kn-wait">
         <summary><a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— ${stage}; další kontrola ${esc(formatDateOnly(new Date(e.track.nextAt).toISOString()))}</span></summary>
         <div class="kn-item kn-item--wait">${cardBody(e)}</div>
@@ -1909,7 +1916,7 @@ function renderKnQueue(db) {
       `<p class="empty">Nic ke kontrole.${watched.length ? " Plomby hlídá appka sama přes API katastru (viz níž)." : ""}${nextUp ? ` Další kontrola: ${esc(formatDateOnly(new Date(nextUp.track.nextAt).toISOString()))} — ${esc(cardTitle(nextUp.rep, nextUp.address, nextUp.priceLabel))}.` : ""}</p>`
     }</div>
     ${watched.length ? `<details class="kn-done"${watched.some(freshlyGone) ? " open" : ""}><summary>Hlídá appka přes API katastru (${watched.length})</summary>${watched.map(watchedItem).join("")}</details>` : ""}
-    ${waiting.length ? `<details class="kn-done"><summary>Čeká na další kontrolu (${waiting.length})</summary>${waiting.map(waitingItem).join("")}</details>` : ""}
+    ${waiting.length ? `<details class="kn-done"${waiting.some((e) => e.track.stage === "price") ? " open" : ""}><summary>Čeká na další kontrolu (${waiting.length})</summary>${waiting.map(waitingItem).join("")}</details>` : ""}
     ${
       noAddressRows
         ? `<details class="kn-done" open><summary>Bez přesné adresy (${noAddress.length})</summary><p class="muted">Bez adresy je v katastru nejde dohledat — doplň ji, dokud je inzerát online.</p><ul>${noAddressRows}</ul></details>`
@@ -2093,7 +2100,7 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(knMatch[1]);
     const fields = await parseBody(req);
     const action = fields.action;
-    const group = ["filed", "unit", "sold", "withdrawn", "check", "reset", "record"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
+    const group = ["filed", "unit", "sold", "withdrawn", "check", "reset", "record", "plomba"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
     if (group) {
       const now = nowIso();
       const today = now.slice(0, 10);
@@ -2106,6 +2113,9 @@ const server = createServer(async (req, res) => {
       let input = null;
       if (action === "reset") {
         input = { reset: true };
+      } else if (action === "plomba") {
+        // Jen konec plomby (řízení o vkladu): prázdné pole ho smaže.
+        input = { plombaEnd: fields.kn_plomba_end ?? "" };
       } else if (action === "check") {
         input = { checked: true, lv: given(fields.lv_number), unit: given(fields.unit_number) };
       } else if (action === "withdrawn") {
@@ -2137,7 +2147,7 @@ const server = createServer(async (req, res) => {
           unit: given(fields.unit_number),
         };
       } else {
-        input = { filedAt: fields.kn_filed_at, lv: fields.lv_number, price: fields.verified_sale_price_czk, saleDate: fields.verified_sale_date };
+        input = { filedAt: fields.kn_filed_at, plombaEnd: fields.kn_plomba_end, lv: fields.lv_number, price: fields.verified_sale_price_czk, saleDate: fields.verified_sale_date };
       }
       const updates = input ? buildSaleRecordUpdates({ input, current, now }) : {};
       if (Object.keys(updates).length) for (const m of group.members) updateListingFields(db, m.id, updates);

@@ -61,7 +61,7 @@ export function analyzePlombas(scan, { reservedAt, unitNumber = null }) {
 
   for (const c of scan.closed ?? []) {
     if (!keep(c.unit) || !qualifyingProceedings([c.proceeding], reservedAt).length) continue;
-    base.closed.push({ number: c.unit, label: formatUnitNumber(c.unit), lv: c.lv ?? null, proceeding: c.proceeding });
+    base.closed.push({ number: c.unit, label: formatUnitNumber(c.unit), lv: c.lv ?? null, proceeding: c.proceeding, seenAt: c.closedSeenAt ?? null });
   }
   return base;
 }
@@ -118,5 +118,16 @@ export function apiWatch(scan, { reservedAt, unitNumber = null, now = Date.now()
   const analysis = analyzePlombas(scan, { reservedAt, unitNumber });
   if (analysis.incomplete || analysis.unit?.missing) return null;
   const first = analysis.candidates[0];
-  return { needsConfirm: Boolean(first), confirmAt: first ? Date.parse(first.filedAt) : null, unverifiable: false };
+  // Fáze ceny (vklad podán, jednotka je známá): řízení o vkladu ještě běží
+  // (plomba je na jednotce), nebo skončilo (plomba zmizela) — teprve potom jde
+  // v katastru zjistit kupní cenu.
+  const unitKnown = analysis.mode === "unit";
+  const endedAt = unitKnown ? analysis.closed.map((c) => (c.seenAt ? Date.parse(c.seenAt) : NaN)).filter(Number.isFinite) : [];
+  return {
+    needsConfirm: Boolean(first),
+    confirmAt: first ? Date.parse(first.filedAt) : null,
+    unverifiable: false,
+    plombaActive: unitKnown && Boolean(first),
+    priceReadyAt: endedAt.length ? Math.max(...endedAt) : null,
+  };
 }

@@ -204,6 +204,9 @@ const COLUMN_MIGRATIONS = [
   // zrušil, tomuhle bytu se už automaticky nepřiřazuje nic.
   { table: "listings", column: "kn_auto_unit", ddl: "TEXT" },
   { table: "listings", column: "kn_auto_off", ddl: "INTEGER" },
+  // Konec plomby (řízení o vkladu), YYYY-MM-DD, jak ho uživatel zná z katastru —
+  // i budoucí. Kupní cenu jde zjistit až po něm (viz kn-schedule.js, fáze ceny).
+  { table: "listings", column: "kn_plomba_end", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {
