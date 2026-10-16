@@ -12,7 +12,7 @@ import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
-import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
+import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian, RECHECK_UNKNOWN_DAYS } from "./ruian.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
 import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
@@ -1078,6 +1078,14 @@ function renderDetail(db, id) {
   const knHtml = kn
     ? `<p class="muted"><strong>Katastr:</strong> ${esc(describeKn(kn))}${kn.via === "bod" && ai.state !== "known" ? " <span>(podle bodu z inzerátu, adresa není potvrzená)</span>" : ""}</p>`
     : "";
+  // Zapsaná adresa, kterou RÚIAN nezná (typicky novostavba z webu developera,
+  // číslo popisné se v registru objeví až po dokončení) — ať "budova nenalezena"
+  // nevypadá jako chyba appky; záznam se po čase ověří znovu (viz ruian.js).
+  const parsedExact = ai.exact ? parseExactAddress(ai.exact) : null;
+  const ruianUnknown = parsedExact && actx.ruianCache.get(addressKey(parsedExact.street, parsedExact.number, parsedExact.city)) === null;
+  const ruianHint = ruianUnknown
+    ? `<p class="muted">RÚIAN adresu „${esc(ai.exact)}“ zatím nezná. U novostavby je to běžné — číslo popisné se do registru dostane až po dokončení domu. Appka to zkusí znovu jednou za ${RECHECK_UNKNOWN_DAYS} dní a až dům najde, začne ho hlídat v katastru.</p>`
+    : "";
   const addressStatusText =
     ai.state === "known"
       ? ai.auto
@@ -1161,6 +1169,7 @@ function renderDetail(db, id) {
     ${suggestionHtml}
     ${evidenceHtml}
     ${knHtml}
+    ${ruianHint}
     ${retryHtml}
     ${mapLinks ? `<p class="muted">Bod z portálu na mapě: ${mapLinks}</p>` : ""}
     ${saleSectionHtml}

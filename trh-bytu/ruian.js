@@ -143,6 +143,31 @@ export async function ruianLookupAddress(street, number, city) {
 // viz ruianPending.
 export const ADDRESS_LOOKUP_VERSION = 2;
 
+// Adresa, kterou RÚIAN neznal, se zkusí znovu po tolika dnech. Novostavba z
+// webu developera ("Lhotka 51") má adresní místo a číslo popisné v registru až
+// po dokončení domu; záporná odpověď proto nesmí platit navždy.
+export const RECHECK_UNKNOWN_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Kdy byl který klíč naposledy zjišťován: Map klíč → čas (ms). */
+export function loadRuianFetchedAt(db) {
+  const at = new Map();
+  for (const r of db.prepare("SELECT key, fetched_at FROM ruian_cache").all()) at.set(r.key, Date.parse(r.fetched_at));
+  return at;
+}
+
+/**
+ * Má se záznam o adrese v mezipaměti zopakovat? Ano, když RÚIAN adresu
+ * neznal a od té doby uplynulo RECHECK_UNKNOWN_DAYS, nebo když ji starší verze
+ * hledání našla bez budovy (viz ADDRESS_LOOKUP_VERSION). Body (pt:) se
+ * nemění, ty se neopakují.
+ */
+export function isRuianEntryStale(key, cached, fetchedAtMs, now = Date.now()) {
+  if (!key.startsWith("adr:")) return false;
+  if (cached === null) return now - (fetchedAtMs ?? 0) >= RECHECK_UNKNOWN_DAYS * DAY_MS;
+  return Boolean(cached?.addressPoint) && !cached.building && cached.lookupVersion !== ADDRESS_LOOKUP_VERSION;
+}
+
 /** "Truby 1737, Česká Třebová" -> { street, number, city } (nebo null, když to nevypadá jako adresa s číslem). */
 export function parseExactAddress(text) {
   const m = String(text ?? "")
@@ -170,6 +195,7 @@ export function saveRuian(db, key, result) {
  */
 export async function ruianPending(db, log, { limit = 150, delayMs = 250 } = {}) {
   const cache = loadRuianCache(db);
+  const fetchedAt = loadRuianFetchedAt(db);
   const todo = [];
   for (const p of db
     .prepare(
@@ -185,9 +211,9 @@ export async function ruianPending(db, log, { limit = 150, delayMs = 250 } = {})
     const parsed = parseExactAddress(r.exact_address);
     if (!parsed) continue;
     const key = addressKey(parsed.street, parsed.number, parsed.city);
-    const cached = cache.get(key);
-    const stale = cached && cached.addressPoint && !cached.building && cached.lookupVersion !== ADDRESS_LOOKUP_VERSION;
-    if (!cache.has(key) || stale) todo.push({ key, run: () => ruianLookupAddress(parsed.street, parsed.number, parsed.city) });
+    if (!cache.has(key) || isRuianEntryStale(key, cache.get(key), fetchedAt.get(key))) {
+      todo.push({ key, run: () => ruianLookupAddress(parsed.street, parsed.number, parsed.city) });
+    }
   }
 
   let done = 0;

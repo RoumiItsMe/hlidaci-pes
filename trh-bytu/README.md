@@ -422,9 +422,15 @@ obrysu víc objektů najednou (sousední sekce, přístavba) — budova pak vyš
 správně (reálně J. Drobného 1620, Česká Třebová). Obec se při hledání porovnává
 bez PSČ („560 02 Česká Třebová“ i „56002 Česká Třebová“ je totéž). Starší záznamy
 v mezipaměti, které budovu nenašly, se při příštím sběru zopakují samy
-(`ADDRESS_LOOKUP_VERSION` v `ruian.js`). Zůstává pár adres, které RÚIAN nezná v
-tom tvaru, v jakém je zapsaná (např. část obce bez ulice); u nich detail ukáže
-jen k.ú. a budovu je potřeba dohledat ručně.
+(`ADDRESS_LOOKUP_VERSION` v `ruian.js`). **Novostavba z webu developera.** Adresa z marketingu („Lhotka 51, Česká
+Třebová“, projekt Rezidence Na Rovině Lhotka) v RÚIAN často není: číslo popisné
+a adresní místo se v registru objeví až po dokončení domu, a do té doby není ani
+budova s jednotkami v katastru. Detail to řekne („RÚIAN adresu zatím nezná…“) a
+nepůsobí to jako chyba appky. Záporná odpověď RÚIAN **neplatí navždy**: adresa,
+kterou RÚIAN neznal, se při sběru zkusí znovu po 14 dnech (`RECHECK_UNKNOWN_DAYS`
+v `ruian.js`) a jakmile dům v registru je, appka ho najde sama a začne ho
+hlídat v katastru. Do té doby byt v katastru ověřit nejde (jednotky ještě
+neexistují; u rozestavěného domu prodej typicky běží smlouvou o budoucí smlouvě a vklad přijde až po dokončení).
 
 - **Vysoká jistota** → adresa se doplní sama a v přehledu je u ní „(auto)", v
   detailu je vidět **důvod** (které zdroje se shodly). Střední jistota je jen

@@ -16,7 +16,7 @@ import { groupListings, bestAddress, pickOwnValue, isCooperativeOwnership } from
 import { extractCity } from "./parse.js";
 import { updateListingFields } from "./db.js";
 import { geoKey, loadGeocodeCache } from "./geo.js";
-import { loadRuianCache, pointKey, addressKey, parseExactAddress, ruianLookupAddress, saveRuian } from "./ruian.js";
+import { loadRuianCache, loadRuianFetchedAt, isRuianEntryStale, pointKey, addressKey, parseExactAddress, ruianLookupAddress, saveRuian } from "./ruian.js";
 import { resolveAddress, distanceMeters } from "./geo-suggest.js";
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
@@ -164,6 +164,7 @@ export async function ruianPendingTextAddresses(db, log, { limit = 40, delayMs =
   const listings = db.prepare("SELECT * FROM listings").all();
   const groups = groupListings(listings);
   const actx = buildAddressContext(db, listings, groups);
+  const fetchedAt = loadRuianFetchedAt(db);
   const todo = [];
   for (const group of groups) {
     const members = group.members;
@@ -174,7 +175,8 @@ export async function ruianPendingTextAddresses(db, log, { limit = 40, delayMs =
     const city = groupCity(actx, group);
     if (!city) continue;
     const key = addressKey(r.street, r.number, city);
-    if (actx.ruianCache.has(key) || todo.some((t) => t.key === key)) continue;
+    const known = actx.ruianCache.has(key) && !isRuianEntryStale(key, actx.ruianCache.get(key), fetchedAt.get(key));
+    if (known || todo.some((t) => t.key === key)) continue;
     todo.push({ key, street: r.street, number: r.number, city });
   }
 

@@ -78,3 +78,48 @@ test("adresa, kterou RÚIAN nezná, vrací null", async () => {
     stub.restore();
   }
 });
+
+import { DatabaseSync } from "node:sqlite";
+import { initDb, insertListing, updateListingFields } from "./db.js";
+import { addressKey, saveRuian, loadRuianCache, ruianPending, isRuianEntryStale, RECHECK_UNKNOWN_DAYS } from "./ruian.js";
+
+const DAYS = 24 * 60 * 60 * 1000;
+const NOW = Date.parse("2026-10-16T12:00:00.000Z");
+
+test("co se v mezipaměti opakuje: adresa neznámá po RECHECK_UNKNOWN_DAYS, starší nález bez budovy; ostatní ne", () => {
+  const key = "adr:lhotka|51|ceska trebova";
+  const old = NOW - (RECHECK_UNKNOWN_DAYS + 1) * DAYS;
+  const recent = NOW - 2 * DAYS;
+  assert.equal(isRuianEntryStale(key, null, recent, NOW), false); // adresu RÚIAN neznal teprve nedávno
+  assert.equal(isRuianEntryStale(key, null, old, NOW), true); // novostavba mezitím mohla dostat číslo popisné
+  assert.equal(isRuianEntryStale(key, null, undefined, NOW), true); // bez údaje o stáří radši zopakovat
+  assert.equal(isRuianEntryStale("pt:49.9,16.4", null, old, NOW), false); // body se neopakují
+  assert.equal(isRuianEntryStale(key, { addressPoint: "x" }, recent, NOW), true); // starší verze hledání, budova nenalezena
+  assert.equal(isRuianEntryStale(key, { addressPoint: "x", lookupVersion: ADDRESS_LOOKUP_VERSION }, recent, NOW), false);
+  assert.equal(isRuianEntryStale(key, { addressPoint: "x", building: { kod: 1 } }, old, NOW), false);
+});
+
+test("ruianPending: adresa, kterou RÚIAN dřív neznal, se po čase zjistí znovu — novostavba se objeví v registru", async () => {
+  const db = initDb(new DatabaseSync(":memory:"));
+  insertListing(db, { id: "sreality:1", source: "sreality", source_id: "1", url: "https://example.invalid/1", title: "Prodej bytu 2+1", address: "Česká Třebová", status: "active", first_seen_at: "2026-09-24T06:00:00.000Z", last_seen_at: "2026-10-16T06:00:00.000Z" });
+  updateListingFields(db, "sreality:1", { exact_address: "J. Drobného 1620, Česká Třebová" });
+  const key = addressKey("J. Drobného", "1620", "Česká Třebová");
+  saveRuian(db, key, null); // dřív neznámá
+
+  const stub = stubRuian();
+  try {
+    // čerstvé "neznámá" se nezjišťuje znovu
+    await ruianPending(db, () => {}, { delayMs: 0 });
+    assert.equal(loadRuianCache(db).get(key), null);
+    assert.equal(stub.seen.length, 0);
+
+    // po RECHECK_UNKNOWN_DAYS ano, a RÚIAN už adresu i budovu zná
+    db.prepare("UPDATE ruian_cache SET fetched_at = ? WHERE key = ?").run(new Date(Date.now() - (RECHECK_UNKNOWN_DAYS + 1) * DAYS).toISOString(), key);
+    await ruianPending(db, () => {}, { delayMs: 0 });
+    const refreshed = loadRuianCache(db).get(key);
+    assert.equal(refreshed.building.kod, 777);
+    assert.equal(refreshed.lookupVersion, ADDRESS_LOOKUP_VERSION);
+  } finally {
+    stub.restore();
+  }
+});
