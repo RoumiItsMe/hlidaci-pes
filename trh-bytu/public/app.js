@@ -58,6 +58,11 @@ document.addEventListener("submit", async (event) => {
     const currentMain = document.querySelector("main");
     if (nextMain && currentMain) {
       document.title = next.title;
+      // Rozbalené <details data-keep-open="…"> (seznam úkolů na přehledu) zůstanou
+      // rozbalené i po výměně obsahu — jinak by se po každém vyřízeném bytu
+      // sbalily a hromadné vyřizování by se muselo pokaždé rozklikávat znovu.
+      const open = [...currentMain.querySelectorAll("details[data-keep-open][open]")].map((d) => d.dataset.keepOpen);
+      for (const id of open) nextMain.querySelector(`details[data-keep-open="${CSS.escape(id)}"]`)?.setAttribute("open", "");
       currentMain.replaceWith(nextMain);
     }
   } catch (err) {

@@ -178,7 +178,7 @@ function addressChipHtml(ai, status, href = null) {
     return chip(`addr-chip${ai.auto ? " addr-chip--auto" : ""}`, text, ai.auto ? "Adresu doplnila appka sama z polohy v inzerátu — ověř ji a doplň jednotku" : null);
   }
   if (ai.state === "notNeeded") return chip("addr-chip addr-chip--coop", "družstevní · adresa netřeba", "Družstevní byt se v katastru nedá ověřit, takže přesná adresa nic nepřinese — stačí lokalita z inzerátu");
-  if (ai.state === "unknown") return chip("addr-chip addr-chip--unknown", "📍 adresa neznámá");
+  if (ai.state === "unknown") return chip("addr-chip addr-chip--unknown", "📍 adresa nedohledatelná");
   if (ai.state === "missing" && ai.suggestion) return chip("addr-chip addr-chip--missing", "📍 potvrdit návrh adresy", `Návrh: ${ai.suggestion} — potvrdíš v detailu bytu`);
   if (status === "active" || status === "reserved") return chip("addr-chip addr-chip--missing", "📍 doplnit adresu");
   return "";
@@ -1123,7 +1123,7 @@ function renderDetail(db, id) {
       : ai.state === "notNeeded"
       ? "Družstevní byt — přesná adresa není potřeba (v katastru se nedá ověřit), stačí lokalita z inzerátu. Zapsat ji můžeš."
       : ai.state === "unknown"
-      ? "Označeno jako neznámá."
+      ? "Označeno jako nedohledatelná."
       : "⚠ Zatím nevyplněno.";
   // Odkazy na bod z portálu na mapě — k ručnímu ověření (okno, fasáda…).
   const mapLinks = members
@@ -1192,7 +1192,7 @@ function renderDetail(db, id) {
       <label>Jednotka (číslo jednotky nebo bytu)<input type="text" name="unit_number" value="${esc(ai.unit)}" placeholder="např. 1234/12" maxlength="60"></label>
       <div class="address-actions">
         <button type="submit" name="mode" value="save">Uložit adresu</button>
-        <button type="submit" name="mode" value="unknown" class="btn-secondary">Adresa neznámá</button>
+        <button type="submit" name="mode" value="unknown" class="btn-secondary">Adresa nedohledatelná</button>
       </div>
     </form>
     ${suggestionHtml}
@@ -1508,23 +1508,38 @@ function renderDashboard(db) {
   // Úkoly s pár byty ukážou rovnou odkazy na ně; u dlouhého seznamu (adresy,
   // chybějící údaje) stačí počet a odkaz na filtrovaný pohled.
   const flatName = (e) => [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null].filter(Boolean).join(" ") + (e.address ? `, ${e.address}` : "") || "Byt";
-  // Návrh adresy jde potvrdit rovnou z úkolu (jedno kliknutí, stejná akce jako "Použít návrh" v detailu).
-  const confirmList = (t) => {
+  // Adresy se vyřizují rovnou z úkolu: návrh jde potvrdit jedním kliknutím (stejná
+  // akce jako "Použít návrh" v detailu) a adresu, která nejde zjistit, označit
+  // jako nedohledatelnou — byt pak z úkolů zmizí (v detailu jde vrátit zpět přes
+  // "Zkusit znovu automaticky"), ať úkol nevisí donekonečna.
+  const ADDRESS_ROWS = 8;
+  const unreachableForm = (encId) =>
+    `<form class="ajax-form" method="post" action="/byt/${encId}/adresa"><button type="submit" name="mode" value="unknown" class="btn-secondary" title="Adresu nejde zjistit — byt z úkolů zmizí. Vrátit jde v detailu bytu (Zkusit znovu automaticky).">Nedohledatelná</button></form>`;
+  const addressTaskList = (t) => {
     const rows = t.entries
-      .slice(0, 6)
+      .slice(0, ADDRESS_ROWS)
       .map((e) => {
         const encId = encodeURIComponent(e.rep.id);
-        return `<li class="task-confirm"><a href="/byt/${encId}">${esc(truncate(flatName(e), 40))}</a> → <strong>${esc(e.addressInfo.suggestion)}</strong> <span class="muted">(${esc(truncate(e.addressInfo.suggestionWhy ?? "", 80))})</span>
-          <form class="ajax-form" method="post" action="/byt/${encId}/adresa"><input type="hidden" name="exact_address" value="${esc(e.addressInfo.suggestion)}"><button type="submit" name="mode" value="save">✓ Potvrdit</button></form></li>`;
+        const name = `<a href="/byt/${encId}">${esc(truncate(flatName(e), 40))}</a>`;
+        if (t.key === "confirmAddress") {
+          return `<li class="task-confirm">${name} → <strong>${esc(e.addressInfo.suggestion)}</strong> <span class="muted">(${esc(truncate(e.addressInfo.suggestionWhy ?? "", 80))})</span>
+          <form class="ajax-form" method="post" action="/byt/${encId}/adresa"><input type="hidden" name="exact_address" value="${esc(e.addressInfo.suggestion)}"><button type="submit" name="mode" value="save">✓ Potvrdit</button></form>${unreachableForm(encId)}</li>`;
+        }
+        return `<li class="task-confirm">${name} <a class="muted" href="/byt/${encId}#adresa">doplnit v detailu</a>${unreachableForm(encId)}</li>`;
       })
       .join("");
-    const more = t.count > 6 ? `<li class="muted"><a href="${t.href}">… a dalších ${t.count - 6}</a></li>` : "";
+    const more = t.count > ADDRESS_ROWS ? `<li class="muted"><a href="${t.href}">… a dalších ${t.count - ADDRESS_ROWS}</a></li>` : "";
     return `<ul class="task-confirm-list">${rows}${more}</ul>`;
   };
   const todoItems = todo.tasks
     .map((t) => {
       if (t.key === "confirmAddress") {
-        return `<li><a href="${t.href}"><strong>${esc(t.label)}</strong> (${t.count})</a> <span class="muted">— ${esc(t.why)}</span>${confirmList(t)}</li>`;
+        return `<li><a href="${t.href}"><strong>${esc(t.label)}</strong> (${t.count})</a> <span class="muted">— ${esc(t.why)}</span>${addressTaskList(t)}</li>`;
+      }
+      if (t.key === "noAddress") {
+        // Dlouhý seznam je sbalený (progressive disclosure); rozbalení zůstane i po vyřízení bytu (viz app.js).
+        return `<li><a href="${t.href}"><strong>${esc(t.label)}</strong> (${t.count})</a> <span class="muted">— ${esc(t.why)}</span>
+          <details class="task-details" data-keep-open="noAddress"${t.count <= 3 ? " open" : ""}><summary>zobrazit a vyřídit</summary>${addressTaskList(t)}</details></li>`;
       }
       const flats =
         t.count <= 4
@@ -2002,7 +2017,7 @@ function renderKnQueue(db) {
     const place =
       ai.state === "known"
         ? [ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", ")
-        : `${e.address || e.city || ""} (${ai.state === "unknown" ? "přesná adresa neznámá" : "jen přibližně — přesná adresa nebyla zapsána"})`;
+        : `${e.address || e.city || ""} (${ai.state === "unknown" ? "přesná adresa nedohledatelná" : "jen přibližně — přesná adresa nebyla zapsána"})`;
     const ag = knActx.groups.find((g) => g.members.some((m) => m.id === e.rep.id));
     const kn = ag ? knInfoForGroup(knActx, ag, resolveForGroup(knActx, ag)) : null;
     const lookup = [place, kn ? `k.ú. ${kn.ku.nazev} [${kn.ku.kod}]` : null, e.lvNumber ? `LV ${e.lvNumber}` : null, specs].filter(Boolean).join(" — ");

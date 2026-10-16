@@ -348,11 +348,11 @@ je online, proto si u každé nabídky zapiš přesnou adresu hned, jak ji zjist
 
 - **Detail bytu → 📍 Přesná adresa:** pole *Adresa* (ulice, č.p./č.o., obec) a
   *Jednotka* (číslo jednotky nebo bytu). *Uložit adresu* uloží obojí (prázdné
-  uložení vymaže), *Adresa neznámá* znamená „nabídku jsem prošel a adresu se
+  uložení vymaže), *Adresa nedohledatelná* (dřív „neznámá“) znamená „nabídku jsem prošel a adresu se
   zjistit nepodařilo" — to je jiný stav než „ještě jsem se nekoukal".
 - **Přehled:** u každého bytu ve stavu V nabídce/Rezervováno je štítek
-  **📍 doplnit adresu**, u vyplněného rovnou adresa, u neznámé „adresa
-  neznámá". Filtr **📍 Bez adresy (N)** ukáže jen nabídky, které ještě
+  **📍 doplnit adresu**, u vyplněného rovnou adresa, u nedohledatelné „adresa
+  nedohledatelná". Filtr **📍 Bez adresy (N)** ukáže jen nabídky, které ještě
   nemáš prošlé (řazené od nejnovějších, takže nové jsou nahoře).
 - **Družstevní byty přesnou adresu nepotřebují.** Družstevní byt se v katastru
   nepřevádí vkladem, takže ho nejde ověřit ani s přesnou adresou, a k odlišení
@@ -930,6 +930,15 @@ co appka už ví, a každý blok vede do pohledu, odkud pochází:
      Pilulka **💡 Návrh adresy (N)** ve stránce Byty ukáže celý seznam a štítek
      „📍 potvrdit návrh adresy“ je u příslušných bytů v řádku. Byt s návrhem se
      nepočítá podruhé do „Doplnit přesnou adresu“.
+  **Adresy se dají vyřídit rovnou z úkolů.** U návrhu je vedle **✓ Potvrdit** i
+  **Nedohledatelná**; seznam bytů v úkolu „Doplnit přesnou adresu“ (od nejnovějších,
+  sbalený, rozbalení zůstane i po vyřízení bytu) má u každého **Nedohledatelná** a
+  odkaz „doplnit v detailu“. **Nedohledatelná** je totéž co „Adresa nedohledatelná“
+  v detailu: byt se označí, že adresu nejde zjistit, a z úkolů zmizí. Nic se
+  nemaže — v detailu jde stav vrátit tlačítkem **🔄 Zkusit znovu automaticky**, a
+  appka adresu u takového bytu sama nedoplňuje, dokud ho nevrátíš. Zmizelý byt s
+  nedohledatelnou adresou se v katastru nehlídá, zůstává mezi ručními ve frontě
+  Katastr.
   4. **Doplnit chybějící údaje** — dispozice, plocha, vlastnictví, stav
      (před/po rekonstrukci), pokud je appka nevyčetla z inzerátu; v úkolu je
      vidět, co chybí nejčastěji. Vede do tabulky Srovnání s filtrem

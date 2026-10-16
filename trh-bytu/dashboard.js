@@ -150,11 +150,13 @@ export function attention(entries) {
     .filter((x) => x.n > 0)
     .sort((a, b) => b.n - a.n);
 
+  // Od nejnovějších — čerstvé nabídky se dají ještě doplnit, dokud inzerát běží.
+  const newestFirst = (list) => [...list].sort((a, b) => timeOf(b.discoveredAt) - timeOf(a.discoveredAt));
   const tasks = [
     { key: "enterPrice", entries: enterPrice, href: "/kontrola", label: "Zadat cenu prodeje", why: "vklad je podaný nebo řízení skončilo" },
     { key: "confirmFiling", entries: confirmFiling, href: "/kontrola", label: "Potvrdit plombu nalezenou v katastru", why: "appka ji nedokázala sama přiřadit k bytu" },
     { key: "manualCheck", entries: manualCheck, href: "/kontrola", label: "Zkontrolovat v katastru", why: "nastal termín kontroly" },
-    { key: "confirmAddress", entries: suggested, href: "/byty?adresa=navrh", label: "Potvrdit navrženou adresu", why: "appka ji odhadla, ale sama si není dost jistá" },
+    { key: "confirmAddress", entries: newestFirst(suggested), href: "/byty?adresa=navrh", label: "Potvrdit navrženou adresu", why: "appka ji odhadla, ale sama si není dost jistá" },
     {
       key: "missingData",
       entries: incomplete,
@@ -162,7 +164,7 @@ export function attention(entries) {
       label: "Doplnit chybějící údaje",
       why: `appka je nevyčetla z inzerátu — ${missingCounts.map((x) => `${x.label} ${x.n}×`).join(", ")}`,
     },
-    { key: "noAddress", entries: noAddress, href: "/byty?adresa=chybi", label: "Doplnit přesnou adresu", why: "bez ní se byt v katastru nedá hledat ani hlídat" },
+    { key: "noAddress", entries: newestFirst(noAddress), href: "/byty?adresa=chybi", label: "Doplnit přesnou adresu", why: "bez ní se byt v katastru nedá hledat ani hlídat" },
   ]
     .filter((t) => t.entries.length > 0)
     .map(({ entries: list, ...task }) => ({ ...task, count: list.length, entries: list }));

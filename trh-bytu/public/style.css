@@ -306,6 +306,9 @@ form button { align-self: flex-start; padding: 0.5rem 1.2rem; background: var(--
 .task-confirm a { color: var(--accent); text-decoration: none; }
 .task-confirm form { display: inline-flex; max-width: none; padding: 0; background: none; border: none; margin: 0 0 0 0.3rem; }
 .task-confirm button { padding: 0.15rem 0.7rem; font-size: 0.8rem; }
+.task-confirm .muted { font-size: 0.8rem; }
+.task-details { margin: 0.2rem 0 0.1rem; }
+.task-details summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); }
 /* Základní údaj bytu, který appka nevyčetla — v tabulce srovnání zvýrazněná buňka */
 .compare td.cell-missing { background: #fef3c7; }
 .dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }

@@ -78,7 +78,7 @@ export function addressNoticeLines(db, listingId) {
     if (isCooperativeOwnership(group.members) && bestAddress(group.members)) {
       return ["🏢 Družstevní byt — v katastru nejde ověřit, přesná adresa není potřeba."];
     }
-    return [group.members.some((m) => m.address_unknown) ? "📍 Přesná adresa: neznámá" : "⚠️ Přesná adresa není zapsaná — doplň ji, dokud je byt v nabídce."];
+    return [group.members.some((m) => m.address_unknown) ? "📍 Přesná adresa: nedohledatelná" : "⚠️ Přesná adresa není zapsaná — doplň ji, dokud je byt v nabídce."];
   }
   const lines = [`📍 ${[exact, unit ? `jednotka ${unit}` : null].filter(Boolean).join(", ")}`];
   const kn = knInfoForGroup(actx, group, resolveForGroup(actx, group));

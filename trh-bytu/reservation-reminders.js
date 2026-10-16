@@ -158,7 +158,7 @@ export function buildPossibleSaleText(db, group, triage) {
   const addressLines =
     exact || unit
       ? addressNoticeLines(db, rep.id)
-      : [group.members.some((m) => m.address_unknown) ? "📍 Přesná adresa: neznámá" : "📍 Přesná adresa nebyla zapsaná — v katastru půjde byt hledat jen podle přibližného místa."];
+      : [group.members.some((m) => m.address_unknown) ? "📍 Přesná adresa: nedohledatelná" : "📍 Přesná adresa nebyla zapsaná — v katastru půjde byt hledat jen podle přibližného místa."];
   return [
     `🔎 Zmizel z nabídky po rezervaci — možný prodej: ${specs}${rep.address ? `, ${rep.address}` : ""}`,
     price,

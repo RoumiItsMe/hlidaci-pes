@@ -226,3 +226,13 @@ test("potvrzení adresy je v seznamu úkolů před doplňováním údajů a adre
   const entries = [entry({ ownCondition: null }), entry({ addressInfo: { state: "missing" } }), entry(suggestion("U Dvora 661, Letohrad"))];
   assert.deepEqual(attention(entries).tasks.map((t) => t.key), ["confirmAddress", "missingData", "noAddress"]);
 });
+
+test("úkoly s adresami jsou od nejnovějších nabídek", () => {
+  const old = entry({ addressInfo: { state: "missing" }, discoveredAt: ago(20) });
+  const fresh = entry({ addressInfo: { state: "missing" }, discoveredAt: ago(1) });
+  const mid = entry({ addressInfo: { state: "missing" }, discoveredAt: ago(7) });
+  assert.deepEqual(ids(attention([old, fresh, mid]).tasks.find((t) => t.key === "noAddress").entries), ids([fresh, mid, old]));
+  const s1 = entry(suggestion("A 1, X", { discoveredAt: ago(9) }));
+  const s2 = entry(suggestion("B 2, X", { discoveredAt: ago(2) }));
+  assert.deepEqual(ids(attention([s1, s2]).tasks.find((t) => t.key === "confirmAddress").entries), ids([s2, s1]));
+});
