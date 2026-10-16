@@ -151,6 +151,13 @@ export function resolveAddress(members, ctx) {
       if (geo.street && geo.houseNumber && (precision == null || precision === "address")) {
         const num = geo.streetNumber ? `${geo.houseNumber}/${geo.streetNumber}` : geo.houseNumber;
         evidence.push({ type: "portal", strength: "strong", street: geo.street, number: num, src: srcName, note: `${srcName}: adresa z inzerátu` });
+      } else if (!geo.street && geo.cityPart && geo.houseNumber && (precision == null || precision === "address")) {
+        // Část obce bez ulic ("Knapovec 6"): v RÚIAN je adresa "Knapovec 6, 56201
+        // Ústí nad Orlicí", tedy část obce hraje roli ulice. Bez ověření v RÚIAN
+        // to ale není jisté (ve městě s ulicemi by chyběla ulice, ne část obce),
+        // proto `needsRegister` — viz níž.
+        const num = geo.streetNumber ? `${geo.houseNumber}/${geo.streetNumber}` : geo.houseNumber;
+        evidence.push({ type: "portal", strength: "strong", needsRegister: true, street: geo.cityPart, number: num, src: srcName, note: `${srcName}: adresa z inzerátu (část obce ${geo.cityPart} + číslo popisné)` });
       } else if (srcName === "sreality" && precision && precision !== "address") {
         const what = precision === "street" ? "jen ulici" : precision === "ward" ? "jen část obce" : precision === "municipality" ? "jen obec" : `jen „${precision}“`;
         reasons.push(`Sreality: prodejce označil ${what}, číslo domu tam není.`);
@@ -175,6 +182,8 @@ export function resolveAddress(members, ctx) {
       const osm = ctx.geocodes(m.lat, m.lon);
       if (osm === undefined) {
         reasons.push(`Bod z ${srcName} se ještě nezpracoval.`);
+      } else if (osm?.address?.house_number && !osm.address.road) {
+        reasons.push(`Bod z ${srcName} míří na dům č. ${osm.address.house_number}, ale mapa u něj nezná ulici (část obce bez ulic) — z bodu se nepřiřazuje.`);
       } else if (osm === null || !osm.address?.house_number || !osm.address?.road) {
         reasons.push(`Bod z ${srcName} míří na ulici, ne na konkrétní dům.`);
         if (osm?.address?.road) streetHints.push({ street: osm.address.road, src: srcName });
@@ -263,7 +272,7 @@ export function resolveAddress(members, ctx) {
   }
 
   const types = new Set(c.evidence.map((e) => e.type));
-  const hasStrong = c.evidence.some((e) => e.type === "portal" || (e.type === "pin" && e.strength === "strong"));
+  const hasStrong = c.evidence.some((e) => (e.type === "portal" && !e.needsRegister) || (e.type === "pin" && e.strength === "strong"));
   // Text sám nestačí, ale potvrzený jiným zdrojem (stejná ulice od portálu,
   // nebo jakýkoli bod se stejným číslem) ano.
   const textCorroborated =
@@ -276,7 +285,8 @@ export function resolveAddress(members, ctx) {
   // (a byt se pak v katastru nehlídal). Obec je nutná — bez ní by RÚIAN mohl
   // trefit stejnou ulici jinde. Mimo RÚIAN (testy) se nic nepotvrzuje.
   let registerVerified = false;
-  if (types.has("text") && !hasStrong && !textCorroborated && ctx.ruianAddress && city) {
+  const needsRegister = c.evidence.some((e) => e.needsRegister);
+  if ((types.has("text") || needsRegister) && !hasStrong && !textCorroborated && ctx.ruianAddress && city) {
     const ra = ctx.ruianAddress(c.street, c.number, city);
     if (ra === undefined) {
       result.reasons.push(`Adresa ${c.street} ${c.number} z textu čeká na ověření v RÚIAN.`);
@@ -284,7 +294,7 @@ export function resolveAddress(members, ctx) {
       result.reasons.push(`RÚIAN adresu ${c.street} ${c.number} v obci ${city} nezná — zůstává jen návrh.`);
     } else {
       registerVerified = true;
-      c.evidence.push({ type: "ruian", strength: "strong", street: c.street, number: c.number, src: "ruian", note: "adresa z textu inzerátu existuje v RÚIAN" });
+      c.evidence.push({ type: "ruian", strength: "strong", street: c.street, number: c.number, src: "ruian", note: needsRegister ? "adresa existuje v RÚIAN" : "adresa z textu inzerátu existuje v RÚIAN" });
     }
   }
 

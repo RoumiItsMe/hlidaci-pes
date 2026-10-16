@@ -20,7 +20,7 @@ function stubRuian({ addressRows = [ROW], pointBuildings = [BUILDING(777, "1620"
     const where = u.searchParams.get("where") || "";
     seen.push({ layer, where });
     let features = [];
-    if (layer === "1" && where.includes("LIKE")) features = addressRows;
+    if (layer === "1" && where.includes("LIKE")) features = typeof addressRows === "function" ? addressRows(where) : addressRows;
     else if (layer === "1") features = [{ attributes: { adresa: ROW.attributes.adresa, cislodomovni: 1620, cisloorientacni: null } }];
     else if (layer === "3" && where.startsWith("kod=")) features = [BUILDING(Number(where.slice(4)), "1620")];
     else if (layer === "3") features = pointBuildings;
@@ -130,4 +130,27 @@ test("záporná odpověď RÚIAN se opakuje po čtvrtletí, ne dřív", () => {
   assert.equal(isRuianEntryStale(key, null, NOW - 30 * DAYS, NOW), false);
   assert.equal(isRuianEntryStale(key, null, NOW - 89 * DAYS, NOW), false);
   assert.equal(isRuianEntryStale(key, null, NOW - 91 * DAYS, NOW), true);
+});
+
+test("obec bez ulic: RÚIAN píše 'č.p. 181, 56102 Dolní Dobrouč', ne 'Dolní Dobrouč 181' — najde se druhým dotazem", async () => {
+  const cpRow = { attributes: { adresa: "č.p. 181, 56102 Dolní Dobrouč", stavebniobjekt: 777 }, geometry: { x: 16.5, y: 49.9 } };
+  const stub = stubRuian({ addressRows: (where) => (where.includes("č.p.") ? [cpRow] : []) });
+  try {
+    const r = await ruianLookupAddress("Dolní Dobrouč", "181", "Dolní Dobrouč");
+    assert.equal(r.addressPoint, "č.p. 181, 56102 Dolní Dobrouč");
+    assert.equal(r.building.kod, 777);
+    assert.ok(stub.seen.some((q) => q.layer === "1" && q.where.includes("'č.p. 181, % Dolní Dobrouč'")));
+  } finally {
+    stub.restore();
+  }
+});
+
+test("zápis 'č.p.' se zkouší jen tam, kde se název 'ulice' rovná obci — jinak by se trefilo cizí č.p. ve městě", async () => {
+  const stub = stubRuian({ addressRows: (where) => (where.includes("č.p.") ? [{ attributes: { adresa: "č.p. 6, 56201 Ústí nad Orlicí", stavebniobjekt: 5 }, geometry: { x: 16.4, y: 49.9 } }] : []) });
+  try {
+    assert.equal(await ruianLookupAddress("Knapovec", "6", "Ústí nad Orlicí"), null);
+    assert.ok(!stub.seen.some((q) => q.where.includes("č.p.")));
+  } finally {
+    stub.restore();
+  }
 });

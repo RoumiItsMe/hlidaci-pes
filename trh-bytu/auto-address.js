@@ -171,7 +171,7 @@ export async function ruianPendingTextAddresses(db, log, { limit = 40, delayMs =
     // Stejné výjimky jako applyAutoAddresses: ruční adresa a vědomé "neznámá" se nechají být.
     if (members.some((m) => m.address_unknown || m.address_auto === -1 || (m.exact_address && !m.address_auto))) continue;
     const r = resolveForGroup(actx, group);
-    if (r.level !== "medium" || !r.street || !r.number || !r.evidence.some((e) => e.type === "text")) continue;
+    if (r.level !== "medium" || !r.street || !r.number || !r.evidence.some((e) => e.type === "text" || e.needsRegister)) continue;
     const city = groupCity(actx, group);
     if (!city) continue;
     const key = addressKey(r.street, r.number, city);

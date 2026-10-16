@@ -119,17 +119,19 @@ export async function ruianLookupPoint(lat, lon, { buildingKod = null } = {}) {
 export async function ruianLookupAddress(street, number, city) {
   const cp = String(number).split("/")[0].trim();
   const esc = (s) => String(s).replace(/'/g, "''");
-  const rows = await query(LAYER.adresniMisto, {
+  const addressFields = { outFields: "adresa,stavebniobjekt", returnGeometry: "true", outSR: "4326" };
+  let rows = await query(LAYER.adresniMisto, {
     where: `adresa LIKE '${esc(street)} ${esc(cp)},%' OR adresa LIKE '${esc(street)} ${esc(cp)}/%'`,
-    outFields: "adresa,stavebniobjekt",
-    returnGeometry: "true",
-    outSR: "4326",
+    ...addressFields,
   });
   // Obec bez PSČ: ručně zapsaná adresa bývá "…, 560 02 Česká Třebová", v RÚIAN je "…, 56002 Česká Třebová".
-  const cityKey = stripDiacritics(city || "")
-    .replace(/\b\d{3}\s?\d{2}\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const cityText = String(city || "").replace(/\b\d{3}\s?\d{2}\b/g, "").replace(/\s+/g, " ").trim();
+  const cityKey = stripDiacritics(cityText);
+  // Obec bez ulic i částí obce ("Dolní Dobrouč 181" v obci Dolní Dobrouč): RÚIAN
+  // takové adresy píše "č.p. 181, 56102 Dolní Dobrouč".
+  if (rows.length === 0 && cityKey && stripDiacritics(street) === cityKey) {
+    rows = await query(LAYER.adresniMisto, { where: `adresa LIKE 'č.p. ${esc(cp)}, % ${esc(cityText)}'`, ...addressFields });
+  }
   const matching = rows.filter((r) => !cityKey || stripDiacritics(r.attributes.adresa).includes(cityKey));
   const pick = matching.length > 0 ? matching : rows.length === 1 ? rows : [];
   const geom = pick[0]?.geometry;

@@ -66,3 +66,21 @@ test("upozornění na rezervaci: družstevní byt nevyzývá k doplnění adresy
   assert.deepEqual(addressNoticeLines(db, "bazos:10"), ["🏢 Družstevní byt — v katastru nejde ověřit, přesná adresa není potřeba."]);
   assert.match(addressNoticeLines(db, "bazos:11")[0], /Přesná adresa není zapsaná/);
 });
+
+test("část obce bez ulic: adresa od portálu potvrzená RÚIAN se doplní sama ('Knapovec 6')", () => {
+  const db = initDb(new DatabaseSync(":memory:"));
+  flat(db, "sreality:3967357004", {
+    source: "sreality",
+    source_id: "3967357004",
+    address: "Knapovec, Ústí nad Orlicí",
+    description: "Byt v menším zděném bytovém domě č. p. 6 s pouhými šesti bytovými jednotkami.",
+    status: "active",
+    removed_at: null,
+  });
+  updateListingFields(db, "sreality:3967357004", { geo_json: JSON.stringify({ precision: "address", street: null, houseNumber: "6", streetNumber: null, city: "Ústí nad Orlicí", cityPart: "Knapovec" }) });
+  // dokud RÚIAN adresu nepotvrdí, zůstává jen návrh
+  assert.equal(applyAutoAddresses(db, log).assigned, 0);
+  saveRuian(db, addressKey("Knapovec", "6", "Ústí nad Orlicí"), { addressPoint: "Knapovec 6, 56201 Ústí nad Orlicí", ku: { kod: 666831, nazev: "Knapovec" }, building: { cp: ["6"], flats: 6, isknId: 400759611 } });
+  assert.equal(applyAutoAddresses(db, log).assigned, 1);
+  assert.deepEqual({ ...get(db, "sreality:3967357004") }, { exact_address: "Knapovec 6, Ústí nad Orlicí", address_auto: 1 });
+});

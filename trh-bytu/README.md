@@ -388,6 +388,19 @@ RÚIAN** (oficiální registr ČÚZK, `ruian.js`), (2) **žádný jiný byt nem�
 (sdílený bod = ulice, nebo stejný dům, což z bodu nepoznáme — radši nic), (3)
 ulice z bodu se **objevuje v inzerátu**, (4) číslo domu z mapy se **shoduje s
 čísly popisnými té budovy v RÚIAN** a (5) dům **nemá víc čísel popisných**.
+**Část obce bez ulic („Knapovec 6“).** Spousta bytů je v částech obce, které
+nemají ulice — adresa je „část obce + číslo popisné“ (Knapovec 6, Říčky 91,
+Kunčice 89). Sreality to pošle jako číslo popisné a část obce bez ulice. Appka
+z toho složí adresu „Knapovec 6, Ústí nad Orlicí“ (v RÚIAN je „Knapovec 6, 56201
+Ústí nad Orlicí“, část obce tam hraje roli ulice) a doplní ji sama, **když ji
+RÚIAN potvrdí**. Bez potvrzení je to jen návrh („Použít návrh“): ve městě s
+ulicemi by v takových datech chyběla ulice, ne část obce, a adresa by byla
+nepřesná. Obec bez částí i ulic („Dolní Dobrouč 181“) RÚIAN zapisuje jako „č.p.
+181, 56102 Dolní Dobrouč“ — i tenhle zápis appka zkouší. Číslo, které neodpovídá
+budově v bodě z inzerátu, je pořád spor a nepřiřadí se nic. Bod, který míří na
+dům s číslem, u kterého ale mapa nezná ulici, appka už nehlásí jako „míří na
+ulici“ — důvod říká, že jde o část obce bez ulic.
+
 **Text potvrzený RÚIAN.** Adresa z textu („v ulici U Dvora 661“) sama o sobě
 byla jen návrh, který u zmizelého bytu nikdo nepotvrdil — a zmizelý byt bez
 adresy se v katastru nedá hledat ani hlídat. Appka proto adresu z textu ověří
