@@ -922,6 +922,14 @@ co appka už ví, a každý blok vede do pohledu, odkud pochází:
   1. **Zadat cenu prodeje** (vklad podán / řízení skončilo),
   2. **Potvrdit plombu**, kterou appka nepřiřadila k bytu,
   3. **Zkontrolovat v katastru** podle rozvrhu,
+  3b. **Potvrdit navrženou adresu** — adresu, kterou appka odhadla, ale sama si
+     není dost jistá (střední jistota, viz „Přesná adresa bytu“). Návrh je
+     rovnou v úkolu s tlačítkem **✓ Potvrdit** (jedno kliknutí, totéž co
+     „Použít návrh“ v detailu; zapíše se jako tvoje adresa a hned se ověří v
+     RÚIAN). Týká se i zmizelých bytů — s adresou se začnou hlídat v katastru.
+     Pilulka **💡 Návrh adresy (N)** ve stránce Byty ukáže celý seznam a štítek
+     „📍 potvrdit návrh adresy“ je u příslušných bytů v řádku. Byt s návrhem se
+     nepočítá podruhé do „Doplnit přesnou adresu“.
   4. **Doplnit chybějící údaje** — dispozice, plocha, vlastnictví, stav
      (před/po rekonstrukci), pokud je appka nevyčetla z inzerátu; v úkolu je
      vidět, co chybí nejčastěji. Vede do tabulky Srovnání s filtrem

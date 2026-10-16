@@ -18,6 +18,7 @@ import { updateListingFields } from "./db.js";
 import { geoKey, loadGeocodeCache } from "./geo.js";
 import { loadRuianCache, loadRuianFetchedAt, isRuianEntryStale, pointKey, addressKey, parseExactAddress, ruianLookupAddress, saveRuian } from "./ruian.js";
 import { resolveAddress, distanceMeters } from "./geo-suggest.js";
+import { addressInfo } from "./address-info.js";
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
 const SHARED_PIN_RADIUS_M = 8;
@@ -145,6 +146,18 @@ export function resolveForGroup(actx, group) {
     },
   };
   return resolveAddress(group.members, ctx);
+}
+
+/**
+ * Navržená adresa, kterou appka nedoplnila sama, protože si není dost jistá
+ * (střední jistota) — čeká na potvrzení uživatele. Jen u bytu, který nemá
+ * žádnou adresu ani jednotku (a není družstevní / označený jako neznámá).
+ * `{ text, why }` nebo null; `group` musí být ze seznamu `actx.groups`.
+ */
+export function addressSuggestion(actx, group) {
+  if (addressInfo(group.members).state !== "missing") return null;
+  const r = resolveForGroup(actx, group);
+  return r.level === "medium" && r.text ? { text: r.text, why: describeEvidence(r) } : null;
 }
 
 /** Stručný popis důkazů pro uživatele: "Sreality: adresa z inzerátu · bod z iDNES uvnitř budovy…" */

@@ -12,8 +12,9 @@ import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
-import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian, loadRuianCache } from "./ruian.js";
+import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { isNewBuildPending } from "./new-build.js";
+import { addressSuggestion } from "./auto-address.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
 import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
@@ -178,6 +179,7 @@ function addressChipHtml(ai, status, href = null) {
   }
   if (ai.state === "notNeeded") return chip("addr-chip addr-chip--coop", "družstevní · adresa netřeba", "Družstevní byt se v katastru nedá ověřit, takže přesná adresa nic nepřinese — stačí lokalita z inzerátu");
   if (ai.state === "unknown") return chip("addr-chip addr-chip--unknown", "📍 adresa neznámá");
+  if (ai.state === "missing" && ai.suggestion) return chip("addr-chip addr-chip--missing", "📍 potvrdit návrh adresy", `Návrh: ${ai.suggestion} — potvrdíš v detailu bytu`);
   if (status === "active" || status === "reserved") return chip("addr-chip addr-chip--missing", "📍 doplnit adresu");
   return "";
 }
@@ -537,8 +539,10 @@ function computeEntries(db) {
   const allGroups = groupListings(allListings);
   // Kde plomby hlídá API katastru (kn-scan.js), ruční kontrola podle rozvrhu
   // se nepřipomíná — bez skenů (bez klíče) vrací null a rozvrh platí celý.
-  const watchFor = createWatchResolver(db, allListings, allGroups);
-  const ruianCache = loadRuianCache(db);
+  // Kontext adres (geokódování + RÚIAN) se staví jednou pro hlídání plomb, novostavby i návrhy adres.
+  const actx = buildAddressContext(db, allListings, allGroups);
+  const watchFor = createWatchResolver(db, allListings, allGroups, Date.now(), actx);
+  const ruianCache = actx.ruianCache;
 
   // Jedna náhledová fotka na inzerát (ta s nejnižším id = první stažená),
   // jedním dotazem pro všechny skupiny najednou — ne N samostatných.
@@ -626,7 +630,11 @@ function computeEntries(db) {
       // Výsledek ruční kontroly v katastru (viz saleVerdict v group.js) a
       // odhad, jak pravděpodobně se zmizelý byt prodal (jen pro řazení
       // fronty /kontrola, viz sale-triage.js).
-      addressInfo: addressInfo(g.members),
+      addressInfo: (() => {
+        const info = addressInfo(g.members);
+        const suggestion = info.state === "missing" ? addressSuggestion(actx, g) : null;
+        return { ...info, suggestion: suggestion?.text ?? null, suggestionWhy: suggestion?.why ?? null };
+      })(),
       // Novostavba, jejíž adresu RÚIAN zatím nezná: v katastru se zatím nedá ověřit (new-build.js).
       newBuildPending: isNewBuildPending(g.members, ruianCache),
       track,
@@ -705,7 +713,10 @@ function renderTable(db, filters) {
   // a u kterých uživatel přesnou adresu nezapsal ani neoznačil za neznámou.
   const needsAddress = (e) => e.addressInfo.state === "missing" && (e.status === "active" || e.status === "reserved");
   const needsAddressCount = entries.filter((e) => !e.hidden && needsAddress(e)).length;
-  if (addressFilter) filtered = filtered.filter(needsAddress);
+  const hasSuggestion = (e) => !e.hidden && Boolean(e.addressInfo.suggestion);
+  const suggestionCount = entries.filter(hasSuggestion).length;
+  if (addressFilter === "navrh") filtered = filtered.filter(hasSuggestion);
+  else if (addressFilter) filtered = filtered.filter(needsAddress);
   filtered = [...filtered].sort(SORTERS[sort] || SORTERS.newest);
 
   const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter };
@@ -722,7 +733,11 @@ function renderTable(db, filters) {
 
   const topLink = `<a class="filter ${topFilter ? "active" : ""}" href="${buildQuery(current, { top: topFilter ? null : "1" })}">⭐ TOP</a>`;
   const hiddenLink = `<a class="filter ${showHidden ? "active" : ""}" href="${buildQuery(current, { hidden: showHidden ? null : "show", status: null })}">🚫 Skryté (${hiddenCount})</a>`;
-  const addressLink = `<a class="filter ${addressFilter ? "active" : ""}" href="${buildQuery(current, { adresa: addressFilter ? null : "chybi" })}">📍 Bez adresy (${needsAddressCount})</a>`;
+  const addressLink = `<a class="filter ${addressFilter === "chybi" ? "active" : ""}" href="${buildQuery(current, { adresa: addressFilter === "chybi" ? null : "chybi" })}">📍 Bez adresy (${needsAddressCount})</a>`;
+  // Návrhy adres k potvrzení — jen když nějaké jsou (progressive disclosure).
+  const suggestionLink = suggestionCount
+    ? `<a class="filter ${addressFilter === "navrh" ? "active" : ""}" href="${buildQuery(current, { adresa: addressFilter === "navrh" ? null : "navrh" })}">💡 Návrh adresy (${suggestionCount})</a>`
+    : "";
 
   const sortLinks = SORT_LABELS.map(
     ([key, label]) => `<a class="filter ${sort === key ? "active" : ""}" href="${buildQuery(current, { sort: key })}">${esc(label)}</a>`
@@ -794,7 +809,7 @@ function renderTable(db, filters) {
 
   return `
     <h1>Byty (${filtered.length})</h1>
-    <div class="filters">${filterLinks}${topLink}${addressLink}${hiddenLink}</div>
+    <div class="filters">${filterLinks}${topLink}${addressLink}${suggestionLink}${hiddenLink}</div>
     <div class="toolbar">
       <div class="filters">${sortLinks}</div>
       <form method="get" action="/byty" class="select-filters">
@@ -1493,8 +1508,24 @@ function renderDashboard(db) {
   // Úkoly s pár byty ukážou rovnou odkazy na ně; u dlouhého seznamu (adresy,
   // chybějící údaje) stačí počet a odkaz na filtrovaný pohled.
   const flatName = (e) => [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null].filter(Boolean).join(" ") + (e.address ? `, ${e.address}` : "") || "Byt";
+  // Návrh adresy jde potvrdit rovnou z úkolu (jedno kliknutí, stejná akce jako "Použít návrh" v detailu).
+  const confirmList = (t) => {
+    const rows = t.entries
+      .slice(0, 6)
+      .map((e) => {
+        const encId = encodeURIComponent(e.rep.id);
+        return `<li class="task-confirm"><a href="/byt/${encId}">${esc(truncate(flatName(e), 40))}</a> → <strong>${esc(e.addressInfo.suggestion)}</strong> <span class="muted">(${esc(truncate(e.addressInfo.suggestionWhy ?? "", 80))})</span>
+          <form class="ajax-form" method="post" action="/byt/${encId}/adresa"><input type="hidden" name="exact_address" value="${esc(e.addressInfo.suggestion)}"><button type="submit" name="mode" value="save">✓ Potvrdit</button></form></li>`;
+      })
+      .join("");
+    const more = t.count > 6 ? `<li class="muted"><a href="${t.href}">… a dalších ${t.count - 6}</a></li>` : "";
+    return `<ul class="task-confirm-list">${rows}${more}</ul>`;
+  };
   const todoItems = todo.tasks
     .map((t) => {
+      if (t.key === "confirmAddress") {
+        return `<li><a href="${t.href}"><strong>${esc(t.label)}</strong> (${t.count})</a> <span class="muted">— ${esc(t.why)}</span>${confirmList(t)}</li>`;
+      }
       const flats =
         t.count <= 4
           ? `<div class="task-flats">${t.entries.map((e) => `<a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(truncate(flatName(e), 52))}</a>`).join(" · ")}</div>`

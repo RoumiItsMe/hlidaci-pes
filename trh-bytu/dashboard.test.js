@@ -205,3 +205,24 @@ test("souhrn sběru: varování při selhání zdroje a přeskočený běh", () 
   assert.deepEqual(parseRunSummary("[2026-10-16T06:00:00.000Z] Jiný sběrný běh právě probíhá — tenhle se přeskakuje.", 0), { kind: "skipped" });
   assert.equal(parseRunSummary("", 0), null);
 });
+
+const suggestion = (text, over = {}) => ({ addressInfo: { state: "missing", suggestion: text, suggestionWhy: "text inzerátu (idnes)" }, ...over });
+
+test("úkol 'potvrdit navrženou adresu': byty s návrhem (i zmizelé), ne skryté; v 'doplnit adresu' se nepočítají podruhé", () => {
+  const live = entry(suggestion("U Dvora 661, Letohrad"));
+  const gone = entry(suggestion("V Aleji 744, Letohrad", { status: "removed" }));
+  const hiddenOne = entry(suggestion("Husova 1, Letohrad", { hidden: true }));
+  const noHint = entry({ addressInfo: { state: "missing" } });
+  const entries = [live, gone, hiddenOne, noHint, entry()];
+  const { tasks } = attention(entries);
+  const confirm = tasks.find((t) => t.key === "confirmAddress");
+  assert.equal(confirm.count, 2);
+  assert.deepEqual(ids(confirm.entries), ids([live, gone]));
+  assert.equal(confirm.href, "/byty?adresa=navrh");
+  assert.equal(tasks.find((t) => t.key === "noAddress").count, 1); // jen byt bez jakéhokoli návrhu
+});
+
+test("potvrzení adresy je v seznamu úkolů před doplňováním údajů a adres", () => {
+  const entries = [entry({ ownCondition: null }), entry({ addressInfo: { state: "missing" } }), entry(suggestion("U Dvora 661, Letohrad"))];
+  assert.deepEqual(attention(entries).tasks.map((t) => t.key), ["confirmAddress", "missingData", "noAddress"]);
+});

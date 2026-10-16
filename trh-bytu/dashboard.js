@@ -140,7 +140,10 @@ export function attention(entries) {
   const confirmFiling = [...confirmTracked, ...confirmUnreserved];
   const manualCheck = due.filter((e) => !enterPrice.includes(e) && !confirmTracked.includes(e));
   const incomplete = shown.filter((e) => missingEssentials(e).length > 0);
-  const noAddress = shown.filter((e) => e.addressInfo?.state === "missing" && isLive(e));
+  // Adresa, kterou appka navrhla, ale sama si není jistá: stačí potvrdit (a to i u
+  // zmizelého bytu — s adresou se začne hlídat v katastru).
+  const suggested = shown.filter((e) => e.addressInfo?.state === "missing" && e.addressInfo?.suggestion);
+  const noAddress = shown.filter((e) => e.addressInfo?.state === "missing" && !e.addressInfo?.suggestion && isLive(e));
 
   // Co nejčastěji chybí: "stav (12×), vlastnictví (3×)".
   const missingCounts = ESSENTIAL_FIELDS.map((f) => ({ label: f.label, n: incomplete.filter((e) => missingEssentials(e).includes(f.key)).length }))
@@ -151,6 +154,7 @@ export function attention(entries) {
     { key: "enterPrice", entries: enterPrice, href: "/kontrola", label: "Zadat cenu prodeje", why: "vklad je podaný nebo řízení skončilo" },
     { key: "confirmFiling", entries: confirmFiling, href: "/kontrola", label: "Potvrdit plombu nalezenou v katastru", why: "appka ji nedokázala sama přiřadit k bytu" },
     { key: "manualCheck", entries: manualCheck, href: "/kontrola", label: "Zkontrolovat v katastru", why: "nastal termín kontroly" },
+    { key: "confirmAddress", entries: suggested, href: "/byty?adresa=navrh", label: "Potvrdit navrženou adresu", why: "appka ji odhadla, ale sama si není dost jistá" },
     {
       key: "missingData",
       entries: incomplete,

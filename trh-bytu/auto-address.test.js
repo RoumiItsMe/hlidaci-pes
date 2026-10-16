@@ -84,3 +84,35 @@ test("část obce bez ulic: adresa od portálu potvrzená RÚIAN se doplní sama
   assert.equal(applyAutoAddresses(db, log).assigned, 1);
   assert.deepEqual({ ...get(db, "sreality:3967357004") }, { exact_address: "Knapovec 6, Ústí nad Orlicí", address_auto: 1 });
 });
+
+import { addressSuggestion, buildAddressContext } from "./auto-address.js";
+import { groupListings } from "./group.js";
+
+function suggestionOf(db, id) {
+  const listings = db.prepare("SELECT * FROM listings").all();
+  const groups = groupListings(listings);
+  const actx = buildAddressContext(db, listings, groups);
+  return addressSuggestion(actx, groups.find((g) => g.members.some((m) => m.id === id)));
+}
+
+test("návrh adresy: text s číslem domu bez potvrzení čeká na uživatele; potvrzený RÚIAN se doplní sám (není co navrhovat)", () => {
+  const db = initDb(new DatabaseSync(":memory:"));
+  flat(db, "bazos:1");
+  const s = suggestionOf(db, "bazos:1");
+  assert.equal(s.text, "U Dvora 661, Letohrad");
+  assert.match(s.why, /text inzerátu/);
+  saveRuian(db, addressKey("U Dvora", "661", "Letohrad"), { addressPoint: "U Dvora 661, 56151 Letohrad", ku: { kod: 1, nazev: "Letohrad" }, building: { cp: ["661"], isknId: 5 } });
+  assert.equal(suggestionOf(db, "bazos:1"), null); // high → doplní se automaticky
+});
+
+test("návrh adresy se nenabízí, když adresa už je, byt je družstevní nebo uživatel označil 'neznámá'", () => {
+  const db = initDb(new DatabaseSync(":memory:"));
+  flat(db, "bazos:1");
+  assert.ok(suggestionOf(db, "bazos:1"));
+  updateListingFields(db, "bazos:1", { address_unknown: 1 });
+  assert.equal(suggestionOf(db, "bazos:1"), null);
+  updateListingFields(db, "bazos:1", { address_unknown: 0, params_json: JSON.stringify({ ownership: "Družstevní" }) });
+  assert.equal(suggestionOf(db, "bazos:1"), null);
+  updateListingFields(db, "bazos:1", { params_json: null, exact_address: "Husova 1, Letohrad" });
+  assert.equal(suggestionOf(db, "bazos:1"), null);
+});
