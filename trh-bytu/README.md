@@ -422,15 +422,27 @@ obrysu víc objektů najednou (sousední sekce, přístavba) — budova pak vyš
 správně (reálně J. Drobného 1620, Česká Třebová). Obec se při hledání porovnává
 bez PSČ („560 02 Česká Třebová“ i „56002 Česká Třebová“ je totéž). Starší záznamy
 v mezipaměti, které budovu nenašly, se při příštím sběru zopakují samy
-(`ADDRESS_LOOKUP_VERSION` v `ruian.js`). **Novostavba z webu developera.** Adresa z marketingu („Lhotka 51, Česká
+(`ADDRESS_LOOKUP_VERSION` v `ruian.js`).
+
+**Novostavba před dokončením.** Adresa z webu developera („Lhotka 51, Česká
 Třebová“, projekt Rezidence Na Rovině Lhotka) v RÚIAN často není: číslo popisné
 a adresní místo se v registru objeví až po dokončení domu, a do té doby není ani
-budova s jednotkami v katastru. Detail to řekne („RÚIAN adresu zatím nezná…“) a
-nepůsobí to jako chyba appky. Záporná odpověď RÚIAN **neplatí navždy**: adresa,
-kterou RÚIAN neznal, se při sběru zkusí znovu po 14 dnech (`RECHECK_UNKNOWN_DAYS`
-v `ruian.js`) a jakmile dům v registru je, appka ho najde sama a začne ho
-hlídat v katastru. Do té doby byt v katastru ověřit nejde (jednotky ještě
-neexistují; u rozestavěného domu prodej typicky běží smlouvou o budoucí smlouvě a vklad přijde až po dokončení).
+budova s jednotkami v katastru. Byt, který je **novostavba** (stav bytu
+„Novostavba“ — z portálu „Novostavba“ / „Ve výstavbě“, nebo ručně) a jehož zapsanou
+adresu RÚIAN nezná, appka označí **🏗️ novostavba · zatím nejde ověřit** (v
+seznamu, v tabulce Srovnání i v detailu s vysvětlením) a chová se k němu jako k
+družstevnímu: nehlídá ho v katastru a neskenuje (bod z inzerátu může ležet u
+sousedního domu), po jeho zmizení patří mezi „Vyřízené — nejde ověřit“ a v
+Telegramu se píše, že ho nejde ověřit. Adresu appka po tobě chce dál (jen u
+družstevních ne), protože je potřeba, až dům v registru vznikne.
+
+**Kontrola jednou za 3 měsíce.** Adresa, kterou RÚIAN neznal, se při sběru zkusí
+znovu po 90 dnech (`RECHECK_UNKNOWN_DAYS` v `ruian.js`). Jakmile dům v registru je,
+appka ho **tiše** doplní (jen řádek v `track.log`, žádná zpráva ani zvoneček) a byt
+se sám zařadí tam, kam podle stavu patří: nabídka se prostě sleduje dál, zmizelý
+nebo rezervovaný byt se začne hlídat v katastru jako každý jiný (plomba, cena).
+Stav „zatím nejde ověřit“ se totiž nikam neukládá, počítá se z toho, co RÚIAN o
+adrese zrovna ví.
 
 - **Vysoká jistota** → adresa se doplní sama a v přehledu je u ní „(auto)", v
   detailu je vidět **důvod** (které zdroje se shodly). Střední jistota je jen

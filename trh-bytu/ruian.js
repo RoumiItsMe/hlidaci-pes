@@ -143,10 +143,11 @@ export async function ruianLookupAddress(street, number, city) {
 // viz ruianPending.
 export const ADDRESS_LOOKUP_VERSION = 2;
 
-// Adresa, kterou RÚIAN neznal, se zkusí znovu po tolika dnech. Novostavba z
-// webu developera ("Lhotka 51") má adresní místo a číslo popisné v registru až
-// po dokončení domu; záporná odpověď proto nesmí platit navždy.
-export const RECHECK_UNKNOWN_DAYS = 14;
+// Adresa, kterou RÚIAN neznal, se zkusí znovu po tolika dnech (čtvrtletí).
+// Novostavba z webu developera ("Lhotka 51") má adresní místo a číslo popisné v
+// registru až po dokončení domu; záporná odpověď proto nesmí platit navždy, ale
+// ani se na ni nemá cenu ptát častěji — dům se nestaví po dnech.
+export const RECHECK_UNKNOWN_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Kdy byl který klíč naposledy zjišťován: Map klíč → čas (ms). */
@@ -220,7 +221,11 @@ export async function ruianPending(db, log, { limit = 150, delayMs = 250 } = {})
   let failures = 0;
   for (const job of todo.slice(0, limit)) {
     try {
-      saveRuian(db, job.key, await job.run());
+      const result = await job.run();
+      // Adresa, kterou RÚIAN dřív neznal, se objevila (novostavba po dokončení) —
+      // jen do logu, byt se sám zařadí mezi ověřitelné (viz new-build.js).
+      if (result && cache.get(job.key) === null) log(`[ruian] adresa se objevila v registru: ${job.key} — byt se zařadí mezi ověřitelné.`);
+      saveRuian(db, job.key, result);
       done++;
       failures = 0;
     } catch (err) {

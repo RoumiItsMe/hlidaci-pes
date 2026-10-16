@@ -145,7 +145,7 @@ const POSSIBLE_SALE_NEXT_STEP = {
   "pending-scan":
     "Dům se prohledá při tomhle sběru a plomby (podané vklady) pak hlídá appka sama přes API katastru — ozve se, jakmile nějakou najde. Byt bude v Katastr → „Hlídá appka přes API katastru“.",
   unverifiable:
-    "Tenhle byt jde v katastru těžko ověřit (družstevní byt, nebo dům bez vymezených jednotek) — vklad tu nevznikne, takže appka nic dalšího nehlídá.",
+    "Tenhle byt jde v katastru těžko ověřit (družstevní byt, novostavba před dokončením, nebo dům bez vymezených jednotek) — vklad tu nevznikne, takže appka nic dalšího nehlídá (novostavbu zkontroluje znovu za 3 měsíce).",
   "no-address":
     "Bez přesné adresy se v katastru nedá hlídat. Doplň ji v detailu bytu — appka pak dům prohledá hned a podaný vklad ohlásí.",
 };

@@ -19,6 +19,7 @@ import { buildSaleTrack, FILING_CHECK_DAYS } from "./kn-schedule.js";
 import { createKnClient, scanBuilding, parseUnitNumber, KnApiError } from "./kn-api.js";
 import { analyzePlombas, apiWatch, formatDay } from "./kn-plomba.js";
 import { diffKnScan, saveKnEvents } from "./kn-events.js";
+import { isNewBuildPending } from "./new-build.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -105,6 +106,9 @@ export function collectTrackedGroups(db, now = Date.now()) {
   const tracked = [];
   for (const group of groups) {
     if (isCooperativeOwnership(group.members)) continue; // v katastru nemá vklad, sken by byl zbytečný
+    // Novostavba, jejíž adresu RÚIAN zatím nezná: bod z inzerátu může ležet u
+    // sousedního domu, sken by hlídal cizí dům (viz new-build.js).
+    if (isNewBuildPending(group.members, actx.ruianCache)) continue;
     const track =
       buildSaleTrack(group.members, group.members.flatMap((m) => eventsByListing.get(m.id) || []), now) ?? unreservedTrack(group.members, now);
     if (!worthScanning(track)) continue;
@@ -205,6 +209,7 @@ export function knWatchState(db, group) {
   const same = groups.find((g) => g.members.some((m) => group.members.some((x) => x.id === m.id)));
   if (!same) return "no-address";
   const actx = buildAddressContext(db, listings, groups);
+  if (isNewBuildPending(same.members, actx.ruianCache)) return "unverifiable";
   const buildingId = knInfoForGroup(actx, same, resolveForGroup(actx, same))?.building?.isknId;
   if (!buildingId) return "no-address";
   const scan = loadKnScans(db).get(buildingId);
@@ -225,8 +230,11 @@ export function createWatchResolver(db, listings, groups, now = Date.now(), exis
   let actx = existingContext;
   return (group) => (reservedAt) => {
     if (isCooperativeOwnership(group.members)) return UNVERIFIABLE_WATCH;
-    if (!scans.size || !pickOwnValue(group.members, "exact_address")) return null;
+    if (!pickOwnValue(group.members, "exact_address")) return null;
     actx ??= buildAddressContext(db, listings, groups);
+    // Novostavba před dokončením: zatím není v čem hledat (viz new-build.js).
+    if (isNewBuildPending(group.members, actx.ruianCache)) return UNVERIFIABLE_WATCH;
+    if (!scans.size) return null;
     const buildingId = knInfoForGroup(actx, group, resolveForGroup(actx, group))?.building?.isknId;
     const scan = buildingId ? scans.get(buildingId) : null;
     const unitNumber = parseUnitNumber(pickOwnValue(group.members, "unit_number")) ?? parseUnitNumber(pickOwnValue(group.members, "kn_auto_unit"));

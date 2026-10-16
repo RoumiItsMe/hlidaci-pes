@@ -270,3 +270,74 @@ for (const hidden of [true, false]) {
     assert.equal(db.prepare("SELECT COUNT(*) c FROM kn_events WHERE kind = 'filing'").get().c, 1);
   });
 }
+
+// --- Novostavba před dokončením: zatím nejde ověřit, po objevení v RÚIAN se zařadí sama ---
+import { groupListings } from "./group.js";
+import { createWatchResolver } from "./kn-scan.js";
+
+function newBuildDb() {
+  const db = initDb(new DatabaseSync(":memory:"));
+  insertListing(db, {
+    id: "sreality:1",
+    source: "sreality",
+    source_id: "1",
+    url: "https://example.invalid/1",
+    title: "Prodej bytu 2+1",
+    disposition: "2+1",
+    area_m2: 52,
+    address: "Česká Třebová",
+    description: "",
+    price_czk: 4_600_000,
+    status: "removed",
+    first_seen_at: iso(NOW - 20 * DAY),
+    last_seen_at: iso(NOW - 3 * DAY),
+    removed_at: iso(NOW - 3 * DAY),
+  });
+  updateListingFields(db, "sreality:1", { exact_address: "Lhotka 51, Česká Třebová", own_condition: "novostavba" });
+  return db;
+}
+const LHOTKA = () => addressKey("Lhotka", "51", "Česká Třebová");
+const watchOf = (db) => {
+  const listings = db.prepare("SELECT * FROM listings").all();
+  const groups = groupListings(listings);
+  return createWatchResolver(db, listings, groups, NOW)(groups[0])(NOW - 3 * DAY);
+};
+
+test("novostavba, kterou RÚIAN zná jako neznámou: nehlídá se, neskenuje se a je 'nejde ověřit'", () => {
+  const db = newBuildDb();
+  saveRuian(db, LHOTKA(), null);
+  assert.deepEqual(collectTrackedGroups(db, NOW), []);
+  assert.equal(watchOf(db)?.unverifiable, true);
+});
+
+test("jakmile RÚIAN dům zná, byt se tiše zařadí mezi ověřitelné (sleduje se, už není 'nejde ověřit')", () => {
+  const db = newBuildDb();
+  saveRuian(db, LHOTKA(), null);
+  assert.deepEqual(collectTrackedGroups(db, NOW), []);
+  // o 3 měsíce později: dům je v registru
+  saveRuian(db, LHOTKA(), { ku: { kod: 621757, nazev: "Česká Třebová" }, building: { cp: ["51"], flats: 12, isknId: 4242 }, addressPoint: "Lhotka 51, 56002 Česká Třebová" });
+  const tracked = collectTrackedGroups(db, NOW);
+  assert.equal(tracked.length, 1);
+  assert.equal(tracked[0].buildingId, 4242);
+  assert.notEqual(watchOf(db)?.unverifiable, true);
+});
+
+test("stejná adresa u bytu, který novostavba není, se neoznačuje jako neověřitelná", () => {
+  const db = newBuildDb();
+  updateListingFields(db, "sreality:1", { own_condition: "maintained" });
+  saveRuian(db, LHOTKA(), null);
+  assert.notEqual(watchOf(db)?.unverifiable, true);
+});
+
+import { pointKey } from "./ruian.js";
+
+test("novostavba před dokončením se neskenuje ani tehdy, když bod z inzerátu leží v cizím (sousedním) domě", () => {
+  const db = newBuildDb();
+  updateListingFields(db, "sreality:1", { lat: 49.9249, lon: 16.437 });
+  saveRuian(db, pointKey(49.9249, 16.437), { exact: true, ambiguous: false, ku: { kod: 621757, nazev: "Česká Třebová" }, building: { cp: ["52"], flats: 3, isknId: 999 }, addresses: [] });
+  saveRuian(db, LHOTKA(), null);
+  assert.deepEqual(collectTrackedGroups(db, NOW), []); // kdyby se sken nepřeskočil, hlídal by se dům č.p. 52
+  // a kdy by byt novostavba nebyl, sledoval by se podle bodu (kontrola, že test měří to správné)
+  updateListingFields(db, "sreality:1", { own_condition: "maintained" });
+  assert.equal(collectTrackedGroups(db, NOW).length, 1);
+});

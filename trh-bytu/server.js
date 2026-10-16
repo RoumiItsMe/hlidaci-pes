@@ -12,7 +12,8 @@ import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
 import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
-import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian, RECHECK_UNKNOWN_DAYS } from "./ruian.js";
+import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian, loadRuianCache } from "./ruian.js";
+import { isNewBuildPending } from "./new-build.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
 import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
@@ -179,6 +180,12 @@ function addressChipHtml(ai, status, href = null) {
   if (ai.state === "unknown") return chip("addr-chip addr-chip--unknown", "📍 adresa neznámá");
   if (status === "active" || status === "reserved") return chip("addr-chip addr-chip--missing", "📍 doplnit adresu");
   return "";
+}
+
+// Štítek "novostavba před dokončením" — v katastru se zatím nedá ověřit.
+function newBuildChipHtml(e) {
+  if (!e.newBuildPending) return "";
+  return `<span class="addr-chip addr-chip--coop" title="Dům zatím není v registru RÚIAN (číslo popisné se přidělí až po dokončení), takže v katastru není co ověřit. Appka to zkontroluje jednou za 3 měsíce a až dům v registru bude, zařadí byt mezi ověřitelné.">🏗️ novostavba · zatím nejde ověřit</span>`;
 }
 
 // Štítek stavu bytu. Zmizelý byt, u kterého uživatel v katastru ověřil, že
@@ -531,6 +538,7 @@ function computeEntries(db) {
   // Kde plomby hlídá API katastru (kn-scan.js), ruční kontrola podle rozvrhu
   // se nepřipomíná — bez skenů (bez klíče) vrací null a rozvrh platí celý.
   const watchFor = createWatchResolver(db, allListings, allGroups);
+  const ruianCache = loadRuianCache(db);
 
   // Jedna náhledová fotka na inzerát (ta s nejnižším id = první stažená),
   // jedním dotazem pro všechny skupiny najednou — ne N samostatných.
@@ -619,6 +627,8 @@ function computeEntries(db) {
       // odhad, jak pravděpodobně se zmizelý byt prodal (jen pro řazení
       // fronty /kontrola, viz sale-triage.js).
       addressInfo: addressInfo(g.members),
+      // Novostavba, jejíž adresu RÚIAN zatím nezná: v katastru se zatím nedá ověřit (new-build.js).
+      newBuildPending: isNewBuildPending(g.members, ruianCache),
       track,
       unreservedWatch,
       // Čas se podívat do katastru: nastal kontrolní bod rozvrhu a po něm se
@@ -774,7 +784,7 @@ function renderTable(db, filters) {
             <div class="row-meta">
               <span class="badge" style="background:${st.color}">${esc(st.text)}</span>${saleChip}
               <span class="muted">${esc(sourceLabel)}${linkBadge}${reservedNote}${goneNote}${hiddenNote}</span>
-              ${addressChip}${candidateChip}
+              ${addressChip}${newBuildChipHtml(entry)}${candidateChip}
             </div>
           </div>
         </a>
@@ -922,7 +932,8 @@ function renderComparisonTable(db, filters) {
       cell: (e, encId) => {
         // Přesná adresa pod přibližnou — to, podle čeho se byt hledá v katastru.
         const chip = addressChipHtml(e.addressInfo, e.status, `/byt/${encId}#adresa`);
-        return `<td>${noteInput(encId, "address", e.address || e.city, "adresa…")}${chip ? `<div class="cell-addr">${chip}</div>` : ""}</td>`;
+        const chips = [chip, newBuildChipHtml(e)].filter(Boolean).join(" ");
+        return `<td>${noteInput(encId, "address", e.address || e.city, "adresa…")}${chips ? `<div class="cell-addr">${chips}</div>` : ""}</td>`;
       },
     },
     { head: "Dispozice", essential: "disposition", cell: (e, encId) => `<td>${noteInput(encId, "disposition", e.rep.disposition, "—")}</td>` },
@@ -1083,8 +1094,11 @@ function renderDetail(db, id) {
   // nevypadá jako chyba appky; záznam se po čase ověří znovu (viz ruian.js).
   const parsedExact = ai.exact ? parseExactAddress(ai.exact) : null;
   const ruianUnknown = parsedExact && actx.ruianCache.get(addressKey(parsedExact.street, parsedExact.number, parsedExact.city)) === null;
-  const ruianHint = ruianUnknown
-    ? `<p class="muted">RÚIAN adresu „${esc(ai.exact)}“ zatím nezná. U novostavby je to běžné — číslo popisné se do registru dostane až po dokončení domu. Appka to zkusí znovu jednou za ${RECHECK_UNKNOWN_DAYS} dní a až dům najde, začne ho hlídat v katastru.</p>`
+  const newBuildPending = ruianUnknown && isNewBuildPending(members, actx.ruianCache);
+  const ruianHint = newBuildPending
+    ? `<p class="muted">🏗️ <strong>Novostavba — zatím nejde ověřit v katastru.</strong> RÚIAN adresu „${esc(ai.exact)}“ zatím nezná, číslo popisné se do registru dostane až po dokončení domu. Appka to zkontroluje jednou za 3 měsíce; až dům v registru bude, doplní ho a zařadí byt mezi ověřitelné — bez upozornění.</p>`
+    : ruianUnknown
+    ? `<p class="muted">RÚIAN adresu „${esc(ai.exact)}“ nezná — zkontroluj, jestli je správně. U novostavby před dokončením je to běžné (číslo popisné přichází až s dokončením domu); appka se zeptá znovu jednou za 3 měsíce.</p>`
     : "";
   const addressStatusText =
     ai.state === "known"
@@ -1819,7 +1833,7 @@ function saleStageText({ verdict, track, price, saleDate, filed, portalSold = fa
   if (track?.priceAssumed) return `Prodáno podle portálu — poslední cena ${formatCzk(lastPrice)}, v katastru ji nejde ověřit; do statistik se počítá snížená o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (${formatCzk(assumedSalePrice(lastPrice))})`;
   if (unverifiable && !verdict) {
     const counted = countsInStats && lastPrice != null ? `; ve statistikách se počítá poslední cena −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (${formatCzk(assumedSalePrice(lastPrice))}), skutečnou cenu můžeš zadat níže` : "";
-    return `Nejde ověřit v katastru (družstevní byt, nebo dům bez vymezených jednotek) — appka ho nehlídá${counted}`;
+    return `Nejde ověřit v katastru (družstevní byt, novostavba před dokončením, nebo dům bez vymezených jednotek) — appka ho nehlídá${counted}`;
   }
   if (portalSold && !filed && lastPrice != null) return `Prodáno podle portálu — cena z inzerátu ${formatCzk(lastPrice)} zatím není ověřená v katastru`;
   if (verdict === "sold" || portalSold) return filed ? `Prodáno — vklad podán ${formatDateOnly(filed)}, cena se dohledá po rozhodnutí o vkladu` : "Prodáno — cena zatím neznámá";
@@ -2025,7 +2039,7 @@ function renderKnQueue(db) {
     const encId = encodeURIComponent(e.rep.id);
     const scan = lookupFor(e).buildingId ? knScans.get(lookupFor(e).buildingId) : null;
     const note = e.track.unverifiable
-      ? "dům nemá v katastru jednotky (družstevní?) — nejde ověřit"
+      ? "dům nemá v katastru jednotky (družstevní?) nebo je to novostavba před dokončením — nejde ověřit"
       : `${e.removedAt ? `inzerát zmizel ${formatDateOnly(e.removedAt)}; ` : ""}čeká na plombu; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}`;
     return `<details class="kn-wait">
         <summary><a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— ${esc(note)}</span></summary>
@@ -2090,7 +2104,9 @@ function renderKnQueue(db) {
       const facts = unverifiableOnly
         ? [
             e.removedAt ? `inzerát zmizel ${formatDateOnly(e.removedAt)}` : e.status === "reserved" ? "rezervováno" : null,
-            "dům nemá v katastru jednotky nebo je byt družstevní — prodej ani cenu z katastru nezjistíme",
+            e.newBuildPending
+              ? "novostavba před dokončením — dům zatím není v RÚIAN, prodej ani cenu z katastru zatím nezjistíme (appka to zkontroluje jednou za 3 měsíce)"
+              : "dům nemá v katastru jednotky nebo je byt družstevní — prodej ani cenu z katastru nezjistíme",
             e.price != null && e.almostSold
               ? `ve statistikách se počítá poslední cena ${formatCzk(e.price)} −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (${formatCzk(assumedSalePrice(e.price))})`
               : null,

@@ -123,3 +123,11 @@ test("ruianPending: adresa, kterou RÚIAN dřív neznal, se po čase zjistí zno
     stub.restore();
   }
 });
+
+test("záporná odpověď RÚIAN se opakuje po čtvrtletí, ne dřív", () => {
+  const key = "adr:lhotka|51|ceska trebova";
+  assert.equal(RECHECK_UNKNOWN_DAYS, 90);
+  assert.equal(isRuianEntryStale(key, null, NOW - 30 * DAYS, NOW), false);
+  assert.equal(isRuianEntryStale(key, null, NOW - 89 * DAYS, NOW), false);
+  assert.equal(isRuianEntryStale(key, null, NOW - 91 * DAYS, NOW), true);
+});
