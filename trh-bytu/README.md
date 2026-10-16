@@ -592,7 +592,7 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   Když se byt **30 dní** (`PROBABLE_SALE_AFTER_DAYS` v `sale-triage.js`) nevrátil,
   štítek se změní na **Pravděpodobně prodáno** (oba jsou ve filtru „Čeká na ověření“).
   Verdikt dál dává jen katastr.
-- **Rychlý přehled prodaných bytů: dva filtry na úvodní stránce i v tabulce
+- **Rychlý přehled prodaných bytů: dva filtry ve stránce Byty i v tabulce
   srovnání.**
   - **Prodáno** je přísné: jen byty s **potvrzenou cenou** — cena z katastru
     (nebo zadaná ručně) a družstevní byty, které se v katastru ověřit nedají a
@@ -828,11 +828,24 @@ po pár vteřinách a snadno unikne pozornosti. Protože nové zprávy tlačítk
 nemají, je tahle úloha už jen dobíhající pojistka pro staré zprávy; jinak ji
 nepotřebuješ.
 
-## Přehled (`/prehled`) — co je nového na jedné stránce
+## Přehled (úvodní stránka `/`) — co je nového na jedné stránce
 
-V hlavičce první odkaz **📊 Přehled**. Je to nástěnka, na které za pár vteřin
-uvidíš, co se od posledně stalo a co čeká na tebe. Nemá vlastní data — všechno
-bere z toho, co appka už ví, a každý blok vede do pohledu, odkud pochází:
+Po otevření appky (`http://localhost:4321`, nebo **🏠 Trh bytů** v hlavičce) se
+ukáže **Přehled**: nástěnka, na které za pár vteřin uvidíš, co se od posledně
+stalo a co čeká na tebe. Seznam bytů s fotkami a filtry je vedle ve stránce
+**🏘️ Byty** (`/byty`). Staré odkazy (`/?status=sold`, `/prehled`) fungují dál —
+přesměrují se na nové adresy. Přehled nemá vlastní data — všechno bere z toho,
+co appka už ví, a každý blok vede do pohledu, odkud pochází:
+
+- **🔄 Aktualizovat teď** — tlačítko úplně nahoře spustí sběr nabídek hned, ne
+  až zítra v 8:00 (tentýž sběr jako plánovaná úloha, včetně Telegram zpráv a
+  kontroly katastru). Po dobu běhu (obvykle pár minut) je tlačítko neaktivní a
+  stránka se sama obnovuje; po dokončení ukáže výsledek („Hotovo: 2 nových
+  bytů zaevidováno, 1 změn ceny.“). Víc sběrů najednou appka nepustí
+  (`data/track.lock`) — tlačítko, plánovaná úloha a dohánění po startu PC se
+  vzájemně nepřetlačí. Zmizení inzerátu se potvrdí až při dalším sběru **po
+  alespoň 6 hodinách** od prvního výpadku (`MIN_CONFIRM_GAP_MS` v `relist.js`),
+  takže dva sběry těsně po sobě nevyrobí falešné „zmizelo z nabídky“.
 
 - **Pás čísel nahoře** (každé číslo je odkaz na odpovídající filtr): v nabídce
   (+ kolik jich přibylo za týden), rezervováno, **čeká na ověření**, **prodáno**

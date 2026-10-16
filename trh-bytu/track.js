@@ -27,6 +27,7 @@ import { fetchRealitymix } from "../sources/realitymix.js";
 import { fetchBazos } from "../sources/bazos.js";
 import { openDb, nowIso, getListing, insertListing, updateListingFields, insertEvent, insertPhoto, DATA_DIR } from "./db.js";
 import { handleDisappeared } from "./relist.js";
+import { acquireTrackLock, releaseTrackLock } from "./track-lock.js";
 import { reservationChange } from "./reservation.js";
 import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
 import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
@@ -42,6 +43,7 @@ import { fetchRealitymixDetail } from "./detail/realitymix.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
 
 const LOG_PATH = path.join(DATA_DIR, "track.log");
+const LOCK_PATH = path.join(DATA_DIR, "track.lock");
 
 // Telegram token/chat ID z `.env.local` v kořeni repa (git-ignored) —
 // stejný mechanismus a stejné proměnné jako hlídací pes (viz
@@ -337,7 +339,23 @@ async function processSource(db, source, watch) {
   return { newCount, priceChangeCount, removedCount, relistedCount, reservationCount, soldCount, error: false };
 }
 
+// Jen jeden sběr naráz (plánovaná úloha + tlačítko "Aktualizovat teď" na
+// přehledu + dohánění po startu PC), viz track-lock.js. Běh, který zámek nezíská,
+// se tiše přeskočí — ten druhý právě dělá totéž.
 async function run() {
+  if (!acquireTrackLock(LOCK_PATH)) {
+    log("Jiný sběrný běh právě probíhá — tenhle se přeskakuje.");
+    return;
+  }
+  process.on("exit", () => releaseTrackLock(LOCK_PATH));
+  try {
+    await runLocked();
+  } finally {
+    releaseTrackLock(LOCK_PATH);
+  }
+}
+
+async function runLocked() {
   const db = openDb();
   const watch = watches.find((w) => w.key === "byty");
   if (!watch) throw new Error('watch "byty" nenalezen v config.js');

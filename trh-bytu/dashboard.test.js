@@ -1,7 +1,7 @@
 // node --test trh-bytu/dashboard.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime } from "./dashboard.js";
+import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime, parseRunSummary } from "./dashboard.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-10-15T10:00:00.000Z");
@@ -183,4 +183,25 @@ test("čas od posledního sběru česky", () => {
   assert.equal(relativeTime(new Date(NOW - 3 * 60 * 60 * 1000).toISOString(), NOW), "před 3 h");
   assert.equal(relativeTime(ago(1), NOW), "před 1 dnem");
   assert.equal(relativeTime(ago(5), NOW), "před 5 dny");
+});
+
+const LOG = [
+  "[2026-10-16T06:00:00.000Z] === Start běhu ===",
+  "[2026-10-16T06:01:36.853Z] Hotovo. 3 nových bytů zaevidováno, 1 změn ceny, 0 zmizelo z nabídky, 0 znovu vloženo, 0 změn rezervace, 0 prodáno.",
+  "[2026-10-16T12:00:00.000Z] === Start běhu ===",
+  "[2026-10-16T12:01:10.000Z] Hotovo. 0 nových bytů zaevidováno, 0 změn ceny, 0 zmizelo z nabídky, 0 znovu vloženo, 0 změn rezervace, 0 prodáno.",
+].join("\n");
+
+test("souhrn sběru z logu: jen nenulové počty a jen běh po zadaném čase", () => {
+  assert.deepEqual(parseRunSummary(LOG, Date.parse("2026-10-16T05:59:00.000Z")), { kind: "done", text: "Hotovo: beze změn.", warning: false }); // poslední řádek vyhrává
+  const first = LOG.split("\n").slice(0, 2).join("\n");
+  assert.deepEqual(parseRunSummary(first, Date.parse("2026-10-16T05:59:00.000Z")), { kind: "done", text: "Hotovo: 3 nových bytů zaevidováno, 1 změn ceny.", warning: false });
+  assert.equal(parseRunSummary(first, Date.parse("2026-10-16T07:00:00.000Z")), null);
+});
+
+test("souhrn sběru: varování při selhání zdroje a přeskočený běh", () => {
+  const warn = "[2026-10-16T06:01:36.853Z] Hotovo. 1 nových bytů zaevidováno, 0 změn ceny, 0 zmizelo z nabídky, 0 znovu vloženo, 0 změn rezervace, 0 prodáno. (u některého zdroje selhalo stahování — zkontroluj log výše.)";
+  assert.deepEqual(parseRunSummary(warn, 0), { kind: "done", text: "Hotovo: 1 nových bytů zaevidováno.", warning: true });
+  assert.deepEqual(parseRunSummary("[2026-10-16T06:00:00.000Z] Jiný sběrný běh právě probíhá — tenhle se přeskakuje.", 0), { kind: "skipped" });
+  assert.equal(parseRunSummary("", 0), null);
 });

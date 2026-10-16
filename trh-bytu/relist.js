@@ -33,6 +33,17 @@ export function findRelistSuccessor(gone, candidates) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+// Dva běhy po sobě mají být odstup, ne dva dotazy v řadě: sběr jde spustit i
+// ručně (tlačítko "Aktualizovat teď") a plánovaná úloha se po startu PC
+// dožene klidně hodinu po předchozím běhu. Kdyby stačilo "chybí ve dvou
+// bězích", přechodný výpadek portálu by se potvrdil jako zmizení během minut.
+export const MIN_CONFIRM_GAP_MS = 6 * 60 * 60 * 1000;
+
+/** Je první výpadek (`missedSince`) dost starý na to, aby ho další běh potvrdil jako zmizení? */
+export function isMissConfirmed(missedSince, now = Date.now()) {
+  return Boolean(missedSince) && now - Date.parse(missedSince) >= MIN_CONFIRM_GAP_MS;
+}
+
 function priceText(price) {
   return price == null ? "na vyžádání" : `${price} Kč`;
 }
@@ -74,8 +85,13 @@ export function handleDisappeared(db, sourceName, currentIds, createdThisRun, lo
       continue;
     }
 
-    // Chybí podruhé po sobě — zmizení potvrzeno, datum je ale okamžik, kdy
-    // ho appka poprvé nenašla.
+    if (!isMissConfirmed(gone.missed_since)) {
+      log(`[${sourceName}] pořád nenalezen, ale první výpadek je čerstvý — potvrdí až další běh po odstupu: ${id}`);
+      continue;
+    }
+
+    // Chybí podruhé po sobě (s odstupem) — zmizení potvrzeno, datum je ale
+    // okamžik, kdy ho appka poprvé nenašla.
     updateListingFields(db, id, { status: "removed", removed_at: gone.missed_since, missed_since: null });
     insertEvent(db, { listing_id: id, event_type: "removed", occurred_at: gone.missed_since });
     removedCount++;

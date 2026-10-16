@@ -158,7 +158,7 @@ export function attention(entries) {
       label: "Doplnit chybějící údaje",
       why: `appka je nevyčetla z inzerátu — ${missingCounts.map((x) => `${x.label} ${x.n}×`).join(", ")}`,
     },
-    { key: "noAddress", entries: noAddress, href: "/?adresa=chybi", label: "Doplnit přesnou adresu", why: "bez ní se byt v katastru nedá hledat ani hlídat" },
+    { key: "noAddress", entries: noAddress, href: "/byty?adresa=chybi", label: "Doplnit přesnou adresu", why: "bez ní se byt v katastru nedá hledat ani hlídat" },
   ]
     .filter((t) => t.entries.length > 0)
     .map(({ entries: list, ...task }) => ({ ...task, count: list.length, entries: list }));
@@ -174,4 +174,28 @@ export function relativeTime(iso, now = Date.now()) {
   if (diff < DAY_MS) return `před ${Math.floor(diff / HOUR_MS)} h`;
   const days = Math.floor(diff / DAY_MS);
   return days === 1 ? "před 1 dnem" : `před ${days} dny`;
+}
+
+/**
+ * Souhrn posledního dokončeného sběru z logu (track.log): řádek "Hotovo. …"
+ * zapsaný po `sinceMs`. Vrací `{ kind: "done", text, warning }` (nulové počty se
+ * vynechají), `{ kind: "skipped" }` (sběr se přeskočil, protože běžel jiný), nebo
+ * null, když v logu po `sinceMs` nic takového není.
+ */
+export function parseRunSummary(logText, sinceMs = 0) {
+  let result = null;
+  for (const line of logText.split(/\r?\n/)) {
+    const m = /^\[(\S+?)\] (.*)$/.exec(line);
+    if (!m || !(Date.parse(m[1]) >= sinceMs - 2000)) continue;
+    const body = m[2];
+    if (body.startsWith("Jiný sběrný běh právě probíhá")) {
+      result = { kind: "skipped" };
+    } else if (body.startsWith("Hotovo. ")) {
+      const rest = body.slice("Hotovo. ".length);
+      const counts = rest.replace(/\s*\(.*\)\s*$/, "").replace(/\.$/, "");
+      const parts = counts.split(", ").filter((p) => p && !/^0 /.test(p));
+      result = { kind: "done", text: parts.length ? `Hotovo: ${parts.join(", ")}.` : "Hotovo: beze změn.", warning: /selhalo stahování/.test(rest) };
+    }
+  }
+  return result;
 }

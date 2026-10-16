@@ -4,7 +4,8 @@
 // na rozdíl od track.js NEBĚŽÍ na pozadí.
 
 import { createServer } from "node:http";
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
@@ -22,7 +23,8 @@ import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js";
-import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime } from "./dashboard.js";
+import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime, parseRunSummary } from "./dashboard.js";
+import { readTrackLock } from "./track-lock.js";
 import { watches } from "../config.js";
 
 // KN_API_KEY (a Telegram kvůli zprávě o nalezeném vkladu) z `.env.local` v
@@ -49,6 +51,57 @@ function refreshKnScansNow(db) {
       });
   }
   return knRefreshRunning;
+}
+
+// Ruční sběr ("Aktualizovat teď" na přehledu): server spustí track.js jako
+// samostatný proces (stejný, jaký denně pouští plánovaná úloha) a hlídá, jestli
+// ještě běží. Souběh s plánovanou úlohou hlídá zámek v track.js (track-lock.js);
+// tady se podle něj jen pozná, že sběr někde běží. TRACK_SCRIPT a TRACK_LOG jsou jen pro
+// zkoušení (náhradní skript místo skutečného sběru).
+const TRACK_SCRIPT = process.env.TRACK_SCRIPT || path.join(import.meta.dirname, "track.js");
+const TRACK_LOCK_PATH = path.join(DATA_DIR, "track.lock");
+const TRACK_LOG_PATH = process.env.TRACK_LOG || path.join(DATA_DIR, "track.log");
+let manualRun = null; // { startedAt } — sběr spuštěný z appky, ještě běží
+let lastManualRun = null; // { finishedAt, ok, message } — výsledek posledního ručního sběru
+
+function trackRunning() {
+  return manualRun !== null || readTrackLock(TRACK_LOCK_PATH) !== null;
+}
+
+// Zpráva o dokončeném ručním sběru z "Hotovo. …" v logu (viz parseRunSummary).
+function manualRunMessage(startedAt, exitCode) {
+  if (exitCode !== 0) return { ok: false, message: "Aktualizace skončila chybou — podrobnosti jsou v data/track.log." };
+  let text = "";
+  try {
+    text = readFileSync(TRACK_LOG_PATH, "utf8");
+  } catch {
+    // Bez logu zůstane obecná zpráva.
+  }
+  const summary = parseRunSummary(text, startedAt);
+  if (summary?.kind === "skipped") return { ok: true, message: "Právě běžel jiný sběr, tenhle se přeskočil — data jsou čerstvá." };
+  if (summary?.kind === "done") {
+    return { ok: !summary.warning, message: `${summary.text}${summary.warning ? " ⚠️ U některého zdroje selhalo stahování (viz data/track.log)." : ""}` };
+  }
+  return { ok: true, message: "Aktualizace doběhla." };
+}
+
+function startManualTrack() {
+  if (trackRunning()) return false;
+  const startedAt = Date.now();
+  manualRun = { startedAt };
+  const finish = (code) => {
+    if (!manualRun) return;
+    manualRun = null;
+    lastManualRun = { finishedAt: nowIso(), ...manualRunMessage(startedAt, code) };
+  };
+  try {
+    const child = spawn(process.execPath, [TRACK_SCRIPT], { cwd: path.join(import.meta.dirname, ".."), stdio: "ignore", windowsHide: true });
+    child.on("error", () => finish(1));
+    child.on("exit", (code) => finish(code ?? 1));
+  } catch {
+    finish(1);
+  }
+  return true;
 }
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
@@ -343,7 +396,7 @@ function rowActionButtons(id, starred, hidden) {
   return `${starBtn}${hideBtn}`;
 }
 
-function layout(title, body, { wide = false } = {}) {
+function layout(title, body, { wide = false, refresh = 0 } = {}) {
   // Zvoneček: počet nepřečtených upozornění — rezervace, změny cen, nové
   // nabídky (viz notifications.js).
   const unread = countUnread(getNotifications(db), getNotificationsSeenAt(db));
@@ -358,10 +411,11 @@ function layout(title, body, { wide = false } = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <link rel="stylesheet" href="/style.css">
+${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ""}
 <script src="/app.js" defer></script>
 </head>
 <body>
-<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/prehled">📊 Přehled</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a>${bell}</header>
+<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/byty">🏘️ Byty</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a>${bell}</header>
 <main${wide ? ' class="wide"' : ""}>${body}</main>
 </body>
 </html>`;
@@ -434,7 +488,7 @@ function truncate(text, maxLen) {
 // filtry (klik na "Cena ↑" nesmí zapomenout zvolené město atd.).
 // `base` = stránka, na kterou odkaz vede ("/" přehled, "/tabulka" srovnání) —
 // bez toho odkazy ve filtrech tabulky srovnání vedly na přehled.
-function buildQuery(current, overrides, base = "/") {
+function buildQuery(current, overrides, base = "/byty") {
   const merged = { ...current, ...overrides };
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(merged)) {
@@ -751,7 +805,7 @@ function renderTable(db, filters) {
     <div class="filters">${filterLinks}${topLink}${addressLink}${hiddenLink}</div>
     <div class="toolbar">
       <div class="filters">${sortLinks}</div>
-      <form method="get" action="/" class="select-filters">
+      <form method="get" action="/byty" class="select-filters">
         <input type="hidden" name="status" value="${esc(statusFilter || "")}">
         <input type="hidden" name="sort" value="${esc(sort)}">
         <input type="hidden" name="top" value="${esc(topFilter || "")}">
@@ -1094,7 +1148,7 @@ function renderDetail(db, id) {
   });
 
   return `
-    <p><a href="/">← Zpět na seznam</a></p>
+    <p><a href="/byty">← Zpět na seznam</a></p>
     <div class="detail-heading">
       <h1>${starred ? "⭐ " : ""}${esc(rep.disposition || "")} ${rep.area_m2 ? `${rep.area_m2} m²` : ""}</h1>
       <div class="row-actions row-actions--detail">${rowActionButtons(rep.id, starred, hidden)}</div>
@@ -1379,7 +1433,24 @@ function miniCardHtml(e, noteHtml = "") {
     </a>`;
 }
 
-// Přehled (/prehled): co je nového a co čeká na rozhodnutí. Počty a výběry
+// Tlačítko "Aktualizovat teď" + stav sběru nad pásem čísel. Dokud sběr běží, je
+// tlačítko neaktivní a stránka se sama obnovuje (viz layout, refresh), po
+// dokončení ukáže výsledek.
+function refreshPanelHtml(sub) {
+  const running = trackRunning();
+  const button = running
+    ? `<button type="button" disabled>⏳ Aktualizuji…</button>`
+    : `<form method="post" action="/aktualizovat" class="refresh-form"><button type="submit">🔄 Aktualizovat teď</button></form>`;
+  let status = "";
+  if (running) {
+    status = `<p class="refresh-status refresh-status--running">Stahuji nové nabídky z portálů — obvykle to trvá pár minut, stránka se obnoví sama.</p>`;
+  } else if (lastManualRun && Date.now() - Date.parse(lastManualRun.finishedAt) < 30 * 60 * 1000) {
+    status = `<p class="refresh-status refresh-status--${lastManualRun.ok ? "done" : "error"}">${lastManualRun.ok ? "✅" : "⚠️"} ${esc(lastManualRun.message)}</p>`;
+  }
+  return `<div class="refresh-panel">${button}${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</div>${status}`;
+}
+
+// Přehled (úvodní stránka): co je nového a co čeká na rozhodnutí. Počty a výběry
 // počítá dashboard.js, tady se jen skládá HTML. Všechno vede do existujících
 // pohledů (filtry přehledu bytů, zvoneček, fronta Katastr) — žádná nová data.
 function renderDashboard(db) {
@@ -1404,10 +1475,10 @@ function renderDashboard(db) {
   const kpi = (href, num, label, note = "") =>
     `<a class="kpi" href="${href}"><span class="kpi-num">${esc(num)}</span><span class="kpi-label">${esc(label)}</span>${note ? `<span class="kpi-note">${esc(note)}</span>` : ""}</a>`;
   const kpis = [
-    kpi("/?status=active", String(snap.active), "v nabídce", snap.newThisWeek ? `+${snap.newThisWeek} nových za týden` : "žádné nové za týden"),
-    kpi("/?status=reserved", String(snap.reserved), "rezervováno"),
-    kpi("/?status=possible", String(snap.pending), "čeká na ověření", "prodané bez potvrzené ceny"),
-    kpi("/?status=sold", String(snap.confirmed), "prodáno", "s potvrzenou cenou"),
+    kpi("/byty?status=active", String(snap.active), "v nabídce", snap.newThisWeek ? `+${snap.newThisWeek} nových za týden` : "žádné nové za týden"),
+    kpi("/byty?status=reserved", String(snap.reserved), "rezervováno"),
+    kpi("/byty?status=possible", String(snap.pending), "čeká na ověření", "prodané bez potvrzené ceny"),
+    kpi("/byty?status=sold", String(snap.confirmed), "prodáno", "s potvrzenou cenou"),
     kpi("/upozorneni?typ=price", String(snap.dropsThisWeek), "slev za týden"),
     kpi("/stats", snap.medianPricePerM2 != null ? new Intl.NumberFormat("cs-CZ").format(snap.medianPricePerM2) : "—", "Kč/m² (medián)", "u bytů v nabídce"),
   ].join("");
@@ -1448,15 +1519,15 @@ function renderDashboard(db) {
 
   return `
     <h1>Přehled</h1>
-    ${sub ? `<p class="muted dash-sub">${esc(sub)}</p>` : ""}
+    ${refreshPanelHtml(sub)}
     <div class="kpis">${kpis}</div>
     ${attentionBox}
     <div class="dash-grid">
       ${card("Aktuality", feed ? `<div class="notifs">${feed}</div>` : "", "Zatím žádná upozornění.", "/upozorneni", "Všechna upozornění", unread ? `<span class="dash-count">${unread} nepřečtených</span>` : "")}
-      ${card("Nejnovější nabídky", offerCards ? `<div class="minis">${offerCards}</div>` : "", "Zatím žádné nabídky.", "/?status=active", "Všechny nabídky")}
+      ${card("Nejnovější nabídky", offerCards ? `<div class="minis">${offerCards}</div>` : "", "Zatím žádné nabídky.", "/byty?status=active", "Všechny nabídky")}
     </div>
     <div class="dash-grid">
-      ${card("Nejnovější prodeje", saleCards ? `<div class="minis">${saleCards}</div>` : "", "Zatím žádný prodaný byt.", "/?status=possible", "Všechny prodeje a ověřování")}
+      ${card("Nejnovější prodeje", saleCards ? `<div class="minis">${saleCards}</div>` : "", "Zatím žádný prodaný byt.", "/byty?status=possible", "Všechny prodeje a ověřování")}
       ${card("Největší slevy (30 dní)", dropCards ? `<div class="minis">${dropCards}</div>` : "", "Za posledních 30 dní žádný byt nezlevnil.", "/upozorneni?typ=price", "Všechny změny cen")}
     </div>`;
 }
@@ -1652,7 +1723,7 @@ function renderStats(db) {
   const justReserved = entries.filter((e) => e.almostSold && e.status === "reserved").length;
 
   return `
-    <p><a href="/">← Zpět na seznam</a></p>
+    <p><a href="/byty">← Zpět na seznam</a></p>
     <h1>Statistiky</h1>
     <ul>${countRows}</ul>
     <p class="muted">Z toho ${mergedCount} nemovitostí nalezeno na víc portálech zároveň.</p>
@@ -2161,7 +2232,29 @@ const server = createServer(async (req, res) => {
     return serveStatic(res, filePath, type);
   }
 
+  // Úvodní stránka je přehled. Staré odkazy na seznam s filtry (záložky,
+  // "/?status=sold") se přesměrují na /byty, kde seznam teď žije.
+  const LIST_PARAMS = ["status", "sort", "city", "ownership", "top", "hidden", "adresa"];
   if (url.pathname === "/" && req.method === "GET") {
+    if (LIST_PARAMS.some((k) => url.searchParams.has(k))) {
+      res.writeHead(302, { Location: `/byty${url.search}` });
+      return res.end();
+    }
+    return sendHtml(res, 200, layout("Přehled — Trh bytů", renderDashboard(db), { refresh: trackRunning() ? 5 : 0 }));
+  }
+
+  if (url.pathname === "/prehled" && req.method === "GET") {
+    res.writeHead(302, { Location: "/" });
+    return res.end();
+  }
+
+  if (url.pathname === "/aktualizovat" && req.method === "POST") {
+    startManualTrack();
+    res.writeHead(302, { Location: "/" });
+    return res.end();
+  }
+
+  if (url.pathname === "/byty" && req.method === "GET") {
     const filters = {
       status: url.searchParams.get("status") || null,
       sort: url.searchParams.get("sort") || "newest",
@@ -2171,7 +2264,7 @@ const server = createServer(async (req, res) => {
       hidden: url.searchParams.get("hidden") || null,
       adresa: url.searchParams.get("adresa") || null,
     };
-    return sendHtml(res, 200, layout("Trh bytů", renderTable(db, filters)));
+    return sendHtml(res, 200, layout("Byty — Trh bytů", renderTable(db, filters)));
   }
 
   if (url.pathname === "/tabulka" && req.method === "GET") {
@@ -2183,10 +2276,6 @@ const server = createServer(async (req, res) => {
       chybi: url.searchParams.get("chybi") === "udaje" ? "udaje" : null,
     };
     return sendHtml(res, 200, layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
-  }
-
-  if (url.pathname === "/prehled" && req.method === "GET") {
-    return sendHtml(res, 200, layout("Přehled — Trh bytů", renderDashboard(db)));
   }
 
   if (url.pathname === "/upozorneni" && req.method === "GET") {
@@ -2363,7 +2452,7 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(starMatch[1]);
     const row = db.prepare("SELECT starred FROM listings WHERE id = ?").get(id);
     if (row) db.prepare("UPDATE listings SET starred = ? WHERE id = ?").run(row.starred ? 0 : 1, id);
-    res.writeHead(302, { Location: req.headers.referer || "/" });
+    res.writeHead(302, { Location: req.headers.referer || "/byty" });
     return res.end();
   }
 
@@ -2372,7 +2461,7 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(hideMatch[1]);
     const row = db.prepare("SELECT hidden FROM listings WHERE id = ?").get(id);
     if (row) db.prepare("UPDATE listings SET hidden = ? WHERE id = ?").run(row.hidden ? 0 : 1, id);
-    res.writeHead(302, { Location: req.headers.referer || "/" });
+    res.writeHead(302, { Location: req.headers.referer || "/byty" });
     return res.end();
   }
 
