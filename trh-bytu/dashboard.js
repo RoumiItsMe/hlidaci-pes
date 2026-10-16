@@ -113,7 +113,9 @@ export function needsEssentials(e) {
 
 /** Klíče chybějících základních údajů bytu (prázdné pole = vše vyplněno nebo se nevyžaduje). */
 export function missingEssentials(e) {
-  return needsEssentials(e) ? ESSENTIAL_FIELDS.filter((f) => !f.has(e)).map((f) => f.key) : [];
+  if (!needsEssentials(e)) return [];
+  const unknown = e.unknownFields ?? []; // označené jako nezjistitelné (unknown-fields.js)
+  return ESSENTIAL_FIELDS.filter((f) => !f.has(e) && !unknown.includes(f.key)).map((f) => f.key);
 }
 
 /**

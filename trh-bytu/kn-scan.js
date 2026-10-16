@@ -297,11 +297,13 @@ function filingMessage(entry, candidate, via) {
  * do logu, nebo null, když nebylo co dělat. Nikdy nevyhazuje — track.js běží
  * bez dohledu.
  */
-export async function refreshKnScans(db, log, { now = Date.now(), client = createKnClient(), send = sendTelegramMessage } = {}) {
+export async function refreshKnScans(db, log, { now = Date.now(), client = createKnClient(), send = sendTelegramMessage, dailyBudget = DAILY_BUDGET } = {}) {
   if (!client.hasKey) return null;
   try {
     const usage = await client.usage();
-    const budget = Math.min(DAILY_BUDGET, usage.limitVolani - usage.provedenoVolani - RESERVE);
+    // Limit API je jeden na klíč, tedy společný pro všechny regiony — region si
+    // smí vzít nejvýš `dailyBudget` a zbytek (RESERVE) zůstává.
+    const budget = Math.min(dailyBudget, usage.limitVolani - usage.provedenoVolani - RESERVE);
     if (budget <= 0) {
       log(`KN API: málo volání (${usage.provedenoVolani}/${usage.limitVolani}), kontrola plomb přeskočena`);
       return null;

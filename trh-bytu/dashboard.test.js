@@ -236,3 +236,22 @@ test("úkoly s adresami jsou od nejnovějších nabídek", () => {
   const s2 = entry(suggestion("B 2, X", { discoveredAt: ago(2) }));
   assert.deepEqual(ids(attention([s1, s2]).tasks.find((t) => t.key === "confirmAddress").entries), ids([s2, s1]));
 });
+
+test("údaj označený jako nezjistitelný se z úkolu 'doplnit údaje' vyřadí; ostatní chybějící zůstávají", () => {
+  const bare = { rep: { disposition: null, area_m2: null }, params: {}, ownCondition: null };
+  assert.deepEqual(missingEssentials(entry({ ...bare, unknownFields: ["condition", "area"] })), ["disposition", "ownership"]);
+  assert.deepEqual(missingEssentials(entry({ ownCondition: null, unknownFields: ["condition"] })), []);
+  // označení nezpůsobí, že by se chybějící jiný údaj přestal hlídat
+  assert.deepEqual(missingEssentials(entry({ ownCondition: null, params: {}, unknownFields: ["condition"] })), ["ownership"]);
+});
+
+test("byt, kterému zbývají jen nezjistitelné údaje, v úkolu 'doplnit údaje' není; počty sedí", () => {
+  const entries = [
+    entry({ ownCondition: null, unknownFields: ["condition"] }), // vyřízeno
+    entry({ ownCondition: null }), // chybí stav
+    entry({ ownCondition: null, params: {}, unknownFields: ["condition"] }), // zbývá vlastnictví
+  ];
+  const task = attention(entries).tasks.find((t) => t.key === "missingData");
+  assert.equal(task.count, 2);
+  assert.ok(task.why.includes("stav (před/po rekonstrukci) 1×") && task.why.includes("vlastnictví 1×"), task.why);
+});

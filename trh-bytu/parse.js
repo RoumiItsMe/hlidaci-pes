@@ -118,6 +118,9 @@ const DECLINED_FORMS = {
   Letohrad: ["Letohradě", "Letohradu", "Letohradem"],
   Žamberk: ["Žamberku", "Žamberkem"],
   "Česká Třebová": ["České Třebové", "Českou Třebovou"],
+  // Region Náchod (region.js)
+  "Náchod": ["Náchodě", "Náchodu", "Náchodem"],
+  "Nové Město nad Metují": ["Novém Městě nad Metují", "Nového Města nad Metují", "Novým Městem nad Metují", "Novému Městu nad Metují"],
 };
 
 /**

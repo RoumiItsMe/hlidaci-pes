@@ -16,7 +16,9 @@
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { watches } from "../config.js";
+import { REGION, REGION_WATCH, KN_OPTIONS } from "./region.js";
+import { runOtherRegions } from "./region-runner.js";
+import { regionSources } from "./region-sources.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
 import { refreshKnScans } from "./kn-scan.js";
@@ -58,7 +60,7 @@ try {
   // shodit celý sběrný běh.
 }
 
-const SOURCES = [
+const DEFAULT_SOURCES = [
   // Sreality stahujeme přes VŠECHNY stránky výpisu — jen z 1. stránky by
   // starší inzeráty vytlačené novějšími vypadaly jako zmizelé.
   // Sreality nemá příznak rezervace ve výpisu, jen na detailu — proto se u
@@ -73,6 +75,15 @@ const SOURCES = [
   { name: "realitymix", fetchList: fetchRealitymix, fetchDetail: fetchRealitymixDetail },
   { name: "bazos", fetchList: fetchBazos, fetchDetail: fetchBazosDetail },
 ];
+
+// Další regiony (region.js) čtou portály přes vlastní zdroje s okresem a obcí
+// regionu (region-sources.js); výchozí region zůstává přesně jak byl.
+const SOURCES = REGION.watch ? regionSources(REGION) : DEFAULT_SOURCES;
+
+// Region bez Telegramu (např. Náchod) žádné zprávy neposílá — ani o rezervaci, ani
+// o možném prodeji, podaném vkladu či souhrnu kontrol; zbytek (sběr, adresy,
+// kontrola katastru) běží stejně. Denní strop volání API katastru je společný pro
+// všechny regiony, proto má region vlastní limit (KN_OPTIONS v region.js).
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -97,6 +108,7 @@ function log(line) {
 // běží bez dohledu (naplánovaná úloha), chybějící token nebo výpadek
 // Telegramu nesmí shodit celý sběrný běh, jen se zaloguje.
 async function notifyReservation(listing) {
+  if (!REGION.telegram) return;
   const specs = [listing.disposition, listing.area_m2 ? `${listing.area_m2} m²` : null].filter(Boolean).join(", ");
   const price = listing.price_czk != null ? `${listing.price_czk.toLocaleString("cs-CZ")} Kč` : "cena na vyžádání";
   const text = `🔒 Rezervováno: ${specs || "byt"}${listing.address ? `, ${listing.address}` : ""}\n${price}\n${listing.url}`;
@@ -357,8 +369,7 @@ async function run() {
 
 async function runLocked() {
   const db = openDb();
-  const watch = watches.find((w) => w.key === "byty");
-  if (!watch) throw new Error('watch "byty" nenalezen v config.js');
+  const watch = REGION_WATCH;
 
   log("=== Start běhu ===");
   let totalNew = 0;
@@ -387,13 +398,15 @@ async function runLocked() {
 
   // Kliknutí na tlačítka ze starších zpráv (viz reservation-reminders.js).
   // Nezávislé na výsledku sběru výš (fail-soft).
-  await processTelegramActions(db, log);
+  if (REGION.telegram) await processTelegramActions(db, log);
   // Rezervované byty, které při tomhle běhu zmizely z nabídky — "možný
   // prodej", teď je nejlepší chvíle začít hledat v katastru.
-  try {
-    await notifyPossibleSales(db, log);
-  } catch (err) {
-    log(`Upozornění na možný prodej selhalo: ${err.message}`);
+  if (REGION.telegram) {
+    try {
+      await notifyPossibleSales(db, log);
+    } catch (err) {
+      log(`Upozornění na možný prodej selhalo: ${err.message}`);
+    }
   }
 
   // Geokódování nových bodů a automatické doplnění adres (viz geo.js,
@@ -413,7 +426,7 @@ async function runLocked() {
   // u kterého se vklad našel sám, už mezi "k vyřízení" nepatří. Bez KN_API_KEY
   // v .env.local se nedělá nic.
   try {
-    const line = await refreshKnScans(db, log);
+    const line = await refreshKnScans(db, log, KN_OPTIONS);
     if (line) log(line);
   } catch (err) {
     log(`Kontrola plomb v katastru selhala: ${err.message}`);
@@ -422,21 +435,27 @@ async function runLocked() {
   // Souhrn "tyhle byty je čas zkontrolovat v katastru" (rozvrh viz
   // kn-schedule.js). Až PO doplnění adres výš — bez přesné adresy se byt v
   // katastru dohledat nedá, takže čerstvě určená adresa musí být vidět.
-  try {
-    await sendKnCheckDigest(db, log);
-  } catch (err) {
-    log(`Souhrn kontrol v katastru selhal: ${err.message}`);
+  if (REGION.telegram) {
+    try {
+      await sendKnCheckDigest(db, log);
+    } catch (err) {
+      log(`Souhrn kontrol v katastru selhal: ${err.message}`);
+    }
   }
 
   db.close();
 }
 
-run().catch((err) => {
-  console.error("Neočekávaná chyba:", err);
-  try {
-    appendFileSync(LOG_PATH, `[${nowIso()}] NEOČEKÁVANÁ CHYBA: ${err.stack || err.message}\n`, "utf-8");
-  } catch {
-    // Nic víc se s tím nedá dělat — appka běží bez dohledu.
-  }
-  process.exitCode = 1;
-});
+run()
+  .catch((err) => {
+    console.error("Neočekávaná chyba:", err);
+    try {
+      appendFileSync(LOG_PATH, `[${nowIso()}] NEOČEKÁVANÁ CHYBA: ${err.stack || err.message}\n`, "utf-8");
+    } catch {
+      // Nic víc se s tím nedá dělat — appka běží bez dohledu.
+    }
+    process.exitCode = 1;
+  })
+  // Plánovaná úloha pouští `node track.js` bez regionu: po výchozím regionu pustí
+  // další regiony jako samostatné procesy (viz region-runner.js).
+  .finally(() => runOtherRegions({ scriptPath: fileURLToPath(import.meta.url), log }));

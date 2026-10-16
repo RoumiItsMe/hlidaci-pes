@@ -948,6 +948,14 @@ co appka už ví, a každý blok vede do pohledu, odkud pochází:
      téměř jistě prodaných (bez stavu by byt vypadl ze statistiky po
      rekonstrukci); skryté a obyčejně zmizelé ne. Žlutá buňka se ukazuje i v
      běžné tabulce, ne jen ve filtru.
+     **Nezjistitelné.** Úkol „Doplnit chybějící údaje“ jde rozbalit („zobrazit a
+     vyřídit“, rozbalení zůstane po vyřízení bytu): u každého bytu je vidět, co
+     chybí, a tlačítko **Nezjistitelné** označí chybějící údaje bytu za
+     nezjistitelné — byt z úkolu zmizí (a ze žlutého zvýraznění v tabulce). Nic se
+     nemaže: v detailu bytu je „Označeno jako nezjistitelné: … **Vrátit do úkolů**“.
+     Označení se týká jen údajů, které v tu chvíli chybí; když později chybět
+     začne jiný, úkol ho hlídá dál. Ukládá se na byt jako celek (sloupec
+     `unknown_fields`, viz `unknown-fields.js`).
   5. **Doplnit přesnou adresu** (bez ní se byt v katastru nedá hledat ani
      hlídat).
 
@@ -1018,6 +1026,47 @@ Pravidla, ať zvoneček nezahltí šumem:
 - Zvoneček hlásí i **nově nalezený byt, který už je rezervovaný**.
 - Přečteno/nepřečteno a "nové od" jsou jediné údaje navíc, co se ukládají
   (tabulka `app_state`); samotná upozornění se počítají z historie událostí.
+
+## Další sekce: Náchod a Nové Město nad Metují (oddělená data)
+
+Vedle Ústí nad Orlicí a okolí appka hlídá i **Náchod** a **Nové Město nad
+Metují** — přímo tyto obce, ne okolí. Je to **úplně oddělená sekce**, 1:1 s tou
+původní (Přehled, Byty, Srovnání, Statistiky, Katastr, zvoneček, ruční
+aktualizace), ale s vlastními daty a **bez Telegramu**:
+
+| | Ústí n. O. a okolí (původní) | Náchod a Nové Město n. M. |
+|---|---|---|
+| Adresa | http://localhost:4321 | http://localhost:4323 |
+| Data | `trh-bytu/data/` | `trh-bytu/data-nachod/` (vlastní databáze, fotky, log, zámek sběru) |
+| Telegram | ano | **ne** (ani rezervace, možný prodej, vklad, souhrn kontrol) |
+| Katastr (API) | ano | ano — denní strop 150 volání, ať nevyčerpá společný limit klíče |
+
+**Jak se to používá.** `npm run sales-app` spustí původní web a sám k němu
+pustí i sekci Náchod (samostatný proces); v hlavičce je odkaz **↔ Náchod** a zpět
+**↔ Ústí n. O.**, sekce Náchod má jinou barvu hlavičky (zelenou) a štítek, ať se
+nepletou. Vypnout jde `TRH_NO_REGIONS=1`. Každá sekce má vlastní **🔄 Aktualizovat
+teď**, který obnoví jen ji.
+
+**Sběr.** Plánovaná úloha (`node trh-bytu/track.js`, viz Task Scheduler) se nemění:
+nejdřív proběhne původní region úplně jako dřív, potom jako **samostatný proces**
+Náchod (s časovým limitem 25 minut). Chyba nebo zaseknutí Náchodu původní data nijak
+neovlivní. Jen jednu sekci pustí `TRH_REGION=nachod node trh-bytu/track.js`.
+
+**Odkud se nabídky berou („přímo tyto obce“).** Sreality: výpis celého okresu
+Náchod přes všechny stránky, ale zůstanou jen byty z Náchoda (včetně jeho částí,
+např. Běloves, Staré Město n. M.) a Nového Města podle pole „město“. iDNES a
+RealityMIX: výpis po obcích. Bezrealitky: okruh kolem středu obce, pak filtr podle
+obce z adresy. Bazoš: PSČ + 3 km a vyřazení inzerátů, jejichž titulek jmenuje jiné
+místo okresu (Bazoš adresu nedává, jen titulek — je to nejméně přesný zdroj).
+Kód: `region.js` (regiony, lokality, port, Telegram), `region-sources.js` (čtení
+portálů). Sdílené zdroje v `../sources/` a `../config.js` (hlídací pes) se kvůli
+tomu **neupravují** — nový region by tam okamžitě začal posílat Telegram.
+
+**Nemíchání dat.** Region se volí proměnnou `TRH_REGION` při startu procesu a řídí
+složku dat, watch, port i Telegram; bez ní je to původní chování beze změny.
+Region bez Telegramu navíc při startu zahodí `TELEGRAM_BOT_TOKEN`, takže ani
+chybná cesta v kódu nemá čím poslat zprávu. Test `region.test.js` hlídá, že obě
+sekce mají různé složky dat. Další region = položka v `REGIONS` a jeho zdroje.
 
 ## Vědomá omezení (v1)
 

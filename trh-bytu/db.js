@@ -12,9 +12,12 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { KN_EVENTS_DDL } from "./kn-events.js";
+import { REGION } from "./region.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const DATA_DIR = path.join(__dirname, "data");
+// Složka dat podle regionu (region.js): výchozí je "data", další regiony mají
+// vlastní — databáze, fotky, log i zámek sběru se tak nikdy nemíchají.
+export const DATA_DIR = path.join(__dirname, REGION.dataDir);
 export const PHOTOS_DIR = path.join(DATA_DIR, "photos");
 const DB_PATH = path.join(DATA_DIR, "trh-bytu.sqlite");
 
@@ -208,6 +211,9 @@ const COLUMN_MIGRATIONS = [
   // Konec plomby (řízení o vkladu), YYYY-MM-DD, jak ho uživatel zná z katastru —
   // i budoucí. Kupní cenu jde zjistit až po něm (viz kn-schedule.js, fáze ceny).
   { table: "listings", column: "kn_plomba_end", ddl: "TEXT" },
+  // Základní údaje, které uživatel označil jako nezjistitelné (JSON pole klíčů,
+  // viz unknown-fields.js) — úkol "Doplnit chybějící údaje" je u bytu pak nehlídá.
+  { table: "listings", column: "unknown_fields", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {

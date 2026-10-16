@@ -44,7 +44,7 @@ import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from 
 import { extractParamsFromText, mergeExtractedParams, normalizeOwnership, upgradeLegacyFloor } from "./extract-params.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
-import { watches } from "../config.js";
+import { REGION_WATCH } from "./region.js";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,8 +55,7 @@ function sleep(ms) {
 // extract-params.js, nesahá na vlastní hodnocení, které uživatel mohl vymazat.
 const PARAMS_ONLY = process.argv.includes("--params-only");
 const OFFLINE = PARAMS_ONLY || process.argv.includes("--offline");
-const watch = watches.find((w) => w.key === "byty");
-if (!watch) throw new Error('watch "byty" nenalezen v config.js');
+const watch = REGION_WATCH;
 
 const db = openDb();
 

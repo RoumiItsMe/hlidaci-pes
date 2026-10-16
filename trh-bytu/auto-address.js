@@ -11,7 +11,7 @@
 //  - jednotku (`unit_number`) automat nikdy nevyplňuje, ta v inzerátech ani
 //    v registrech není.
 
-import { watches } from "../config.js";
+import { REGION_WATCH } from "./region.js";
 import { groupListings, bestAddress, pickOwnValue, isCooperativeOwnership } from "./group.js";
 import { extractCity } from "./parse.js";
 import { updateListingFields } from "./db.js";
@@ -20,7 +20,7 @@ import { loadRuianCache, loadRuianFetchedAt, isRuianEntryStale, pointKey, addres
 import { resolveAddress, distanceMeters } from "./geo-suggest.js";
 import { addressInfo } from "./address-info.js";
 
-const BYTY_WATCH = watches.find((w) => w.key === "byty");
+const BYTY_WATCH = REGION_WATCH;
 const SHARED_PIN_RADIUS_M = 8;
 
 /** Společný kontext pro vyhodnocení víc skupin najednou (mezipaměť geokódování + body všech bytů). */

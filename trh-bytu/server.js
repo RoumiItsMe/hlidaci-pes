@@ -15,6 +15,7 @@ import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddres
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
 import { isNewBuildPending } from "./new-build.js";
 import { addressSuggestion } from "./auto-address.js";
+import { parseUnknownFields, addUnknownFields, removeUnknownFields, serializeUnknownFields, parseFieldList, labelsOf } from "./unknown-fields.js";
 import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
 import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
@@ -28,7 +29,7 @@ import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js
 import { addressInfo } from "./address-info.js";
 import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime, parseRunSummary } from "./dashboard.js";
 import { readTrackLock } from "./track-lock.js";
-import { watches } from "../config.js";
+import { REGION, REGION_WATCH, OTHER_REGIONS, KN_OPTIONS } from "./region.js";
 
 // KN_API_KEY (a Telegram kvůli zprávě o nalezeném vkladu) z `.env.local` v
 // kořeni repa, stejně jako v track.js. Server je potřebuje jen kvůli kontrole
@@ -46,7 +47,7 @@ try {
 let knRefreshRunning = null;
 function refreshKnScansNow(db) {
   if (!knRefreshRunning) {
-    knRefreshRunning = refreshKnScans(db, (line) => console.log(line))
+    knRefreshRunning = refreshKnScans(db, (line) => console.log(line), KN_OPTIONS)
       .then((line) => line && console.log(line))
       .catch((err) => console.log(`KN API: ${err.message}`))
       .finally(() => {
@@ -98,7 +99,14 @@ function startManualTrack() {
     lastManualRun = { finishedAt: nowIso(), ...manualRunMessage(startedAt, code) };
   };
   try {
-    const child = spawn(process.execPath, [TRACK_SCRIPT], { cwd: path.join(import.meta.dirname, ".."), stdio: "ignore", windowsHide: true });
+    // TRH_REGION: ruční sběr aktualizuje jen tuto sekci (bez něj by plánovaný
+    // způsob spuštění pustil i ostatní regiony, viz track.js).
+    const child = spawn(process.execPath, [TRACK_SCRIPT], {
+      cwd: path.join(import.meta.dirname, ".."),
+      env: { ...process.env, TRH_REGION: REGION.key },
+      stdio: "ignore",
+      windowsHide: true,
+    });
     child.on("error", () => finish(1));
     child.on("exit", (code) => finish(code ?? 1));
   } catch {
@@ -107,9 +115,9 @@ function startManualTrack() {
   return true;
 }
 
-const BYTY_WATCH = watches.find((w) => w.key === "byty");
+const BYTY_WATCH = REGION_WATCH;
 
-const PORT = 4321;
+const PORT = REGION.port;
 const SOURCE_LABELS = {
   sreality: "Sreality.cz",
   bezrealitky: "Bezrealitky.cz",
@@ -391,6 +399,10 @@ function layout(title, body, { wide = false, refresh = 0 } = {}) {
   // Zvoneček: počet nepřečtených upozornění — rezervace, změny cen, nové
   // nabídky (viz notifications.js).
   const unread = countUnread(getNotifications(db), getNotificationsSeenAt(db));
+  // Přepínač sekcí: každý region je samostatný web (vlastní data) na vlastním portu.
+  const regionSwitch = OTHER_REGIONS.map(
+    (r) => `<a href="http://localhost:${r.port}/" class="region-switch" title="Přepnout na sekci: ${esc(r.label)} (oddělená data)">↔ ${esc(r.short)}</a>`
+  ).join(" ");
   const bell = `<a href="/upozorneni" class="bell" title="${unread ? `Nepřečtená upozornění: ${unread}` : "Upozornění (rezervace, změny cen, nové nabídky, katastr)"}">🔔${unread ? `<span class="bell-badge">${unread}</span>` : ""}</a>`;
   // Srovnávací tabulka má hodně sloupců a potřebuje co nejvíc vodorovného
   // místa — na rozdíl od ostatních stránek (karty, detail), kterým sedí
@@ -400,13 +412,13 @@ function layout(title, body, { wide = false, refresh = 0 } = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)}</title>
+<title>${esc(REGION.key === "default" ? title : `${title} · ${REGION.short}`)}</title>
 <link rel="stylesheet" href="/style.css">
 ${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ""}
 <script src="/app.js" defer></script>
 </head>
-<body>
-<header><a href="/" class="brand">🏠 Trh bytů</a> <a href="/byty">🏘️ Byty</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a>${bell}</header>
+<body data-region="${REGION.key}">
+<header><a href="/" class="brand">🏠 Trh bytů</a> <span class="region-tag" title="${esc(REGION.label)}">${esc(REGION.short)}</span> <a href="/byty">🏘️ Byty</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a>${regionSwitch}${bell}</header>
 <main${wide ? ' class="wide"' : ""}>${body}</main>
 </body>
 </html>`;
@@ -637,6 +649,8 @@ function computeEntries(db) {
       })(),
       // Novostavba, jejíž adresu RÚIAN zatím nezná: v katastru se zatím nedá ověřit (new-build.js).
       newBuildPending: isNewBuildPending(g.members, ruianCache),
+      // Základní údaje, které uživatel označil jako nezjistitelné (unknown-fields.js).
+      unknownFields: parseUnknownFields(g.members),
       track,
       unreservedWatch,
       // Čas se podívat do katastru: nastal kontrolní bod rozvrhu a po něm se
@@ -1131,6 +1145,13 @@ function renderDetail(db, id) {
     .map((m) => `<a href="https://mapy.cz/zakladni?x=${m.lon}&y=${m.lat}&z=19" target="_blank" rel="noopener">${esc(SOURCE_LABELS[m.source] || m.source)} ↗</a>`)
     .join(" · ");
   const encId = encodeURIComponent(rep.id);
+  // Údaje, které uživatel označil jako nezjistitelné (úkol "Doplnit chybějící údaje" je nehlídá) —
+  // tady jde označení vrátit zpět.
+  const unknownKeys = parseUnknownFields(members);
+  const unknownFieldsHtml = unknownKeys.length
+    ? `<div class="muted">Označeno jako nezjistitelné: ${esc(labelsOf(unknownKeys).join(", "))}.
+        <form class="ajax-form address-retry" method="post" action="/byt/${encId}/nezjistitelne"><input type="hidden" name="fields" value="${esc(unknownKeys.join(","))}"><button type="submit" name="mode" value="clear" class="btn-secondary">Vrátit do úkolů</button></form></div>`
+    : "";
   const suggestionHtml =
     ai.state === "missing" && resolution.level === "medium"
       ? `<div class="address-hint"><strong>Návrh:</strong> ${esc(resolution.text)} <span class="muted">(${esc(describeEvidence(resolution))} — nedostatečně jisté, aby se doplnilo samo)</span>
@@ -1188,7 +1209,7 @@ function renderDetail(db, id) {
       zmizí, bude se podle toho byt hledat v katastru. <strong>${esc(addressStatusText)}</strong>
     </p>
     <form class="ajax-form address-form" method="post" action="/byt/${encodeURIComponent(rep.id)}/adresa">
-      <label>Adresa (ulice, č.p. / č.o., obec)<input type="text" name="exact_address" value="${esc(ai.exact)}" placeholder="např. Lukesova 1234, Ústí nad Orlicí" maxlength="200"></label>
+      <label>Adresa (ulice, č.p. / č.o., obec)<input type="text" name="exact_address" value="${esc(ai.exact)}" placeholder="např. Lukesova 1234, ${esc(REGION_WATCH.locations[0].label)}" maxlength="200"></label>
       <label>Jednotka (číslo jednotky nebo bytu)<input type="text" name="unit_number" value="${esc(ai.unit)}" placeholder="např. 1234/12" maxlength="60"></label>
       <div class="address-actions">
         <button type="submit" name="mode" value="save">Uložit adresu</button>
@@ -1216,6 +1237,7 @@ function renderDetail(db, id) {
       <button type="submit">Uložit</button>
     </form>
 
+    ${unknownFieldsHtml}
     <h2>Vlastní hodnocení a poznámky</h2>
     <form method="post" action="/byt/${encodeURIComponent(rep.id)}/notes">
       <label>Adresa / lokalita<input type="text" name="address" value="${esc(address)}"></label>
@@ -1535,6 +1557,20 @@ function renderDashboard(db) {
     .map((t) => {
       if (t.key === "confirmAddress") {
         return `<li><a href="${t.href}"><strong>${esc(t.label)}</strong> (${t.count})</a> <span class="muted">— ${esc(t.why)}</span>${addressTaskList(t)}</li>`;
+      }
+      if (t.key === "missingData") {
+        const rows = t.entries
+          .slice(0, ADDRESS_ROWS)
+          .map((e) => {
+            const encId = encodeURIComponent(e.rep.id);
+            const keys = missingEssentials(e);
+            return `<li class="task-confirm"><a href="/byt/${encId}">${esc(truncate(flatName(e), 40))}</a> <span class="muted">chybí: ${esc(labelsOf(keys).join(", "))}</span>
+          <form class="ajax-form" method="post" action="/byt/${encId}/nezjistitelne"><input type="hidden" name="fields" value="${esc(keys.join(","))}"><button type="submit" name="mode" value="mark" class="btn-secondary" title="Tenhle údaj se nedá zjistit — byt z úkolu zmizí. Vrátit jde v detailu bytu.">Nezjistitelné</button></form></li>`;
+          })
+          .join("");
+        const more = t.count > ADDRESS_ROWS ? `<li class="muted"><a href="${t.href}">… a dalších ${t.count - ADDRESS_ROWS}</a></li>` : "";
+        return `<li><a href="${t.href}"><strong>${esc(t.label)}</strong> (${t.count})</a> <span class="muted">— ${esc(t.why)}</span>
+          <details class="task-details" data-keep-open="missingData"${t.count <= 3 ? " open" : ""}><summary>zobrazit a vyřídit</summary><ul class="task-confirm-list">${rows}${more}</ul></details></li>`;
       }
       if (t.key === "noAddress") {
         // Dlouhý seznam je sbalený (progressive disclosure); rozbalení zůstane i po vyřízení bytu (viz app.js).
@@ -2529,6 +2565,24 @@ const server = createServer(async (req, res) => {
   // jinak by uložení jednoho pole z tabulky smazalo zbytek. Zapisuje se na
   // VŠECHNY členy skupiny (ne jen na ID v URL), stejná úvaha jako u
   // isStarred/isHidden — přežije to i budoucí přerovnání SOURCE_PRIORITY.
+  // "Nezjistitelné": základní údaj bytu (dispozice, plocha, vlastnictví, stav), který
+  // se nedá zjistit — byt z úkolu "Doplnit chybějící údaje" zmizí (unknown-fields.js).
+  // `mode=clear` ho vrátí zpět. Zapisuje se na VŠECHNY nabídky bytu.
+  const unknownMatch = url.pathname.match(/^\/byt\/([^/]+)\/nezjistitelne$/);
+  if (unknownMatch && req.method === "POST") {
+    const id = decodeURIComponent(unknownMatch[1]);
+    const fields = await parseBody(req);
+    const group = findGroupForListing(db.prepare("SELECT * FROM listings").all(), id);
+    if (group && (fields.mode === "mark" || fields.mode === "clear")) {
+      const keys = parseFieldList(fields.fields);
+      const current = parseUnknownFields(group.members);
+      const next = fields.mode === "mark" ? addUnknownFields(current, keys) : removeUnknownFields(current, keys.length ? keys : null);
+      for (const m of group.members) updateListingFields(db, m.id, { unknown_fields: serializeUnknownFields(next) });
+    }
+    res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
+    return res.end();
+  }
+
   const notesMatch = url.pathname.match(/^\/byt\/([^/]+)\/notes$/);
   if (notesMatch && req.method === "POST") {
     const id = decodeURIComponent(notesMatch[1]);
@@ -2616,6 +2670,48 @@ const server = createServer(async (req, res) => {
   sendHtml(res, 404, layout("Nenalezeno", "<p>Stránka nenalezena.</p>"));
 });
 
+// Další sekce (regiony, viz region.js) si web výchozího regionu pustí sám jako
+// samostatné procesy s vlastní databází a vlastním portem — jedno spuštění appky
+// tak obslouží všechny. TRH_NO_REGIONS=1 to vypne (např. při zkoušení).
+const regionServers = [];
+function startOtherRegions() {
+  if (process.env.TRH_REGION || process.env.TRH_NO_REGIONS) return;
+  for (const other of OTHER_REGIONS) {
+    const child = spawn(process.execPath, [import.meta.filename], {
+      env: { ...process.env, TRH_REGION: other.key },
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    regionServers.push(child);
+    child.on("exit", (code) => console.log(`Sekce „${other.label}“ skončila (kód ${code}).`));
+  }
+}
+function stopOtherRegions() {
+  for (const child of regionServers) {
+    try {
+      child.kill();
+    } catch {
+      // už neběží
+    }
+  }
+}
+process.on("exit", stopOtherRegions);
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    stopOtherRegions();
+    process.exit(0);
+  });
+}
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.log(`Port ${PORT} je obsazený — sekce „${REGION.label}“ nejspíš už běží.`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, () => {
-  console.log(`Trh bytů běží na http://localhost:${PORT}`);
+  console.log(`Trh bytů [${REGION.label}] běží na http://localhost:${PORT}`);
+  startOtherRegions();
 });
