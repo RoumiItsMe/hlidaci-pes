@@ -196,3 +196,77 @@ test("skenování pokračuje i po konci rozvrhu kontrol (nezjištěno), dokud ne
   assert.equal(worthScanning({ stage: "withdrawn" }), false);
   assert.equal(worthScanning(null), false);
 });
+
+// --- Skryté byty se v katastru hlídají taky (collectTrackedGroups) ---------
+import { DatabaseSync } from "node:sqlite";
+import { collectTrackedGroups } from "./kn-scan.js";
+import { initDb, insertListing, updateListingFields } from "./db.js";
+import { addressKey, saveRuian } from "./ruian.js";
+
+function trackedDb({ hidden }) {
+  const db = initDb(new DatabaseSync(":memory:"));
+  insertListing(db, {
+    id: "bazos:1",
+    source: "bazos",
+    source_id: "1",
+    url: "https://example.invalid/1",
+    title: "Prodej bytu 3+1",
+    disposition: "3+1",
+    area_m2: 70,
+    address: "Letohrad",
+    description: "",
+    price_czk: 3_500_000,
+    status: "removed",
+    first_seen_at: iso(NOW - 20 * DAY),
+    last_seen_at: iso(NOW - 3 * DAY),
+    removed_at: iso(NOW - 3 * DAY),
+  });
+  updateListingFields(db, "bazos:1", { exact_address: "U Dvora 661, Letohrad", hidden: hidden ? 1 : 0 });
+  saveRuian(db, addressKey("U Dvora", "661", "Letohrad"), { ku: { kod: 1, nazev: "Letohrad" }, building: { cp: ["661"], flats: 6, isknId: 555 } });
+  return db;
+}
+
+test("skrytý zmizelý byt se sleduje (a nese příznak hidden, ať se o něm nepíše do Telegramu)", () => {
+  const [entry, ...rest] = collectTrackedGroups(trackedDb({ hidden: true }), NOW);
+  assert.equal(rest.length, 0);
+  assert.equal(entry.buildingId, 555);
+  assert.equal(entry.hidden, true);
+});
+
+test("neskrytý zmizelý byt se sleduje také, bez příznaku hidden", () => {
+  const [entry] = collectTrackedGroups(trackedDb({ hidden: false }), NOW);
+  assert.equal(entry.buildingId, 555);
+  assert.equal(entry.hidden, false);
+});
+
+import { refreshKnScans } from "./kn-scan.js";
+
+// Falešný klient API katastru: dům s dvěma jednotkami, na první je plomba podaná včera.
+function fakeKnClient() {
+  let calls = 0;
+  const tick = (v) => (calls++, v);
+  return {
+    get calls() {
+      return calls;
+    },
+    hasKey: true,
+    usage: async () => ({ limitVolani: 500, provedenoVolani: 0 }),
+    building: async () => tick({ jednotky: [{ id: 1, cisloJednotky: 6610001 }, { id: 2, cisloJednotky: 6610002 }], rizeniPlomby: [] }),
+    unit: async (id) => tick({ lv: { cislo: 7 }, zpusobVyuziti: { nazev: "byt" }, podilNaSpolecnychCastechDomu: null, rizeniPlomby: id === 1 ? [{ id: 900, typRizeni: "V", poradoveCislo: 5, rok: 2026 }] : [] }),
+    proceeding: async () => tick({ id: 900, typRizeni: "V", poradoveCislo: 5, rok: 2026, datumPrijeti: iso(NOW - DAY), stav: "Probíhá", provedeneOperace: [] }),
+  };
+}
+
+for (const hidden of [true, false]) {
+  test(`nalezený vklad se u ${hidden ? "skrytého" : "neskrytého"} bytu zapíše${hidden ? ", ale do Telegramu se nic neposílá" : " a pošle se zpráva do Telegramu"}`, async () => {
+    const db = trackedDb({ hidden });
+    const sent = [];
+    await refreshKnScans(db, () => {}, { now: NOW, client: fakeKnClient(), send: async (m) => sent.push(m) });
+    const row = db.prepare("SELECT sale_verdict, kn_filed_at, kn_auto_unit FROM listings WHERE id = 'bazos:1'").get();
+    assert.equal(row.sale_verdict, "sold");
+    assert.equal(row.kn_filed_at, iso(NOW - DAY).slice(0, 10));
+    assert.equal(sent.length, hidden ? 0 : 1);
+    // změna v katastru se do zvonečku zapíše v obou případech
+    assert.equal(db.prepare("SELECT COUNT(*) c FROM kn_events WHERE kind = 'filing'").get().c, 1);
+  });
+}

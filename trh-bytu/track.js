@@ -35,7 +35,7 @@ import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js
 import { downloadPhotos } from "./photos.js";
 import { geoFields, geocodePending } from "./geo.js";
 import { ruianPending } from "./ruian.js";
-import { applyAutoAddresses } from "./auto-address.js";
+import { applyAutoAddresses, ruianPendingTextAddresses } from "./auto-address.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
 import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
 import { fetchIdnesDetail } from "./detail/idnes.js";
@@ -401,6 +401,7 @@ async function runLocked() {
   try {
     await geocodePending(db, log);
     await ruianPending(db, log); // oficiální ověření budovy + katastrální území, viz ruian.js
+    await ruianPendingTextAddresses(db, log); // adresy z textu inzerátů v RÚIAN, viz auto-address.js
     const { assigned, revoked } = applyAutoAddresses(db, log);
     if (assigned || revoked) log(`[geo] adresy: ${assigned} doplněno automaticky, ${revoked} odvoláno.`);
   } catch (err) {

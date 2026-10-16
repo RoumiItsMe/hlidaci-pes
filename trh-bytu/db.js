@@ -235,9 +235,14 @@ export function openDb() {
   mkdirSync(PHOTOS_DIR, { recursive: true });
   db = new DatabaseSync(DB_PATH);
   db.exec("PRAGMA journal_mode = WAL;");
-  db.exec(SCHEMA);
-  runMigrations(db);
-  return db;
+  return initDb(db);
+}
+
+/** Založí schéma a migrace v dané databázi (pro testy v paměti: `initDb(new DatabaseSync(":memory:"))`). */
+export function initDb(database) {
+  database.exec(SCHEMA);
+  runMigrations(database);
+  return database;
 }
 
 export function nowIso() {

@@ -16,7 +16,7 @@ import { groupListings, bestAddress, pickOwnValue } from "./group.js";
 import { extractCity } from "./parse.js";
 import { updateListingFields } from "./db.js";
 import { geoKey, loadGeocodeCache } from "./geo.js";
-import { loadRuianCache, pointKey, addressKey, parseExactAddress } from "./ruian.js";
+import { loadRuianCache, pointKey, addressKey, parseExactAddress, ruianLookupAddress, saveRuian } from "./ruian.js";
 import { resolveAddress, distanceMeters } from "./geo-suggest.js";
 
 const BYTY_WATCH = watches.find((w) => w.key === "byty");
@@ -95,12 +95,13 @@ export function describeKn(kn) {
   return parts.join(" · ");
 }
 
-export function resolveForGroup(actx, group) {
-  const gid = actx.groups.indexOf(group);
-  // Město pro zobrazení adresy: z adresy inzerátu (sjednocené názvy jako v
-  // celé appce), jinak od portálu, jinak z geokodéru. `extractCity` v
-  // krajním případě vrátí poslední segment adresy, i když je to ulice
-  // ("ul. Ústecká") — takový výsledek se zahazuje.
+/**
+ * Město pro zobrazení adresy a dotazy do RÚIAN: z adresy inzerátu (sjednocené
+ * názvy jako v celé appce), jinak od portálu, jinak z geokodéru. `extractCity` v
+ * krajním případě vrátí poslední segment adresy, i když je to ulice
+ * ("ul. Ústecká") — takový výsledek se zahazuje.
+ */
+export function groupCity(actx, group) {
   const geoCity = group.members.map((m) => (m.geo_json ? JSON.parse(m.geo_json).city : null)).find(Boolean);
   const osmCity = group.members
     .filter((m) => typeof m.lat === "number" && typeof m.lon === "number")
@@ -108,8 +109,19 @@ export function resolveForGroup(actx, group) {
     .map((a) => a?.town || a?.city || a?.village)
     .find(Boolean);
   const adCity = extractCity(bestAddress(group.members), BYTY_WATCH);
+  return (adCity && !/^ul\./i.test(adCity) ? adCity : null) || geoCity || osmCity || null;
+}
+
+export function resolveForGroup(actx, group) {
+  const gid = actx.groups.indexOf(group);
   const ctx = {
-    city: (adCity && !/^ul\./i.test(adCity) ? adCity : null) || geoCity || osmCity || null,
+    city: groupCity(actx, group),
+    // Adresní místo z textu inzerátu v RÚIAN (viz ruianPendingTextAddresses);
+    // undefined = zatím se nezjišťovalo.
+    ruianAddress: (street, number, city) => {
+      const key = addressKey(street, number, city);
+      return actx.ruianCache.has(key) ? actx.ruianCache.get(key) : undefined;
+    },
     geocodes: (lat, lon) => {
       const key = geoKey(lat, lon);
       return actx.cache.has(key) ? actx.cache.get(key) : undefined;
@@ -134,6 +146,53 @@ export function resolveForGroup(actx, group) {
 /** Stručný popis důkazů pro uživatele: "Sreality: adresa z inzerátu · bod z iDNES uvnitř budovy…" */
 export function describeEvidence(result) {
   return [...new Set(result.evidence.map((e) => e.note))].join(" · ");
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Ověří v RÚIAN adresy, které appka zatím jen vyčetla z textu inzerátu (ulice +
+ * číslo popisné bez dalšího důkazu): jedna se uloží do mezipaměti (kladně i
+ * záporně) a vyhodnocení adresy ji pak umí potvrdit, viz resolveAddress.
+ * Dotazuje se jen na byty, které ještě nemají adresu; fail-soft jako ruianPending.
+ */
+export async function ruianPendingTextAddresses(db, log, { limit = 40, delayMs = 250 } = {}) {
+  const listings = db.prepare("SELECT * FROM listings").all();
+  const groups = groupListings(listings);
+  const actx = buildAddressContext(db, listings, groups);
+  const todo = [];
+  for (const group of groups) {
+    const members = group.members;
+    // Stejné výjimky jako applyAutoAddresses: ruční adresa a vědomé "neznámá" se nechají být.
+    if (members.some((m) => m.address_unknown || m.address_auto === -1 || (m.exact_address && !m.address_auto))) continue;
+    const r = resolveForGroup(actx, group);
+    if (r.level !== "medium" || !r.street || !r.number || !r.evidence.some((e) => e.type === "text")) continue;
+    const city = groupCity(actx, group);
+    if (!city) continue;
+    const key = addressKey(r.street, r.number, city);
+    if (actx.ruianCache.has(key) || todo.some((t) => t.key === key)) continue;
+    todo.push({ key, street: r.street, number: r.number, city });
+  }
+
+  let done = 0;
+  let failures = 0;
+  for (const job of todo.slice(0, limit)) {
+    try {
+      saveRuian(db, job.key, await ruianLookupAddress(job.street, job.number, job.city));
+      done++;
+      failures = 0;
+    } catch (err) {
+      failures++;
+      log(`[ruian] ověření adresy z textu selhalo (${job.street} ${job.number}, ${job.city}): ${err.message}`);
+      if (failures >= 3) {
+        log("[ruian] třikrát po sobě selhalo, zbytek se zkusí při příštím běhu.");
+        break;
+      }
+    }
+    await sleep(delayMs);
+  }
+  if (todo.length > 0) log(`[ruian] ověřeno ${done} z ${Math.min(todo.length, limit)} adres z textu inzerátů.`);
+  return { done, pending: Math.max(0, todo.length - done) };
 }
 
 /** Projde všechny byty a doplní/odvolá automatické adresy. */

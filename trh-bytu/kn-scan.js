@@ -87,6 +87,11 @@ export function unreservedTrack(members, now = Date.now()) {
  * zmizely bez ní, viz unreservedTrack),
  * rozvrh kontrol ještě neskončil (není hotovo, neprodáno ani "nezjištěno"),
  * znají přesnou adresu a dům má id v ISKN.
+ *
+ * Skryté byty (✕) se hlídají taky: "tohle mě nezajímá" je o seznamu a
+ * statistikách, ne o tom, že by se přestal sbírat údaj o trhu — prodej a cena
+ * zmizelého bytu zůstanou zapsané (viditelné v pohledu Skryté a po vrácení
+ * bytu). Neposílá se jen zpráva do Telegramu (viz `hidden` u položky).
  */
 export function collectTrackedGroups(db, now = Date.now()) {
   const listings = db.prepare("SELECT * FROM listings").all();
@@ -99,7 +104,6 @@ export function collectTrackedGroups(db, now = Date.now()) {
   }
   const tracked = [];
   for (const group of groups) {
-    if (isHidden(group.members)) continue;
     if (isCooperativeOwnership(group.members)) continue; // v katastru nemá vklad, sken by byl zbytečný
     const track =
       buildSaleTrack(group.members, group.members.flatMap((m) => eventsByListing.get(m.id) || []), now) ?? unreservedTrack(group.members, now);
@@ -116,6 +120,7 @@ export function collectTrackedGroups(db, now = Date.now()) {
       autoUnitNumber: parseUnitNumber(pickOwnValue(group.members, "kn_auto_unit")),
       autoOff: Boolean(pickOwnValue(group.members, "kn_auto_off")),
       filedAt: pickOwnValue(group.members, "kn_filed_at"),
+      hidden: isHidden(group.members),
     });
   }
   return tracked;
@@ -352,10 +357,13 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
         for (const m of entry.group.members) updateListingFields(db, m.id, updates);
         applied++;
         if (via === "building") guessed++;
-        try {
-          await send(filingMessage(entry, candidate, via));
-        } catch (err) {
-          log(`KN API: zpráva o podaném vkladu se neodeslala: ${err.message}`);
+        // Skrytému bytu se zpráva neposílá — nález je zapsaný, to stačí.
+        if (!entry.hidden) {
+          try {
+            await send(filingMessage(entry, candidate, via));
+          } catch (err) {
+            log(`KN API: zpráva o podaném vkladu se neodeslala: ${err.message}`);
+          }
         }
       }
     }

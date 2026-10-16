@@ -143,7 +143,11 @@ Každý řádek (i detail bytu) má dvě malá kolečka v pravém horním rohu:
   **Jediná výjimka: rezervovaný byt** se ukáže v pohledu **"Rezervováno"**
   i když je skrytý (rezervace je důležitá informace o trhu) — řádek je
   označený *"skryto"* a jde vrátit tlačítkem ↺. V ostatních pohledech
-  (Vše, V nabídce, ...) zůstává skrytý.
+  (Vše, V nabídce, ...) zůstává skrytý. Skrytí je o **seznamech a
+  statistikách**, ne o sběru údajů: i **skrytý zmizelý byt se dál hlídá v
+  katastru** (plomba, cena prodeje) — nález se zapíše k bytu, takže po
+  ↺ Obnovit je prodej i cena hotové; do Telegramu o něm ale nic nepřijde a v
+  Přehledu ani ve statistikách se neobjeví.
 - **⭐/☆ Označit jako TOP** — byty, které uživatel sleduje nejvíc. Pilulka
   **"⭐ TOP"** nad seznamem je filtruje na jedno kliknutí; TOP byty navíc
   dostávají zlatý okraj řádku a hvězdičku před titulkem, ať jsou vidět i
@@ -365,7 +369,7 @@ dohledání je mnohem těžší. Sbírá tři druhy důkazů (`geo-suggest.js`):
 | Důkaz | Odkud | Důvěra |
 |---|---|---|
 | **Adresa od portálu** | Sreality: ulice + číslo popisné, **jen když prodejce zadal adresu** (`entityType: address`; „jen ulice / část obce / obec" Sreality řekne taky a číslo pak není). Bezrealitky: ulice, číslo jen občas | silný |
-| **Text inzerátu** | „ulice Kubelkova 1759", „v ulici Dukelská 323" (jen s klíčovým slovem před ulicí, číslo před m²/Kč se nebere) | střední — sám nestačí |
+| **Text inzerátu** | „ulice Kubelkova 1759", „v ulici U Dvora 661, Letohrad" (jen s klíčovým slovem před ulicí; číslo před m², Kč, minutami nebo s desetinnou čárkou se nebere) | střední — sám je jen návrh, **potvrdí ho** stejná ulice od portálu, bod se stejným číslem, nebo **RÚIAN** (viz níž) |
 | **Bod** | souřadnice z iDNES, RealityMIX, Bezrealitky, Sreality → nejbližší dům z OpenStreetMap, ověřený v RÚIAN | silný jen při splnění všech pojistek níž |
 
 **Pojistky u bodu** (prodejce někdy zadá jen ulici — bod pak leží na silnici a
@@ -374,6 +378,16 @@ RÚIAN** (oficiální registr ČÚZK, `ruian.js`), (2) **žádný jiný byt nem�
 (sdílený bod = ulice, nebo stejný dům, což z bodu nepoznáme — radši nic), (3)
 ulice z bodu se **objevuje v inzerátu**, (4) číslo domu z mapy se **shoduje s
 čísly popisnými té budovy v RÚIAN** a (5) dům **nemá víc čísel popisných**.
+**Text potvrzený RÚIAN.** Adresa z textu („v ulici U Dvora 661“) sama o sobě
+byla jen návrh, který u zmizelého bytu nikdo nepotvrdil — a zmizelý byt bez
+adresy se v katastru nedá hledat ani hlídat. Appka proto adresu z textu ověří
+v RÚIAN (`ruianPendingTextAddresses` v `auto-address.js`, součást denního sběru
+i tlačítka Aktualizovat teď): když tam adresní místo **s touhle ulicí a číslem
+v téže obci** existuje, adresa se doplní sama jako **(auto)** s důvodem „adresa z
+textu inzerátu existuje v RÚIAN“. Bez známé obce se nepotvrdí nic (RÚIAN by mohl
+trefit stejnou ulici jinde), dvě různé adresy v textu pořád znamenají spor a
+RÚIAN, který adresu nezná, nechá jen návrh. Ruční adresa se nepřepisuje.
+
 Poslední bod je důležitý: panelový blok má často víc vchodů s vlastním číslem
 (např. Jilemnického 295–299 je jeden dům) a bod ukáže dům, ne vchod — takový
 byt z bodu dostane jen **návrh**, adresu doplní až další důkaz (číslo od

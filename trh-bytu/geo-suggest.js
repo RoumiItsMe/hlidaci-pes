@@ -7,7 +7,10 @@
 //     `entityType: "address"` (ulice + číslo popisné); když RK označila jen
 //     ulici/část obce/obec, Sreality to říká (`street`/`ward`/`municipality`)
 //     a pak číslo domu NENÍ. Bezrealitky dávají ulici a číslo jen občas.
-//  2. TEXT (střední): "ulice Kubelkova 1759" v popisu inzerátu.
+//  2. TEXT (střední): "ulice Kubelkova 1759" v popisu inzerátu. Sám je jen
+//     návrh; potvrdí ho jiný zdroj (stejná ulice od portálu, bod se stejným
+//     číslem) nebo úřední registr — když adresní místo s touhle ulicí a číslem
+//     v téhle obci existuje v RÚIAN.
 //  3. BOD (iDNES, RealityMIX, Bezrealitky, Sreality): souřadnice po zpětném
 //     geokódování (viz geo.js). Bod ale RK často zadá jen na ulici — pak
 //     leží na silnici a může ho sdílet víc bytů — proto se bere jako důkaz
@@ -53,9 +56,10 @@ export function parseHouseNumber(raw) {
 // "ulice Kubelkova 1759", "v ulici Dukelská 323", "ul. Quido Kociana 25/3".
 // Jen s klíčovým slovem před názvem — holé "Slovo 123" je v textu příliš
 // často cena, telefon nebo plocha. Číslo následované jednotkou (m², Kč, %…)
-// se zahazuje.
+// nebo desetinnou čárkou ("1,5") se zahazuje; čárka před dalším slovem
+// ("U Dvora 661, Letohrad") adresu nekazí.
 const TEXT_ADDRESS_RE =
-  /(?:\bul\.|\bulice\b|\bulici\b|\bulic[íi]\b|\btřída\b|\btřídě\b)\s+((?:[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][\wáčďéěíňóřšťúůýž.\-]*\s+){0,3}?[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][\wáčďéěíňóřšťúůýž.\-]*)\s+(\d{1,4})(?:\s*\/\s*(\d{1,3}))?(?![\d,]|\s*(?:m\s?[²2]|m\b|kč|%|km|let\b|min\b|tis\b|mil\b))/g;
+  /(?:\bul\.|\bulice\b|\bulici\b|\bulic[íi]\b|\btřída\b|\btřídě\b)\s+((?:[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][\wáčďéěíňóřšťúůýž.\-]*\s+){0,3}?[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][\wáčďéěíňóřšťúůýž.\-]*)\s+(\d{1,4})(?:\s*\/\s*(\d{1,3}))?(?!\d|,\d|\s*(?:m\s?[²2]|m\b|kč|%|km|let\b|min\w*|tis\b|mil\b))/g;
 
 /** Všechny dvojice (ulice, číslo domu) zmíněné v textu inzerátu. */
 export function extractTextAddresses(text) {
@@ -119,7 +123,10 @@ function displayNumber(a, b) {
 /**
  * @param members   inzeráty skupiny (řádky `listings`)
  * @param ctx       { city, geocodes(lat, lon) -> osm výsledek | null | undefined,
- *                    pinSharedBy(lat, lon) -> počet JINÝCH bytů s bodem do 8 m }
+ *                    pinSharedBy(lat, lon) -> počet JINÝCH bytů s bodem do 8 m,
+ *                    ruian(lat, lon) -> výsledek bodu v RÚIAN (nepovinné),
+ *                    ruianAddress(ulice, číslo, obec) -> adresní místo v RÚIAN |
+ *                      null (nezná) | undefined (ještě nezjištěno) (nepovinné) }
  */
 export function resolveAddress(members, ctx) {
   const evidence = []; // { type, strength, street, number, src, note }
@@ -263,10 +270,28 @@ export function resolveAddress(members, ctx) {
     types.has("text") &&
     (c.evidence.some((e) => e.type === "pin" && numberKey(e.number) === numberKey(c.number)) || streetHints.some((h) => sameStreet(h.street, c.street)));
 
+  // Úřední potvrzení textu: ulice s tímhle číslem popisným opravdu existuje v
+  // téhle obci (adresní místo v RÚIAN). Ukázat text "v ulici U Dvora 661" bez
+  // dalšího důkazu byl dřív jen návrh, který u zmizelého bytu nikdo nepotvrdil
+  // (a byt se pak v katastru nehlídal). Obec je nutná — bez ní by RÚIAN mohl
+  // trefit stejnou ulici jinde. Mimo RÚIAN (testy) se nic nepotvrzuje.
+  let registerVerified = false;
+  if (types.has("text") && !hasStrong && !textCorroborated && ctx.ruianAddress && city) {
+    const ra = ctx.ruianAddress(c.street, c.number, city);
+    if (ra === undefined) {
+      result.reasons.push(`Adresa ${c.street} ${c.number} z textu čeká na ověření v RÚIAN.`);
+    } else if (ra === null || !stripDiacritics(ra.addressPoint ?? "").includes(stripDiacritics(city))) {
+      result.reasons.push(`RÚIAN adresu ${c.street} ${c.number} v obci ${city} nezná — zůstává jen návrh.`);
+    } else {
+      registerVerified = true;
+      c.evidence.push({ type: "ruian", strength: "strong", street: c.street, number: c.number, src: "ruian", note: "adresa z textu inzerátu existuje v RÚIAN" });
+    }
+  }
+
   result.street = c.street;
   result.number = c.number;
   result.text = [`${c.street} ${c.number}`, city].filter(Boolean).join(", ");
   result.evidence = c.evidence;
-  result.level = hasStrong || textCorroborated ? "high" : "medium";
+  result.level = hasStrong || textCorroborated || registerVerified ? "high" : "medium";
   return result;
 }
