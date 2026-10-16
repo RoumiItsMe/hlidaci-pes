@@ -13,7 +13,7 @@
 //    (viz matchFilings), jinak jen nabídne na kartě tlačítko "To je ten byt".
 
 import { nowIso, updateListingFields } from "./db.js";
-import { groupListings, pickOwnValue, isHidden, primaryListing, mergedStatus, saleVerdict, latestRemovedAt, mergeParams } from "./group.js";
+import { groupListings, pickOwnValue, isHidden, primaryListing, mergedStatus, saleVerdict, latestRemovedAt, mergeParams, isCooperativeOwnership } from "./group.js";
 import { buildAddressContext, knInfoForGroup, resolveForGroup } from "./auto-address.js";
 import { buildSaleTrack, FILING_CHECK_DAYS } from "./kn-schedule.js";
 import { createKnClient, scanBuilding, parseUnitNumber, KnApiError } from "./kn-api.js";
@@ -185,14 +185,9 @@ export function matchFilings(entries, scan) {
   return matches;
 }
 
-/**
- * Družstevní byt: v katastru se nepřevádí vkladem vlastnického práva (mění se
- * členský podíl), takže tam nejde ověřit ani vklad, ani cenu. Podle vlastnictví
- * z inzerátu nebo ručně opraveného v "Doplnit parametry" (mergeParams).
- */
-export function isCooperativeOwnership(members) {
-  return /družstev/i.test(mergeParams(members).ownership ?? "");
-}
+// Družstevní byt (v katastru nejde ověřit) — definice žije v group.js, aby ji
+// mohly číst i moduly, které kn-scan.js importují (auto-address.js).
+export { isCooperativeOwnership };
 
 /**
  * Jak se k bytu chová kontrola v katastru — pro text upozornění "možný prodej":

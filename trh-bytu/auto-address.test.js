@@ -55,3 +55,14 @@ test("ruční adresa se potvrzením z textu nepřepíše", () => {
   assert.equal(applyAutoAddresses(db, log).assigned, 0);
   assert.equal(get(db, "bazos:1").exact_address, "Husova 12, Letohrad");
 });
+
+import { addressNoticeLines } from "./auto-address.js";
+
+test("upozornění na rezervaci: družstevní byt nevyzývá k doplnění adresy, osobní ano", () => {
+  const db = initDb(new DatabaseSync(":memory:"));
+  flat(db, "bazos:10", { status: "reserved", removed_at: null, description: "", address: "Ústí nad Orlicí, ul. Popradská" });
+  updateListingFields(db, "bazos:10", { params_json: JSON.stringify({ ownership: "Družstevní" }) });
+  flat(db, "bazos:11", { status: "reserved", removed_at: null, description: "", address: "Letohrad" });
+  assert.deepEqual(addressNoticeLines(db, "bazos:10"), ["🏢 Družstevní byt — v katastru nejde ověřit, přesná adresa není potřeba."]);
+  assert.match(addressNoticeLines(db, "bazos:11")[0], /Přesná adresa není zapsaná/);
+});

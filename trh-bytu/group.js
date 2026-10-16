@@ -523,6 +523,16 @@ export function mergeParams(members) {
 }
 
 /**
+ * Družstevní byt: v katastru se nepřevádí vkladem vlastnického práva (mění se
+ * členský podíl), takže tam nejde ověřit ani vklad, ani cenu. Podle vlastnictví
+ * z inzerátu (portál nebo text, viz extract-params.js) nebo ručně opraveného v
+ * "Doplnit parametry" (mergeParams).
+ */
+export function isCooperativeOwnership(members) {
+  return /družstev/i.test(mergeParams(members).ownership ?? "");
+}
+
+/**
  * Totéž BEZ ručního přepsání — to, co o bytě říká portál / text inzerátu.
  * Slouží k poznání, jestli se ruční hodnota od zdrojů vůbec liší (viz POST
  * /params: uložení formuláře nesmí zmrazit hodnoty, které uživatel nezměnil).

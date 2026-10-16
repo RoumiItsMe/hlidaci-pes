@@ -12,7 +12,7 @@
 //    v registrech není.
 
 import { watches } from "../config.js";
-import { groupListings, bestAddress, pickOwnValue } from "./group.js";
+import { groupListings, bestAddress, pickOwnValue, isCooperativeOwnership } from "./group.js";
 import { extractCity } from "./parse.js";
 import { updateListingFields } from "./db.js";
 import { geoKey, loadGeocodeCache } from "./geo.js";
@@ -73,6 +73,10 @@ export function addressNoticeLines(db, listingId) {
   const exact = pickOwnValue(group.members, "exact_address");
   const unit = pickOwnValue(group.members, "unit_number");
   if (!exact && !unit) {
+    // Družstevní byt se v katastru nedá ověřit, takže přesná adresa nic nepřinese.
+    if (isCooperativeOwnership(group.members) && bestAddress(group.members)) {
+      return ["🏢 Družstevní byt — v katastru nejde ověřit, přesná adresa není potřeba."];
+    }
     return [group.members.some((m) => m.address_unknown) ? "📍 Přesná adresa: neznámá" : "⚠️ Přesná adresa není zapsaná — doplň ji, dokud je byt v nabídce."];
   }
   const lines = [`📍 ${[exact, unit ? `jednotka ${unit}` : null].filter(Boolean).join(", ")}`];

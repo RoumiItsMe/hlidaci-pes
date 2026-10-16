@@ -23,6 +23,7 @@ import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
 import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countUnread } from "./notifications.js";
 import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js";
+import { addressInfo } from "./address-info.js";
 import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime, parseRunSummary } from "./dashboard.js";
 import { readTrackLock } from "./track-lock.js";
 import { watches } from "../config.js";
@@ -124,26 +125,6 @@ const STATUS_LABELS = {
   probable: { text: "Pravděpodobně prodáno", color: "#15803d" },
   removed: { text: "Zmizelo z nabídky", color: "#6b7280" },
 };
-// Stav ručně zapsané přesné adresy bytu (viz db.js exact_address): `known`
-// = vyplněná adresa nebo jednotka, `unknown` = uživatel nabídku prošel a
-// adresu nezjistil, `missing` = ještě nikdo nekoukal (ty se hlídají filtrem
-// "Bez adresy"). Čte se přes celou skupinu — adresa zapsaná na jednom
-// portálu platí pro byt.
-function addressInfo(members) {
-  const exact = pickOwnValue(members, "exact_address");
-  const unit = pickOwnValue(members, "unit_number");
-  const unknown = members.some((m) => m.address_unknown);
-  return {
-    exact,
-    unit,
-    state: exact || unit ? "known" : unknown ? "unknown" : "missing",
-    // Adresu doplnila appka sama z polohy (viz auto-address.js), ne uživatel.
-    auto: Boolean(exact) && members.some((m) => m.address_auto === 1),
-    // Uživatel automatickou adresu smazal — automat ji znovu nedoplňuje.
-    autoOff: members.some((m) => m.address_auto === -1),
-  };
-}
-
 // Pořadí a hodnoty stavových filtrů v přehledu i v srovnávací tabulce.
 const STATUS_FILTERS = ["", "active", "reserved", "possible", "sold", "removed"];
 
@@ -194,6 +175,7 @@ function addressChipHtml(ai, status, href = null) {
     const text = `📍 ${esc([ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", "))}${ai.auto ? " (auto)" : ""}`;
     return chip(`addr-chip${ai.auto ? " addr-chip--auto" : ""}`, text, ai.auto ? "Adresu doplnila appka sama z polohy v inzerátu — ověř ji a doplň jednotku" : null);
   }
+  if (ai.state === "notNeeded") return chip("addr-chip addr-chip--coop", "družstevní · adresa netřeba", "Družstevní byt se v katastru nedá ověřit, takže přesná adresa nic nepřinese — stačí lokalita z inzerátu");
   if (ai.state === "unknown") return chip("addr-chip addr-chip--unknown", "📍 adresa neznámá");
   if (status === "active" || status === "reserved") return chip("addr-chip addr-chip--missing", "📍 doplnit adresu");
   return "";
@@ -1101,6 +1083,8 @@ function renderDetail(db, id) {
       ? ai.auto
         ? "✓ Doplněno automaticky — zkontroluj to a doplň jednotku."
         : "✓ Vyplněno."
+      : ai.state === "notNeeded"
+      ? "Družstevní byt — přesná adresa není potřeba (v katastru se nedá ověřit), stačí lokalita z inzerátu. Zapsat ji můžeš."
       : ai.state === "unknown"
       ? "Označeno jako neznámá."
       : "⚠ Zatím nevyplněno.";

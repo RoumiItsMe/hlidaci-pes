@@ -354,6 +354,16 @@ je online, proto si u každé nabídky zapiš přesnou adresu hned, jak ji zjist
   **📍 doplnit adresu**, u vyplněného rovnou adresa, u neznámé „adresa
   neznámá". Filtr **📍 Bez adresy (N)** ukáže jen nabídky, které ještě
   nemáš prošlé (řazené od nejnovějších, takže nové jsou nahoře).
+- **Družstevní byty přesnou adresu nepotřebují.** Družstevní byt se v katastru
+  nepřevádí vkladem, takže ho nejde ověřit ani s přesnou adresou, a k odlišení
+  bytu stačí lokalita z inzerátu („Popradská, Ústí nad Orlicí“, „Česká Třebová
+  (centrum)“). Družstevní se pozná z vlastnictví (portál, slovo „družstevní“ v
+  titulku či popisu, nebo ruční oprava v *Doplnit parametry*); má-li byt aspoň
+  nějakou lokalitu, appka po něm adresu nechce: místo „📍 doplnit adresu“ je u
+  něj jen tlumené **„družstevní · adresa netřeba“**, nepočítá se do filtru
+  *Bez adresy* ani do úkolu „Doplnit přesnou adresu“ na Přehledu a Telegram po
+  rezervaci o adresu nežádá (jen řekne, že družstevní byt nejde v katastru
+  ověřit). Zapsat ji dál můžeš. Stav počítá `address-info.js`.
 - **Kontrola v katastru** (níž) bere do řádku „Do katastru" tuhle adresu
   s jednotkou; bez ní jen přibližné místo a upozornění.
 - Zapisuje se na byt jako celek (všechny portály, kde je). Je to samostatné
