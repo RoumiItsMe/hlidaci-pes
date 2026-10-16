@@ -55,11 +55,23 @@ function pointGeometry(lat, lon) {
  * `null`, když bod v žádné budově neleží (typicky střed ulice) nebo když
  * jich do 3 m leží víc (nejednoznačné); `exact` říká, že bod leží přímo v
  * obrysu, ne jen těsně vedle.
+ *
+ * `buildingKod` (jen při hledání podle adresy): adresní místo samo ví, do
+ * kterého stavebního objektu patří, takže budovu bereme podle kódu a ne podle
+ * polohy. Poloha adresního bodu často leží v obrysu víc objektů najednou
+ * (sousední sekce, přístavba) a bod pak vyšel jako "nejednoznačný", ačkoli
+ * adresa je v RÚIAN správně (reálně: J. Drobného 1620, Česká Třebová).
  */
-export async function ruianLookupPoint(lat, lon) {
+export async function ruianLookupPoint(lat, lon, { buildingKod = null } = {}) {
   const pt = pointGeometry(lat, lon);
   let exact = true;
-  let buildings = await query(LAYER.stavebniObjekt, { ...pt, outFields: BUILDING_FIELDS });
+  let buildings = [];
+  if (buildingKod != null && Number.isFinite(Number(buildingKod))) {
+    buildings = await query(LAYER.stavebniObjekt, { where: `kod=${Number(buildingKod)}`, outFields: BUILDING_FIELDS });
+  }
+  if (buildings.length === 0) {
+    buildings = await query(LAYER.stavebniObjekt, { ...pt, outFields: BUILDING_FIELDS });
+  }
   if (buildings.length === 0) {
     exact = false;
     buildings = await query(LAYER.stavebniObjekt, { ...pt, distance: "3", units: "esriSRUnit_Meter", outFields: BUILDING_FIELDS });
@@ -109,18 +121,27 @@ export async function ruianLookupAddress(street, number, city) {
   const esc = (s) => String(s).replace(/'/g, "''");
   const rows = await query(LAYER.adresniMisto, {
     where: `adresa LIKE '${esc(street)} ${esc(cp)},%' OR adresa LIKE '${esc(street)} ${esc(cp)}/%'`,
-    outFields: "adresa",
+    outFields: "adresa,stavebniobjekt",
     returnGeometry: "true",
     outSR: "4326",
   });
-  const cityKey = stripDiacritics(city || "");
+  // Obec bez PSČ: ručně zapsaná adresa bývá "…, 560 02 Česká Třebová", v RÚIAN je "…, 56002 Česká Třebová".
+  const cityKey = stripDiacritics(city || "")
+    .replace(/\b\d{3}\s?\d{2}\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
   const matching = rows.filter((r) => !cityKey || stripDiacritics(r.attributes.adresa).includes(cityKey));
   const pick = matching.length > 0 ? matching : rows.length === 1 ? rows : [];
   const geom = pick[0]?.geometry;
   if (!geom || typeof geom.x !== "number") return null;
-  const result = await ruianLookupPoint(geom.y, geom.x);
-  return { ...result, addressPoint: pick[0].attributes.adresa };
+  const result = await ruianLookupPoint(geom.y, geom.x, { buildingKod: pick[0].attributes.stavebniobjekt });
+  return { ...result, addressPoint: pick[0].attributes.adresa, lookupVersion: ADDRESS_LOOKUP_VERSION };
 }
+
+// Verze hledání podle adresy: starší záznamy v mezipaměti, které budovu
+// nenašly (bod ležel v obrysu víc objektů), se při příštím sběru zopakují —
+// viz ruianPending.
+export const ADDRESS_LOOKUP_VERSION = 2;
 
 /** "Truby 1737, Česká Třebová" -> { street, number, city } (nebo null, když to nevypadá jako adresa s číslem). */
 export function parseExactAddress(text) {
@@ -164,7 +185,9 @@ export async function ruianPending(db, log, { limit = 150, delayMs = 250 } = {})
     const parsed = parseExactAddress(r.exact_address);
     if (!parsed) continue;
     const key = addressKey(parsed.street, parsed.number, parsed.city);
-    if (!cache.has(key)) todo.push({ key, run: () => ruianLookupAddress(parsed.street, parsed.number, parsed.city) });
+    const cached = cache.get(key);
+    const stale = cached && cached.addressPoint && !cached.building && cached.lookupVersion !== ADDRESS_LOOKUP_VERSION;
+    if (!cache.has(key) || stale) todo.push({ key, run: () => ruianLookupAddress(parsed.street, parsed.number, parsed.city) });
   }
 
   let done = 0;

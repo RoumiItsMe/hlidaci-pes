@@ -414,6 +414,18 @@ popisná, počet podlaží a bytů. Bere se z adresy bytu, jinak z bodu v inzer�
 Ukazuje se v detailu pod adresou a ve frontě **🏛️ Katastr** v řádku „Do
 katastru". Adresu zapsanou ručně appka ověří v RÚIAN hned po uložení.
 
+**Budova podle adresy se bere z adresního místa, ne z polohy.** Adresní místo v
+RÚIAN samo ví, do kterého stavebního objektu patří; appka si budovu načte podle
+jeho kódu. Dřív se hledala podle souřadnic adresního bodu, a ten často leží v
+obrysu víc objektů najednou (sousední sekce, přístavba) — budova pak vyšla jako
+„nejednoznačná“ a v detailu stálo „budova v bodě nenalezena“, ačkoli adresa byla
+správně (reálně J. Drobného 1620, Česká Třebová). Obec se při hledání porovnává
+bez PSČ („560 02 Česká Třebová“ i „56002 Česká Třebová“ je totéž). Starší záznamy
+v mezipaměti, které budovu nenašly, se při příštím sběru zopakují samy
+(`ADDRESS_LOOKUP_VERSION` v `ruian.js`). Zůstává pár adres, které RÚIAN nezná v
+tom tvaru, v jakém je zapsaná (např. část obce bez ulice); u nich detail ukáže
+jen k.ú. a budovu je potřeba dohledat ručně.
+
 - **Vysoká jistota** → adresa se doplní sama a v přehledu je u ní „(auto)", v
   detailu je vidět **důvod** (které zdroje se shodly). Střední jistota je jen
   **návrh** s tlačítkem „Použít návrh". Když se nepřiřadilo nic, detail řekne
