@@ -559,7 +559,8 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     denně (100 zůstává v rezervě) a dům, na který by rozpočet nestačil celý, se
     neskenuje — neúplný sken by prohlásil nezkontrolované jednotky za čisté. Když
     rozpočet nestačí na všechny domy, track.log to napíše („nejstarší kontrola domu
-    je N dní stará“).
+    je N dní stará“). Limit klíče sdílí i sekce Náchod; ta má až druhou přednost
+    (viz „Přednost Ústí u katastru“ níže).
   - **Jednotka bytu zapsaná** (v detailu bytu jako `č.p./číslo`, např. `412/12`):
     plomba po rezervaci na ní je silný důkaz → appka sama zapíše „Vklad podán“
     s datem z řízení (i LV), pošle zprávu na Telegram a byt přejde do fáze ceny
@@ -1039,7 +1040,26 @@ aktualizace), ale s vlastními daty a **bez Telegramu**:
 | Adresa | http://localhost:4321 | http://localhost:4323 |
 | Data | `trh-bytu/data/` | `trh-bytu/data-nachod/` (vlastní databáze, fotky, log, zámek sběru) |
 | Telegram | ano | **ne** (ani rezervace, možný prodej, vklad, souhrn kontrol) |
-| Katastr (API) | ano | ano — denní strop 150 volání, ať nevyčerpá společný limit klíče |
+| Katastr (API) | ano — **má přednost** | ano — až druhý v pořadí, denní strop 150 volání (viz „Přednost Ústí u katastru“) |
+
+**Přednost Ústí u katastru (tvrdé pravidlo).** Limit API katastru (500 volání za
+den) je jeden na klíč, takže ho sdílí obě sekce. Když by nestačil, data z katastru
+dostane vždy Ústí n. O.; Náchod si bere jen to, co Ústí nemůže potřebovat
+(`kn-priority.js`):
+
+- Dokud Ústí dnes s kontrolou katastru nedoběhlo, Náchod nechává Ústí celý jeho
+  denní strop (350 volání) a rezervu 100 — zbývá mu tedy nanejvýš **50 volání**
+  (např. při ručním „Aktualizovat teď“ v Náchodě ráno, před plánovaným sběrem).
+- Jakmile Ústí doběhlo (zapíše to do společného souboru
+  `trh-bytu/kn-shared-state.json`, gitignorovaného), smí Náchod až **150 volání**,
+  ale vždy nad rezervou 100 a **zálohou 100 volání pro Ústí** (nový byt s rezervací
+  během dne, ruční obnovení). V den, kdy Ústí spotřebuje svých 350, Náchod nedostane
+  nic a v jeho logu je „přednost má Ústí nad Orlicí“.
+- Neví-li se, zda Ústí dnes doběhlo (soubor chybí nebo nejde přečíst, záznam je ze
+  včerejška, kontrola Ústí selhala), bere se to jako „nedoběhlo“ — chyba je vždy
+  na straně Ústí. Den se počítá v pražském čase.
+- Ústí samo se nijak neomezuje víc než dřív (350 volání, rezerva 100); pravidlo mu
+  jen zaručuje, že mu Náchod nic nevezme.
 
 **Jak se to používá.** `npm run sales-app` spustí původní web a sám k němu
 pustí i sekci Náchod (samostatný proces); v hlavičce je odkaz **↔ Náchod** a zpět

@@ -21,7 +21,7 @@ const probe = `
   console.log(JSON.stringify({
     key: region.REGION_KEY, watch: region.REGION_WATCH.key, locations: region.REGION_WATCH.locations.map((l) => l.label),
     dataDir: db.DATA_DIR, telegram: region.REGION.telegram, token: process.env.TELEGRAM_BOT_TOKEN, chat: process.env.TELEGRAM_CHAT_ID,
-    port: region.REGION.port, kn: Object.keys(region.KN_OPTIONS),
+    port: region.REGION.port, kn: Object.keys(region.KN_OPTIONS), knRole: region.KN_OPTIONS.priority.role,
   }));
 `;
 
@@ -33,7 +33,8 @@ test("výchozí region je původní chování: složka data, watch 'byty', Teleg
   assert.equal(r.telegram, true);
   assert.equal(r.token, "token-z-prostredi"); // výchozí region údaje z prostředí nemění
   assert.equal(r.port, 4321);
-  assert.deepEqual(r.kn, []); // výchozí strop a Telegram beze změny
+  assert.deepEqual(r.kn, ["priority"]); // výchozí strop a Telegram beze změny, jen pořadí u společného limitu
+  assert.equal(r.knRole, "primary"); // Ústí má u API katastru přednost
   assert.deepEqual(r.locations, ["Ústí nad Orlicí", "Letohrad", "Žamberk", "Česká Třebová"]);
 });
 
@@ -48,7 +49,8 @@ test("region Náchod má vlastní složku dat, vlastní lokality a port; Telegra
   assert.equal(r.token, ""); // pojistka: i kdyby nějaká cesta sáhla na Telegram, nemá čím poslat
   assert.equal(r.chat, "");
   assert.equal(r.port, 4323);
-  assert.deepEqual(r.kn.sort(), ["dailyBudget", "send"]);
+  assert.deepEqual(r.kn.sort(), ["dailyBudget", "priority", "send"]);
+  assert.equal(r.knRole, "secondary"); // Náchod je u API katastru až druhý v pořadí
 });
 
 test("neznámý region se odmítne hned při startu", () => {

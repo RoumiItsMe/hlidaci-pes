@@ -38,6 +38,8 @@ export const REGIONS = {
     dataDir: "data",
     telegram: true,
     knDailyBudget: null, // výchozí strop kn-scan.js
+    // Přednost při čerpání společného limitu API katastru (kn-priority.js): Ústí je první.
+    knRole: "primary",
   },
   nachod: {
     key: "nachod",
@@ -47,8 +49,10 @@ export const REGIONS = {
     dataDir: "data-nachod",
     telegram: false, // jen porovnávání nabídek, prodejů a katastr — žádné zprávy do Telegramu
     // Denní limit API katastru je společný pro oba regiony (jeden klíč) — tenhle
-    // region si smí vzít nejvýš tolik, ať nevyčerpá limit výchozímu.
+    // region si smí vzít nejvýš tolik, a to JEN z toho, co nemůže potřebovat
+    // Ústí (tvrdá přednost, viz kn-priority.js): "secondary".
     knDailyBudget: 150,
+    knRole: "secondary",
     watch: NACHOD_WATCH,
     // Obce, ze kterých se bere nabídka (porovnání bez diakritiky).
     municipalities: ["Náchod", "Nové Město nad Metují"],
@@ -69,11 +73,12 @@ export const REGION_WATCH = REGION.watch ?? watches.find((w) => w.key === "byty"
 if (!REGION_WATCH) throw new Error('watch "byty" nenalezen v config.js');
 
 /**
- * Volby pro kontrolu domů přes API katastru (kn-scan.js): denní strop volání a —
- * u regionu bez Telegramu — odesílání nahrazené prázdnou funkcí (nález vkladu se
- * zapíše, ale nic se nepošle).
+ * Volby pro kontrolu domů přes API katastru (kn-scan.js): denní strop volání,
+ * pořadí při čerpání společného limitu (`priority`) a — u regionu bez Telegramu —
+ * odesílání nahrazené prázdnou funkcí (nález vkladu se zapíše, ale nic se nepošle).
  */
 export const KN_OPTIONS = {
+  priority: { role: REGION.knRole },
   ...(REGION.knDailyBudget ? { dailyBudget: REGION.knDailyBudget } : {}),
   ...(REGION.telegram ? {} : { send: async () => {} }),
 };

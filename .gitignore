@@ -6,3 +6,5 @@ node_modules/
 # Trh bytů (trh-bytu/) — čistě lokální appka, data zůstávají jen na PC
 trh-bytu/data/
 trh-bytu/data-nachod/
+trh-bytu/kn-shared-state.json
+trh-bytu/kn-shared-state.json.*.tmp

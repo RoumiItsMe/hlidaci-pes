@@ -341,3 +341,113 @@ test("novostavba před dokončením se neskenuje ani tehdy, když bod z inzerát
   updateListingFields(db, "sreality:1", { own_condition: "maintained" });
   assert.equal(collectTrackedGroups(db, NOW).length, 1);
 });
+
+// --- Přednost Ústí nad Orlicí při čerpání společného limitu API katastru (kn-priority.js) ---
+import { KnApiError } from "./kn-api.js";
+import { primaryDoneToday } from "./kn-priority.js";
+
+// Falešný klient: společný limit klíče (`used` už spotřebováno oběma sekcemi), na požádání selže s HTTP chybou.
+function limitedClient({ used = 0, limit = 500, failStatus = null } = {}) {
+  let calls = 0;
+  return {
+    get calls() {
+      return calls;
+    },
+    hasKey: true,
+    usage: async () => ({ limitVolani: limit, provedenoVolani: used }),
+    building: async () => {
+      calls++;
+      if (failStatus) throw new KnApiError("KN API HTTP " + failStatus, failStatus);
+      return { jednotky: [{ id: 1, cisloJednotky: 6610001 }], rizeniPlomby: [] };
+    },
+    unit: async () => (calls++, { lv: { cislo: 7 }, zpusobVyuziti: { nazev: "byt" }, podilNaSpolecnychCastechDomu: null, rizeniPlomby: [] }),
+    proceeding: async () => (calls++, {}),
+  };
+}
+// Společný soubor v paměti.
+const memoryLedger = (state = null) => ({
+  state,
+  read() {
+    return this.state;
+  },
+  write(s) {
+    this.state = s;
+  },
+});
+const budgetOf = (line) => Number(/volání z (\d+)\)/.exec(line)?.[1]);
+const doneLedger = () => memoryLedger({ day: "2026-10-14", primaryDoneAt: iso(NOW - 1000) });
+async function runRole(role, { used = 0, ledger = memoryLedger(), failStatus = null, db = trackedDb({ hidden: false }) } = {}) {
+  const logs = [];
+  const client = limitedClient({ used, failStatus });
+  const options = { now: NOW, client, send: async () => {}, priority: { role, ledger }, ...(role === "secondary" ? { dailyBudget: 150 } : {}) };
+  const line = await refreshKnScans(db, (l) => logs.push(l), options);
+  return { line, logs, client, ledger };
+}
+
+test("Ústí (primary) má svůj obvyklý denní strop a po kontrole zapíše, že dnes doběhlo", async () => {
+  const r = await runRole("primary");
+  assert.equal(budgetOf(r.line), 350);
+  assert.equal(primaryDoneToday(r.ledger, NOW), true);
+});
+
+test("Ústí zapíše 'doběhlo' i tehdy, když nebylo co skenovat (jinak by Náchod zůstal bez rozpočtu zbytečně)", async () => {
+  const r = await runRole("primary", { db: initDb(new DatabaseSync(":memory:")) });
+  assert.equal(r.line, null);
+  assert.equal(primaryDoneToday(r.ledger, NOW), true);
+});
+
+test("selže-li API (429 / neplatný klíč), Ústí NEdoběhlo — druhá sekce zůstane na minimu", async () => {
+  const r = await runRole("primary", { failStatus: 429 });
+  assert.equal(primaryDoneToday(r.ledger, NOW), false);
+});
+
+test("nejde-li zapsat společný soubor, kontrola Ústí přesto proběhne a chyba se oznámí do logu", async () => {
+  const ledger = memoryLedger();
+  ledger.write = () => {
+    throw new Error("disk plný");
+  };
+  const r = await runRole("primary", { ledger });
+  assert.equal(budgetOf(r.line), 350);
+  assert.ok(r.logs.some((l) => /disk plný/.test(l)));
+});
+
+test("Náchod (secondary), dokud Ústí dnes nedoběhlo: nechá mu celý jeho strop, bere si jen to, co zbývá nad ním", async () => {
+  const r = await runRole("secondary", { used: 0 });
+  assert.equal(budgetOf(r.line), 50); // 500 − 100 rezerva − 350 pro Ústí
+});
+
+test("Náchod před během Ústí nikdy nepřekročí hranici, za kterou by Ústí o svůj strop přišlo", async () => {
+  for (let used = 0; used <= 500; used += 5) {
+    const r = await runRole("secondary", { used });
+    assert.ok(used + r.client.calls <= 50 || r.client.calls === 0, `used=${used}: Náchod provedl ${r.client.calls} volání a Ústí by přišlo o strop`);
+  }
+});
+
+test("Náchod po doběhnutí Ústí dostane vlastní strop 150 (a nechá Ústí malou zálohu)", async () => {
+  const r = await runRole("secondary", { used: 90, ledger: doneLedger() });
+  assert.equal(budgetOf(r.line), 150);
+});
+
+test("když Ústí vybralo svůj strop, Náchod nedostane nic a nezavolá API; log říká proč", async () => {
+  const r = await runRole("secondary", { used: 350, ledger: doneLedger() });
+  assert.equal(r.line, null);
+  assert.equal(r.client.calls, 0);
+  assert.ok(r.logs.some((l) => /přednost má Ústí/.test(l)));
+});
+
+test("po doběhnutí Ústí zbývá Náchodu jen to, co přesahuje zálohu pro Ústí", async () => {
+  const r = await runRole("secondary", { used: 280, ledger: doneLedger() });
+  assert.equal(budgetOf(r.line), 20); // 500 − 280 − 100 rezerva − 100 záloha pro Ústí
+});
+
+test("záznam 'Ústí doběhlo' z včerejška neplatí; neznámý nebo neúplný stav se bere jako 'ještě nedoběhlo'", async () => {
+  for (const ledger of [memoryLedger({ day: "2026-10-13", primaryDoneAt: iso(NOW - DAY) }), memoryLedger(null), memoryLedger({ day: "2026-10-14" })]) {
+    const r = await runRole("secondary", { used: 0, ledger });
+    assert.equal(budgetOf(r.line), 50);
+  }
+});
+
+test("bez nastavené priority (jednosekční použití) se bere jen vlastní strop, jako dřív", async () => {
+  const line = await refreshKnScans(trackedDb({ hidden: false }), () => {}, { now: NOW, client: limitedClient({ used: 0 }), send: async () => {} });
+  assert.equal(budgetOf(line), 350);
+});

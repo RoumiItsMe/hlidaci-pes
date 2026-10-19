@@ -20,6 +20,7 @@ import { createKnClient, scanBuilding, parseUnitNumber, KnApiError } from "./kn-
 import { analyzePlombas, apiWatch, formatDay } from "./kn-plomba.js";
 import { diffKnScan, saveKnEvents } from "./kn-events.js";
 import { isNewBuildPending } from "./new-build.js";
+import { fileLedger, markPrimaryDone, primaryDoneToday, secondaryBudget } from "./kn-priority.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -296,21 +297,56 @@ function filingMessage(entry, candidate, via) {
  * Projde dnešní dávku domů (viz hlavička) a zapíše nalezené plomby. Vrací řádek
  * do logu, nebo null, když nebylo co dělat. Nikdy nevyhazuje — track.js běží
  * bez dohledu.
+ *
+ * `priority` ({ role: "primary" | "secondary", ledger? }) řadí sekce při čerpání
+ * společného limitu (viz kn-priority.js): hlavní sekce po dnešní kontrole zapíše,
+ * že doběhla, a druhá v pořadí si bere jen to, co Ústí nemůže potřebovat.
+ * Bez `priority` (testy, jednosekční použití) se bere jen vlastní strop.
  */
-export async function refreshKnScans(db, log, { now = Date.now(), client = createKnClient(), send = sendTelegramMessage, dailyBudget = DAILY_BUDGET } = {}) {
+export async function refreshKnScans(db, log, { now = Date.now(), client = createKnClient(), send = sendTelegramMessage, dailyBudget = DAILY_BUDGET, priority = null } = {}) {
   if (!client.hasKey) return null;
+  const ledger = priority ? (priority.ledger ?? fileLedger()) : null;
+  // Hlavní sekce zapíše "dnes doběhla" — i když nebylo co skenovat; ne po selhání API.
+  const markDone = () => {
+    if (priority?.role !== "primary") return;
+    try {
+      markPrimaryDone(ledger, now);
+    } catch (err) {
+      log(`KN API: nepodařilo se zapsat, že kontrola doběhla (druhá sekce zůstane na minimu): ${err.message}`);
+    }
+  };
   try {
     const usage = await client.usage();
     // Limit API je jeden na klíč, tedy společný pro všechny regiony — region si
-    // smí vzít nejvýš `dailyBudget` a zbytek (RESERVE) zůstává.
-    const budget = Math.min(dailyBudget, usage.limitVolani - usage.provedenoVolani - RESERVE);
+    // smí vzít nejvýš `dailyBudget` a zbytek (RESERVE) zůstává. Sekce druhá v
+    // pořadí navíc nechává Ústí, co by mohlo potřebovat (kn-priority.js).
+    const available = usage.limitVolani - usage.provedenoVolani - RESERVE;
+    const secondary = priority?.role === "secondary";
+    const budget = secondary
+      ? secondaryBudget({
+          ownCap: dailyBudget,
+          limit: usage.limitVolani,
+          used: usage.provedenoVolani,
+          reserve: RESERVE,
+          primaryBudget: DAILY_BUDGET,
+          primaryDone: primaryDoneToday(ledger, now),
+        })
+      : Math.min(dailyBudget, available);
     if (budget <= 0) {
-      log(`KN API: málo volání (${usage.provedenoVolani}/${usage.limitVolani}), kontrola plomb přeskočena`);
+      log(
+        secondary && available > 0
+          ? `KN API: přednost má Ústí nad Orlicí (${usage.provedenoVolani}/${usage.limitVolani} volání), kontrola plomb této sekce přeskočena`
+          : `KN API: málo volání (${usage.provedenoVolani}/${usage.limitVolani}), kontrola plomb přeskočena`
+      );
+      markDone();
       return null;
     }
 
     const tracked = collectTrackedGroups(db, now);
-    if (!tracked.length) return null;
+    if (!tracked.length) {
+      markDone();
+      return null;
+    }
     const scans = loadKnScans(db);
 
     // Jeden sken na dům: byt bez známé jednotky = projít všechny byty domu.
@@ -331,6 +367,7 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
     let scanned = 0;
     let applied = 0;
     let guessed = 0;
+    let aborted = false;
     for (const b of todays) {
       if (budget - used < 1) break;
       let scan;
@@ -340,7 +377,10 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
       } catch (err) {
         log(`KN API: dům ${b.id} se nepodařilo zkontrolovat: ${err.message}`);
         // Neplatný klíč / vyčerpaný limit — další domy by dopadly stejně.
-        if (err instanceof KnApiError && [401, 403, 429].includes(err.status)) break;
+        if (err instanceof KnApiError && [401, 403, 429].includes(err.status)) {
+          aborted = true;
+          break;
+        }
         continue;
       }
       if (scan.skipped) {
@@ -377,6 +417,7 @@ export async function refreshKnScans(db, log, { now = Date.now(), client = creat
     const oldest = Math.max(0, ...[...buildings.keys()].map((id) => (scans.has(id) ? now - Date.parse(scans.get(id).scannedAt) : 0)));
     if (oldest > STALE_WARN_DAYS * DAY_MS) log(`KN API: nejstarší kontrola domu je ${Math.floor(oldest / DAY_MS)} dní stará — denní rozpočet volání nestačí na všechny domy`);
 
+    if (!aborted) markDone();
     if (!scanned && !applied) return null;
     return `KN API: dnes ${scanned} z ${buildings.size} domů (${used} volání z ${budget}), vklad zapsán u ${applied} bytů${guessed ? ` (z toho ${guessed}× odhadem)` : ""}`;
   } catch (err) {
