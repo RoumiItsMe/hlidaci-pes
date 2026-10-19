@@ -558,3 +558,24 @@ table.compare .col-floor input { width: 12rem; }
 .cell-addr { padding: 0 0.4rem 0.1rem; }
 .cell-addr .addr-chip { margin-left: 0; text-decoration: none; }
 .cell-addr a.addr-chip:hover { text-decoration: underline; }
+
+/* Napovídání přesné adresy (detail bytu, viz app.js) */
+.suggest-list {
+  position: absolute;
+  z-index: 60;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  max-height: 22rem;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  font-size: 0.95rem;
+}
+.suggest-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.55rem 0.65rem; border-radius: 0.35rem; cursor: pointer; color: var(--text); }
+.suggest-list li[aria-selected="true"], .suggest-list li[data-i]:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.suggest-label { font-weight: 600; }
+.suggest-detail { color: var(--muted); font-size: 0.85em; text-align: right; }
+.suggest-list li.suggest-more { cursor: default; color: var(--muted); font-size: 0.85em; justify-content: center; }

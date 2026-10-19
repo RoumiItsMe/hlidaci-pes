@@ -13,6 +13,7 @@ import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRe
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
+import { suggestAddresses, loadIndex as loadAddressIndex } from "./address-suggest.js";
 import { isNewBuildPending } from "./new-build.js";
 import { addressSuggestion } from "./auto-address.js";
 import { parseUnknownFields, addUnknownFields, removeUnknownFields, serializeUnknownFields, parseFieldList, labelsOf } from "./unknown-fields.js";
@@ -64,6 +65,8 @@ function refreshKnScansNow(db) {
 // zkoušení (náhradní skript místo skutečného sběru).
 const TRACK_SCRIPT = process.env.TRACK_SCRIPT || path.join(import.meta.dirname, "track.js");
 const TRACK_LOCK_PATH = path.join(DATA_DIR, "track.lock");
+// Rejstřík názvů ulic a obcí pro napovídání adres — vlastní pro každou sekci.
+const ADDRESS_INDEX_PATH = path.join(DATA_DIR, "address-index.json");
 const TRACK_LOG_PATH = process.env.TRACK_LOG || path.join(DATA_DIR, "track.log");
 let manualRun = null; // { startedAt } — sběr spuštěný z appky, ještě běží
 let lastManualRun = null; // { finishedAt, ok, message } — výsledek posledního ručního sběru
@@ -1209,7 +1212,7 @@ function renderDetail(db, id) {
       zmizí, bude se podle toho byt hledat v katastru. <strong>${esc(addressStatusText)}</strong>
     </p>
     <form class="ajax-form address-form" method="post" action="/byt/${encodeURIComponent(rep.id)}/adresa">
-      <label>Adresa (ulice, č.p. / č.o., obec)<input type="text" name="exact_address" value="${esc(ai.exact)}" placeholder="např. Lukesova 1234, ${esc(REGION_WATCH.locations[0].label)}" maxlength="200"></label>
+      <label>Adresa (ulice, č.p. / č.o., obec)<input type="text" name="exact_address" value="${esc(ai.exact)}" placeholder="např. Lukesova 1234, ${esc(REGION_WATCH.locations[0].label)}" maxlength="200" autocomplete="off" data-address-suggest></label>
       <label>Jednotka (číslo jednotky nebo bytu)<input type="text" name="unit_number" value="${esc(ai.unit)}" placeholder="např. 1234/12" maxlength="60"></label>
       <div class="address-actions">
         <button type="submit" name="mode" value="save">Uložit adresu</button>
@@ -2311,6 +2314,19 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/app.js") {
     return serveStatic(res, path.join(import.meta.dirname, "public", "app.js"), "text/javascript");
   }
+  // Napovídání přesné adresy v detailu bytu (viz address-suggest.js). Selhání RÚIAN
+  // není chyba stránky — pole zůstane obyčejné, jen bez nabídky.
+  if (url.pathname === "/api/adresy" && req.method === "GET") {
+    let body = { items: [], more: 0 };
+    try {
+      body = await suggestAddresses(url.searchParams.get("q") ?? "", { watch: REGION_WATCH, file: ADDRESS_INDEX_PATH, municipalities: REGION.municipalities });
+    } catch (err) {
+      console.log(`Napovídání adres: ${err.message}`);
+      body.error = true;
+    }
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    return res.end(JSON.stringify(body));
+  }
   if (url.pathname.startsWith("/photos/")) {
     const rel = decodeURIComponent(url.pathname.replace("/photos/", ""));
     const filePath = path.join(DATA_DIR, "photos", rel);
@@ -2714,4 +2730,6 @@ server.on("error", (err) => {
 server.listen(PORT, () => {
   console.log(`Trh bytů [${REGION.label}] běží na http://localhost:${PORT}`);
   startOtherRegions();
+  // Rejstřík adres se při prvním startu stáhne (pár sekund) hned, ne až při prvním psaní do pole.
+  loadAddressIndex({ file: ADDRESS_INDEX_PATH, watch: REGION_WATCH }).catch((err) => console.log(`Napovídání adres: rejstřík se nepodařilo načíst (${err.message})`));
 });

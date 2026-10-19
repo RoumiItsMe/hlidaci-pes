@@ -20,6 +20,9 @@ const USER_AGENT = "hlidaci-pes-trh-bytu/1.0 (osobni nekomercni pouziti)";
 const LAYER = { adresniMisto: 1, stavebniObjekt: 3, katastralniUzemi: 7 };
 const BUILDING_FIELDS = "kod,cisladomovni,pocetbytu,pocetpodlazi,isknbudovaid,dokonceni,typstavebnihoobjektukod";
 
+// Adresa služby sdílená s napovídáním adres (address-suggest.js).
+export const RUIAN_ENDPOINT = { BASE, USER_AGENT };
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function pointKey(lat, lon) {

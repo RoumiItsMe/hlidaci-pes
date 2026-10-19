@@ -350,6 +350,16 @@ je online, proto si u každé nabídky zapiš přesnou adresu hned, jak ji zjist
   *Jednotka* (číslo jednotky nebo bytu). *Uložit adresu* uloží obojí (prázdné
   uložení vymaže), *Adresa nedohledatelná* (dřív „neznámá“) znamená „nabídku jsem prošel a adresu se
   zjistit nepodařilo" — to je jiný stav než „ještě jsem se nekoukal".
+- **Napovídání adresy.** Pole *Adresa* napovídá jako v e-shopu: po napsání začátku
+  ulice (stačí i bez diakritiky, „smilov“ najde „Šmilovského“) se nabídnou ulice,
+  části obce a obce v okolí sledovaných lokalit a po výběru rovnou **čísla
+  popisná** („Truby 1737, Česká Třebová“). Šipky + Enter nebo klik vyberou, Esc
+  zavře; nabídka nic neukládá. Zdroj je RÚIAN (úřední registr, stejný jako při
+  ověření adresy při uložení), takže nabízené adresy existují. Rejstřík názvů se
+  stáhne jednou (pár sekund při prvním startu, soubor `address-index.json` ve
+  složce dat sekce) a po 30 dnech se obnoví; čísla se dotahují živě. Sekce Náchod
+  nabízí jen Náchod a Nové Město n. M. Evidenční čísla (rekreační objekty) se
+  nenabízejí. Když RÚIAN neodpovídá, pole je obyčejné, jen bez nabídky.
 - **Přehled:** u každého bytu ve stavu V nabídce/Rezervováno je štítek
   **📍 doplnit adresu**, u vyplněného rovnou adresa, u nedohledatelné „adresa
   nedohledatelná". Filtr **📍 Bez adresy (N)** ukáže jen nabídky, které ještě

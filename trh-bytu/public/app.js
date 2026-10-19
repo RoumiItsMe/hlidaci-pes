@@ -77,3 +77,143 @@ document.addEventListener("submit", async (event) => {
     }
   }
 });
+
+// Napovídání přesné adresy (pole s `data-address-suggest`, detail bytu): po napsání
+// začátku ulice nabídne čísla popisná, po výběru vyplní celou adresu (viz
+// address-suggest.js, GET /api/adresy). Poslouchá se na `document`, protože ajax
+// formuláře po uložení vyměňují celý <main>.
+(() => {
+  let box = null; // <ul class="suggest-list"> — jediná nabídka, vždy u pole, do kterého se píše
+  let field = null;
+  let items = [];
+  let active = -1;
+  let timer = null;
+  let controller = null;
+  let seq = 0;
+
+  function close() {
+    clearTimeout(timer);
+    controller?.abort();
+    seq++;
+    box?.remove();
+    box = null;
+    field = null;
+    items = [];
+    active = -1;
+  }
+
+  function place() {
+    if (!box || !field || !field.isConnected) return;
+    const r = field.getBoundingClientRect();
+    box.style.left = `${r.left + window.scrollX}px`;
+    box.style.top = `${r.bottom + window.scrollY + 2}px`;
+    box.style.width = `${r.width}px`;
+  }
+
+  function highlight(i) {
+    active = i;
+    box?.querySelectorAll("li[data-i]").forEach((li) => li.setAttribute("aria-selected", String(Number(li.dataset.i) === i)));
+    box?.querySelector(`li[data-i="${i}"]`)?.scrollIntoView({ block: "nearest" });
+  }
+
+  function render(list, more) {
+    if (!field) return;
+    items = list;
+    active = -1;
+    if (!list.length) {
+      box?.remove();
+      box = null;
+      return;
+    }
+    if (!box) {
+      box = document.createElement("ul");
+      box.className = "suggest-list";
+      box.setAttribute("role", "listbox");
+      document.body.appendChild(box);
+    }
+    box.replaceChildren();
+    list.forEach((item, i) => {
+      const li = document.createElement("li");
+      li.dataset.i = String(i);
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", "false");
+      const label = document.createElement("span");
+      label.className = "suggest-label";
+      label.textContent = item.label;
+      const detail = document.createElement("span");
+      detail.className = "suggest-detail";
+      detail.textContent = item.detail;
+      li.append(label, detail);
+      box.appendChild(li);
+    });
+    if (more > 0) {
+      const li = document.createElement("li");
+      li.className = "suggest-more";
+      li.textContent = `a dalších ${more} — pokračuj v psaní`;
+      box.appendChild(li);
+    }
+    place();
+  }
+
+  async function load(el) {
+    controller?.abort();
+    const text = el.value;
+    if (text.trim().length < 2) return close();
+    const mine = ++seq;
+    controller = new AbortController();
+    try {
+      const res = await fetch(`/api/adresy?q=${encodeURIComponent(text)}`, { signal: controller.signal });
+      const data = await res.json();
+      if (mine !== seq || el !== field) return; // mezitím se psalo dál, nebo se pole opustilo
+      render(data.items ?? [], data.more ?? 0);
+    } catch (err) {
+      if (err.name !== "AbortError") close();
+    }
+  }
+
+  function choose(i) {
+    const item = items[i];
+    if (!item || !field) return;
+    const el = field;
+    el.value = item.value;
+    el.setSelectionRange(el.value.length, el.value.length);
+    if (item.kind === "name") load(el); // název ulice → rovnou její čísla
+    else close();
+  }
+
+  document.addEventListener("input", (event) => {
+    const el = event.target;
+    if (!(el instanceof HTMLInputElement) || !el.matches("[data-address-suggest]")) return;
+    field = el;
+    clearTimeout(timer);
+    timer = setTimeout(() => load(el), 180);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!box || event.target !== field) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      highlight((active + step + items.length) % items.length);
+    } else if (event.key === "Enter" && active >= 0) {
+      event.preventDefault(); // vybrat nabídku, ne odeslat formulář
+      choose(active);
+    } else if (event.key === "Escape") {
+      close();
+    }
+  });
+
+  // mousedown, ne click: pole tak neztratí fokus dřív, než se výběr provede.
+  document.addEventListener("mousedown", (event) => {
+    const li = event.target instanceof Element ? event.target.closest(".suggest-list li[data-i]") : null;
+    if (li) {
+      event.preventDefault();
+      choose(Number(li.dataset.i));
+    }
+  });
+  document.addEventListener("focusout", (event) => {
+    if (event.target === field) close();
+  });
+  document.addEventListener("submit", close, true);
+  window.addEventListener("resize", place);
+})();
