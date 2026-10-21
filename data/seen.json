@@ -11,9 +11,9 @@
       "consecutiveFailures": 0
     },
     "byty:idnes": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "byty:realitymix": {
       "failing": false,
@@ -286,6 +286,10 @@
     {
       "id": "2691698764",
       "price": 3690000
+    },
+    {
+      "id": "1211695180",
+      "price": 3450000
     }
   ],
   "byty:bezrealitky": [
@@ -688,6 +692,10 @@
     {
       "id": "8729903",
       "price": 5999000
+    },
+    {
+      "id": "8730021",
+      "price": 3450000
     }
   ],
   "byty:bazos": [
@@ -998,6 +1006,10 @@
     {
       "id": "225339073",
       "price": 3675000
+    },
+    {
+      "id": "225403977",
+      "price": 3450000
     }
   ],
   "pozemky-glamping:sreality": [
@@ -2014,6 +2026,10 @@
     {
       "fingerprint": "5350000_94",
       "source": "Bezrealitky.cz"
+    },
+    {
+      "fingerprint": "3450000_58",
+      "source": "RealityMIX.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -3634,17 +3650,17 @@
     "OBAS1000A918-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-21T19:17:02.221Z",
-    "board:letohrad": "2026-10-21T19:17:02.221Z",
-    "board:zamberk": "2026-10-21T19:17:02.221Z",
-    "board:ceska-trebova": "2026-10-21T19:17:02.221Z",
-    "board:lanskroun": "2026-10-21T19:17:02.221Z",
-    "board:kraliky": "2026-10-21T19:17:02.221Z",
-    "board:vysoke-myto": "2026-10-21T19:17:02.221Z",
-    "board:lukova": "2026-10-21T19:17:02.221Z",
-    "board:tatenice": "2026-10-21T19:17:02.221Z",
-    "board:anenska-studanka": "2026-10-21T19:17:02.221Z",
-    "board:okres-usti-nad-orlici": "2026-10-21T18:17:42.814Z"
+    "board:usti-nad-orlici": "2026-10-21T19:31:37.099Z",
+    "board:letohrad": "2026-10-21T19:31:37.099Z",
+    "board:zamberk": "2026-10-21T19:31:37.099Z",
+    "board:ceska-trebova": "2026-10-21T19:31:37.099Z",
+    "board:lanskroun": "2026-10-21T19:31:37.099Z",
+    "board:kraliky": "2026-10-21T19:31:37.099Z",
+    "board:vysoke-myto": "2026-10-21T19:31:37.099Z",
+    "board:lukova": "2026-10-21T19:31:37.099Z",
+    "board:tatenice": "2026-10-21T19:31:37.099Z",
+    "board:anenska-studanka": "2026-10-21T19:31:37.099Z",
+    "board:okres-usti-nad-orlici": "2026-10-21T19:31:37.099Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
