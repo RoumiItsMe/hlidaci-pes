@@ -333,3 +333,20 @@ test("trh_prehled: počty odpovídají appce (nabídky, rezervované, prodané, 
   assert.equal(r.sekce, "http://localhost:4321");
   assert.ok(r.upozorneni.length >= 1);
 });
+
+test("dohledatelnost_zmizelych: zmizelé bez rezervace roztříděné; byt bez adresy jde zachránit, s odkazem a důvodem", () => {
+  const r = run("dohledatelnost_zmizelych");
+  // G je jediný zmizelý bez rezervace (B má rezervaci, F/A jsou prodané, E skrytý)
+  assert.equal(r.zmizeloBezRezervace, 1);
+  assert.equal(r.hlidaSe, 0);
+  assert.equal(r.kZachraneDoplnenimAdresy, 1);
+  assert.deepEqual(r.rozdeleni.find((d) => d.kategorie === "chybi_adresa").pocet, 1);
+  assert.equal(r.rozdeleni.length, 7);
+  assert.equal(r.byty.length, 1);
+  assert.equal(r.byty[0].id, "sreality:g");
+  assert.equal(r.byty[0].byt, "3+kk, 65 m²");
+  assert.equal(r.byty[0].adresa, "Žamberk, ul. Tichá");
+  assert.equal(r.byty[0].odkaz, "http://localhost:4321/byt/sreality%3Ag");
+  assert.match(r.byty[0].proc, /chybí adresa/);
+  assert.ok(r.upozorneni.some((u) => /nemusí být prodej/.test(u)));
+});

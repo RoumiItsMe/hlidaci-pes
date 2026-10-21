@@ -69,9 +69,26 @@ export function isDemandAd(title) {
   return DEMAND_TITLE_RE.test(String(title ?? ""));
 }
 
-/** Proč uložený záznam není nabídka k prodeji: "demand" (poptávka), jinak null. */
+// Pronájem mezi nabídkami k prodeji (agentura zařadí inzerát do špatné kategorie, nebo ho portál
+// propíše): reálně 3+kk v Letohradě za 19 200 Kč na Sreality, iDNES ("Pronájem bytu 3+kk, 62 m2")
+// i RealityMIX (URL .../pronajem-bytu-3-kk-62-m-….html) — za prodej se počítal a po zmizení
+// vypadal jako byt prodaný bez rezervace. Pozná se podle (a) slova "pronájem" v URL nebo na
+// začátku titulku, (b) ceny pod MIN_SALE_PRICE_CZK (měsíční nájem, ne cena bytu).
+const RENTAL_URL_RE = /\/pronajem|pronajem-bytu|\/pronajmu/i;
+const RENTAL_TITLE_RE = /^\s*(?:pronájem|pronájmu|k\s+pronájmu|pronajmu|pronajmeme|nájem)(?![\p{L}])/iu;
+export const MIN_SALE_PRICE_CZK = 100_000;
+
+/** Je to pronájem, ne prodej bytu? (URL, titulek, nebo cena v řádu měsíčního nájmu) */
+export function isRentalAd({ title, url, price_czk: price, priceCzk }) {
+  const amount = price ?? priceCzk;
+  return RENTAL_URL_RE.test(String(url ?? "")) || RENTAL_TITLE_RE.test(String(title ?? "")) || (typeof amount === "number" && amount > 0 && amount < MIN_SALE_PRICE_CZK);
+}
+
+/** Proč záznam není nabídka bytu k prodeji: "demand" (poptávka), "rental" (pronájem), jinak null. */
 export function notAnOfferReason(listing) {
-  return isDemandAd(listing.title) ? "demand" : null;
+  if (isDemandAd(listing.title)) return "demand";
+  if (isRentalAd(listing)) return "rental";
+  return null;
 }
 
 /**

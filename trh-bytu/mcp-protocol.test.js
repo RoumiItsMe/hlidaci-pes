@@ -195,7 +195,7 @@ test("stdio server: handshake, seznam nástrojů, volání nad zkušební datab�
     s.send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const list = JSON.parse(await s.nextLine()); // jediná odpověď po notifikaci je ta na tools/list
     assert.equal(list.id, 2);
-    assert.deepEqual(list.result.tools.map((t) => t.name), ["trh_prehled", "prodane_byty", "statistiky_cen", "nabidky", "zmeny_cen", "detail_bytu"]);
+    assert.deepEqual(list.result.tools.map((t) => t.name), ["trh_prehled", "prodane_byty", "statistiky_cen", "nabidky", "zmeny_cen", "dohledatelnost_zmizelych", "detail_bytu"]);
     s.send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "trh_prehled", arguments: {} } });
     const overview = JSON.parse(await s.nextLine());
     assert.equal(overview.id, 3);

@@ -20,7 +20,7 @@ import { REGION, REGION_WATCH, KN_OPTIONS } from "./region.js";
 import { runOtherRegions } from "./region-runner.js";
 import { regionSources } from "./region-sources.js";
 import { runBackup } from "./backup.js";
-import { splitByAddress, isOutsideByPoint, nearestCenterKm, isDemandAd } from "./region-guard.js";
+import { splitByAddress, isOutsideByPoint, nearestCenterKm, notAnOfferReason } from "./region-guard.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
 import { refreshKnScans } from "./kn-scan.js";
@@ -161,9 +161,10 @@ async function processSource(db, source, watch) {
 
     const existing = getListing(db, listingId);
     if (!existing) {
-      // Poptávka ("Poptávka bytu v …") není nabídka k prodeji — nezaeviduje se (viz region-guard.js).
-      if (isDemandAd(item.title)) {
-        log(`[${source.name}] není nabídka (poptávka), přeskočeno: ${item.id} — ${item.title}`);
+      // Poptávka ("Poptávka bytu v …") ani pronájem není nabídka bytu k prodeji — nezaeviduje se (viz region-guard.js).
+      const notAnOffer = notAnOfferReason({ title: item.title, url: item.url, priceCzk: item.priceCzk });
+      if (notAnOffer) {
+        log(`[${source.name}] není nabídka k prodeji (${notAnOffer === "rental" ? "pronájem" : "poptávka"}), přeskočeno: ${item.id} — ${item.title}`);
         continue;
       }
       // Nový inzerát — dotáhnout detail (popis, fotky, případně reserved).

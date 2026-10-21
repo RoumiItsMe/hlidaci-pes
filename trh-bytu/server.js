@@ -31,6 +31,7 @@ import { addressInfo } from "./address-info.js";
 import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime, parseRunSummary } from "./dashboard.js";
 import { computeEntries, SOURCE_LABELS, formatCzk, changeSources, priceLabel } from "./entries.js";
 import { effectivePriceForStats, renovatedSaleStats, almostSoldSaleStats, topSaleStats } from "./sale-stats.js";
+import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
 import { readTrackLock } from "./track-lock.js";
 import { REGION, REGION_WATCH, OTHER_REGIONS, KN_OPTIONS } from "./region.js";
 
@@ -1697,8 +1698,36 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
 const KN_URL = "https://nahlizenidokn.cuzk.cz/";
 const KN_RECHECK_DAYS = 7;
 
+// Přehled "co ze zmizelých bytů bez rezervace se dá dohledat a co ne" (vanish-trace.js): číslo "zmizelo 27,
+// hlídá se 7" samo o sobě nevypovídá — družstevní byty a stažené balíky se dohledat nedají z principu,
+// k záchraně zůstávají jen byty bez adresy.
+function renderVanishTrace(trace, liveWithoutAddress) {
+  if (!trace.total) return "";
+  const counts = Object.entries(trace.counts)
+    .filter(([, n]) => n)
+    .map(([key, n]) => `<li><strong>${n}</strong> — ${esc(TRACE_LABELS[key])}</li>`)
+    .join("");
+  const saveable = trace.actionable
+    .map((a) => {
+      const query = encodeURIComponent(`Prodej bytu ${a.label} ${a.address ?? ""}`.trim());
+      return `<li><a href="/byt/${encodeURIComponent(a.id)}#adresa">${esc(a.label)}${a.address ? `, ${esc(a.address)}` : ""}</a> <span class="muted">· zmizel před ${a.daysGone ?? "?"} dny · ${esc(a.why)}</span> <a href="https://www.google.com/search?q=${query}" target="_blank" rel="noopener">hledat na webu</a></li>`;
+    })
+    .join("");
+  const live = liveWithoutAddress
+    ? `<p class="muted">Ať jich přibývá míň: živých bytů bez přesné adresy je teď ${liveWithoutAddress} — <a href="/byty?adresa=chybi">doplnit, dokud jsou v nabídce</a> (po zmizení inzerátu už adresu zjistit nejde).</p>`
+    : "";
+  return `<details class="kn-done kn-trace" ${trace.actionable.length ? "open" : ""}>
+      <summary>Dohledatelnost: ze ${trace.total} zmizelých bytů se hlídá ${trace.traceable}${trace.actionable.length ? `, ${trace.actionable.length} jde zachránit adresou` : ""}</summary>
+      <ul>${counts}</ul>
+      ${saveable ? `<p class="muted">Jde zachránit (doplň adresu — pokud ji třeba najdeš na webu makléře nebo developera):</p><ul>${saveable}</ul>` : ""}
+      ${live}
+    </details>`;
+}
+
 function renderKnQueue(db) {
   const entries = computeEntries(db).filter((e) => !e.hidden);
+  const vanishTrace = traceVanished(entries);
+  const liveWithoutAddress = entries.filter((e) => (e.status === "active" || e.status === "reserved") && e.addressInfo.state === "missing").length;
   const knActx = buildAddressContext(db, db.prepare("SELECT * FROM listings").all());
   const knScans = loadKnScans(db);
   const DAY = 24 * 60 * 60 * 1000;
@@ -1980,6 +2009,7 @@ function renderKnQueue(db) {
       kontrol nepatří. U bytů s přesnou adresou je prochází i API katastru (${UNRESERVED_HORIZON_DAYS} dní po zmizení): plomba se
       ukáže na kartě, a kde ji API nenašlo, byt leží ve sbalené skupině níž.
     </p>
+    ${renderVanishTrace(vanishTrace, liveWithoutAddress)}
     <div class="kn-list">${otherItems || `<p class="empty">Nic ke kontrole.</p>`}</div>
     ${otherWatchedItems ? `<details class="kn-done"><summary>Zmizelé byty, které hlídá API katastru (${otherWatched.length})</summary>${otherWatchedItems}</details>` : ""}
     ${doneRows ? `<details class="kn-done"><summary>Vyřízené (${done.length})</summary><ul>${doneRows}</ul></details>` : ""}`;

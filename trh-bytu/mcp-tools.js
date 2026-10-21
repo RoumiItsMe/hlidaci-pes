@@ -15,6 +15,7 @@ import { effectivePriceForStats } from "./sale-stats.js";
 import { ASSUMED_PRICE_DISCOUNT, saleEvidence } from "./sale-record.js";
 import { stripDiacritics } from "./geo-suggest.js";
 import { PARAM_FIELDS, OWN_FIELDS } from "./params.js";
+import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
 
 const SOURCE_NAMES = { sreality: "Sreality.cz", bezrealitky: "Bezrealitky.cz", idnes: "Reality.iDNES.cz", realitymix: "RealityMIX.cz", bazos: "Bazoš.cz" };
 const EVENT_NAMES = {
@@ -492,6 +493,36 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
           prumerneZlevneniProcent: drops.length ? Math.round((drops.reduce((s, r) => s + r.zmenaProcent, 0) / drops.length) * 10) / 10 : null,
           byty: rows.slice(0, limit),
           upozorneni: notes,
+        };
+      },
+    },
+    {
+      name: "dohledatelnost_zmizelych",
+      title: "Dohledatelnost zmizelých bytů",
+      description:
+        "Kolik bytů zmizelo z nabídky BEZ rezervace a u kolika z nich se dá v katastru zjistit, co se s nimi stalo. Zmizení bez rezervace nic neříká o prodeji (portály důvod neuvádějí), a v katastru jde byt hledat jen podle domu. Vrací rozdělení (hlídá API katastru / nejde ověřit — družstevní byt, novostavba / stažený balík — víc stejných bytů zmizelo týž den / adresa označena jako nedohledatelná / chybí adresa) a seznam bytů, které jdou zachránit doplněním adresy. Použij na otázky typu „proč nevíme, jestli se ty byty prodaly“.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      handler(db) {
+        const trace = traceVanished(computeEntries(db).filter((e) => !e.hidden), { now: now() });
+        const keys = { watched: "hlida_se_api_katastru", closed: "hlidani_skoncilo", unverifiable: "nejde_overit_v_katastru", bulk: "stazeny_balik", unknown: "adresa_nedohledatelna", noWatch: "dum_v_katastru_nenalezen", missing: "chybi_adresa" };
+        return {
+          zmizeloBezRezervace: trace.total,
+          hlidaSe: trace.traceable,
+          nejdeZPrincipuNeboNeniProdej: trace.untraceable,
+          kZachraneDoplnenimAdresy: trace.actionable.length,
+          rozdeleni: Object.entries(trace.counts).map(([key, pocet]) => ({ kategorie: keys[key], popis: TRACE_LABELS[key], pocet })),
+          byty: trace.actionable.map((a) => ({
+            id: a.id,
+            odkaz: baseUrl ? `${baseUrl}/byt/${encodeURIComponent(a.id)}` : undefined,
+            byt: a.label,
+            adresa: a.address,
+            zmizelPredDny: a.daysGone,
+            proc: a.why,
+          })),
+          upozorneni: [
+            "Zmizení z nabídky bez rezervace nemusí být prodej (stažení, vypršení inzerátu, pronájem). Portály důvod nesdělují, jistotu dá jen katastr.",
+            "Katastr jde hledat jen podle domu, proto se hlídají jen byty s přesnou adresou. Družstevní byty a novostavby před dokončením se v katastru neověří vůbec.",
+          ],
         };
       },
     },

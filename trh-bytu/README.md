@@ -1125,6 +1125,42 @@ Region bez Telegramu navíc při startu zahodí `TELEGRAM_BOT_TOKEN`, takže ani
 chybná cesta v kódu nemá čím poslat zprávu. Test `region.test.js` hlídá, že obě
 sekce mají různé složky dat. Další region = položka v `REGIONS` a jeho zdroje.
 
+## Dohledatelnost zmizelých bytů bez rezervace
+
+Byt, který zmizel z nabídky **bez rezervace**, nic neříká o prodeji (mohl být stažený, vypršel,
+nebo se prodal) a jistotu dá jen katastr. Číslo „zmizelo 27, hlídá se 7“ ale samo nevypovídá —
+část z nich dohledat nejde z principu a část nikdy prodej nebyla. Nahoře v sekci „Zmizelé byty
+bez rezervace“ na stránce **Kontrola v katastru** je proto rozbalovací přehled **Dohledatelnost**
+(`vanish-trace.js`), který je třídí:
+
+| Skupina | Význam |
+|---|---|
+| hlídá API katastru | má přesnou adresu a dům v RÚIAN; plomba se ukáže na kartě (okno 120 dní po zmizení) |
+| hlídání skončilo | okno po zmizení uplynulo |
+| nejde ověřit | družstevní byt, novostavba před dokončením, dům bez jednotek — v katastru se vklad nevede |
+| stažený balík | ≥ 3 byty z jednoho portálu a města zmizely týž den a dva jsou stejného typu (dispozice + plocha) — typicky developerský projekt; nejspíš ne prodej. Byt na víc portálech se do balíku nepočítá |
+| adresa nedohledatelná | označeno ručně |
+| dům nenalezen | adresa je, ale appka k ní v katastru nenašla dům |
+| **chybí adresa** | jediná skupina, kterou jde **zachránit** — je vypsaná s odkazem na doplnění a „hledat na webu“ (web makléře nebo developera někdy drží adresu i po prodeji) |
+
+Zkoumáno a **nejde** (aby se to nezkoušelo znovu):
+- **Důvod zmizení z portálu zjistit nejde.** Sreality vrací 404, Bazoš přesměruje na výpis, RealityMIX napíše
+  „není v naší databázi“, Bezrealitky „Inzerát již není v nabídce“ a iDNES „Nabídka již není aktivní. Ode dne
+  … evidujeme nabídku jako neaktivní“ — tedy jen datum, ne prodáno / staženo.
+- **Katastr jde hledat jen podle domu.** API neumí hledat podle ulice ani území a `Rizeni/PrijateDne` vrací jen
+  hlavičky řízení bez dotčených nemovitostí, takže z nových vkladů se byt bez adresy zpětně určit nedá.
+- **Webový archiv** (Wayback Machine) automatické dotazy blokuje (HTTP 429).
+- **Jednotku z podílu a plochy** (`podíl na společných částech` × podlahová plocha domu) odhadovat nelze ověřit:
+  v databázi není jediná ručně zapsaná jednotka, takže není s čím hypotézu porovnat. Až bude pár ověřených
+  jednotek, má smysl to zkusit.
+
+**Pronájmy** se mezi nabídkami k prodeji občas objeví (agentura zvolí špatnou kategorii): reálně 3+kk v Letohradě za
+19 200 Kč na Sreality, iDNES i RealityMIX, který se po zmizení tvářil jako prodej. Pozná se podle slova „pronájem“
+v URL nebo na začátku titulku, nebo podle ceny pod 100 000 Kč (měsíční nájem). Takový inzerát se nezaeviduje
+(`track.log`: „není nabídka k prodeji (pronájem)“) a už uložené odstraní `purge-outside-region.js`.
+
+V chatu přes MCP: nástroj `dohledatelnost_zmizelych`.
+
 ## Doplňování údajů z textů a z portálu
 
 Stav, konstrukci a parametry bytu (patro, sklep, vlastnictví…) appka vyčítá z titulku a popisu

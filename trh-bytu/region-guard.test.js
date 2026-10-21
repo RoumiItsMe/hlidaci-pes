@@ -89,3 +89,27 @@ test("poptávka (někdo byt shání) se pozná podle začátku titulku; běžné
   assert.equal(notAnOfferReason({ title: "Poptávka bytu v Náchodě" }), "demand");
   assert.equal(notAnOfferReason({ title: "Prodej bytu 2+1" }), null);
 });
+
+import { isRentalAd, MIN_SALE_PRICE_CZK } from "./region-guard.js";
+
+test("pronájem mezi nabídkami: pozná se podle URL, titulku nebo ceny v řádu nájmu; prodej (i 'vhodný k pronájmu') ne", () => {
+  // reálný případ: jeden pronájem 3+kk v Letohradě na třech portálech
+  assert.equal(isRentalAd({ title: "Prodej bytu, 3+kk, 62 m²", url: "https://realitymix.cz/detail/letohrad/pronajem-bytu-3-kk-62-m-8721671.html", price_czk: 19200 }), true);
+  assert.equal(isRentalAd({ title: "Pronájem bytu 3+kk, 62 m2", url: "https://reality.idnes.cz/detail/prodej/byt/x/abc/", price_czk: null }), true);
+  assert.equal(isRentalAd({ title: "Prodej bytu 3+kk 62 m²", url: "https://www.sreality.cz/detail/prodej/byt/3+kk/letohrad/2683506764", price_czk: 19200 }), true);
+  assert.equal(isRentalAd({ title: "Prodej bytu 2+1", url: "https://www.sreality.cz/detail/pronajem/byt/2+1/x/1", price_czk: 3_500_000 }), true);
+  assert.equal(isRentalAd({ title: "K pronájmu byt 1+1", url: "https://x/1", priceCzk: 8000 }), true); // priceCzk jako u položky z výpisu
+  // běžné prodeje
+  assert.equal(isRentalAd({ title: "Prodej bytu 2+1 54 m²", url: "https://www.sreality.cz/detail/prodej/byt/2+1/x/1", price_czk: 3_500_000 }), false);
+  assert.equal(isRentalAd({ title: "Prodej bytu k investici, vhodný k pronájmu", url: "https://x/detail/prodej/byt/1", price_czk: 2_500_000 }), false);
+  assert.equal(isRentalAd({ title: "Nájemní dům a byt na prodej", url: "https://x/2", price_czk: 5_000_000 }), false);
+  // cena neznámá nebo nulová není důkaz pronájmu
+  for (const price of [null, undefined, 0]) assert.equal(isRentalAd({ title: "Prodej bytu", url: "https://x/3", price_czk: price }), false);
+  // hranice ceny
+  assert.equal(isRentalAd({ title: "Prodej bytu", url: "https://x/4", price_czk: MIN_SALE_PRICE_CZK - 1 }), true);
+  assert.equal(isRentalAd({ title: "Prodej bytu", url: "https://x/4", price_czk: MIN_SALE_PRICE_CZK }), false);
+  // společný důvod: poptávka má přednost, pronájem se pozná, jinak nic
+  assert.equal(notAnOfferReason({ title: "Poptávka bytu", url: "https://x/5", price_czk: 5000 }), "demand");
+  assert.equal(notAnOfferReason({ title: "Pronájem bytu", url: "https://x/6" }), "rental");
+  assert.equal(notAnOfferReason({ title: "Prodej bytu", url: "https://x/7", price_czk: 2_000_000 }), null);
+});
