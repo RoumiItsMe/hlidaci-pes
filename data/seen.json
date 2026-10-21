@@ -86,9 +86,9 @@
       "consecutiveFailures": 0
     },
     "board:vysoke-myto": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1
+      "consecutiveFailures": 0
     },
     "board:lukova": {
       "failing": false,
@@ -3442,7 +3442,9 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-zverejneni-navrhu-opatreni-obecne-povahy-pro-stanoveni-mistni-upravy-provozu-na-pozemni-komunikaci-na-pozemcich-p-c-2240-2-a-2249-19-v-k-u-vysoke-myto/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-tumova-v-k-u-a-obci-vysoke-myto-z-duvodu-uzavirky-casti-komunikace-pro-poradani-kulturni-akce-dia-de-muerto/",
     "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-povoleni-stavby-25-0088-vf-prumyslova-1880-chocen_ok/",
-    "https://www.vysoke-myto.cz/uredni-deska/upozorneni-k-odstraneni-a-oklesteni-stromovi-a-jinych-porostu-4/"
+    "https://www.vysoke-myto.cz/uredni-deska/upozorneni-k-odstraneni-a-oklesteni-stromovi-a-jinych-porostu-4/",
+    "https://www.vysoke-myto.cz/uredni-deska/program-regenerace-mpr-a-mpz-pro-rok-2027/",
+    "https://www.vysoke-myto.cz/uredni-deska/smlouva-o-poskytnuti-ind-dotace-mas-litomyslsko-o-p-s-25-rm-2026/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -3618,16 +3620,16 @@
     "OBAS1000A918-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-21T15:16:17.736Z",
-    "board:letohrad": "2026-10-21T15:16:17.736Z",
-    "board:zamberk": "2026-10-21T15:16:17.736Z",
-    "board:ceska-trebova": "2026-10-21T15:16:17.736Z",
-    "board:lanskroun": "2026-10-21T15:16:17.736Z",
-    "board:kraliky": "2026-10-21T15:16:17.736Z",
-    "board:vysoke-myto": "2026-10-21T15:01:43.375Z",
-    "board:lukova": "2026-10-21T15:16:17.736Z",
-    "board:tatenice": "2026-10-21T15:16:17.736Z",
-    "board:anenska-studanka": "2026-10-21T15:16:17.736Z",
+    "board:usti-nad-orlici": "2026-10-21T15:31:22.407Z",
+    "board:letohrad": "2026-10-21T15:31:22.407Z",
+    "board:zamberk": "2026-10-21T15:31:22.407Z",
+    "board:ceska-trebova": "2026-10-21T15:31:22.407Z",
+    "board:lanskroun": "2026-10-21T15:31:22.407Z",
+    "board:kraliky": "2026-10-21T15:31:22.407Z",
+    "board:vysoke-myto": "2026-10-21T15:31:22.407Z",
+    "board:lukova": "2026-10-21T15:31:22.407Z",
+    "board:tatenice": "2026-10-21T15:31:22.407Z",
+    "board:anenska-studanka": "2026-10-21T15:31:22.407Z",
     "board:okres-usti-nad-orlici": "2026-10-21T15:01:43.375Z"
   },
   "board:okres-usti-nad-orlici": [
