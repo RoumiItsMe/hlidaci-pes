@@ -75,3 +75,17 @@ test("uložená nabídka: mimo podle polohy (kterýkoli portál) nebo podle adre
   assert.equal(outsideReason({ source: "realitymix", address: "Jilemnického, Ústí nad Orlicí", lat: 49.9739, lon: 16.3957 }, WATCH), null);
   assert.equal(outsideReason({ source: "realitymix", address: "", lat: null, lon: null }, WATCH), null);
 });
+
+import { isDemandAd, notAnOfferReason } from "./region-guard.js";
+
+test("poptávka (někdo byt shání) se pozná podle začátku titulku; běžné nabídky ne", () => {
+  for (const title of ["Poptávka bytu v Novém Městě nad Metují: Dohodou", "poptávám byt 2+1 v Náchodě", "Koupím byt v Letohradě", "KOUPÍME byt", "Sháním byt 3+1 v Žamberku", "Hledám ke koupi byt", "Odkoupím byt, rychlé jednání", "  Poptávka: byt 2+kk"]) {
+    assert.equal(isDemandAd(title), true, title);
+  }
+  for (const title of ["Prodej bytu 2+1, 54 m²", "Prodám byt 3+1", "Byt 2+1 v Náchodě, vhodný pro investory", "Poptávkový byt", "Koupímeto"]) {
+    assert.equal(isDemandAd(title), false, title);
+  }
+  for (const empty of [null, undefined, ""]) assert.equal(isDemandAd(empty), false);
+  assert.equal(notAnOfferReason({ title: "Poptávka bytu v Náchodě" }), "demand");
+  assert.equal(notAnOfferReason({ title: "Prodej bytu 2+1" }), null);
+});

@@ -1,6 +1,7 @@
-// Úklid nabídek MIMO sledovanou oblast (stejná pravidla jako při sběru, viz
-// region-guard.js) — pro nabídky, které se do databáze dostaly dřív, než pojistka
-// existovala (RealityMIX u Letohradu doplnil výpis Pardubicemi).
+// Úklid záznamů, které v databázi být nemají (stejná pravidla jako při sběru, viz
+// region-guard.js): nabídky MIMO sledovanou oblast (RealityMIX u Letohradu doplnil výpis
+// Pardubicemi) a poptávky ("Poptávka bytu…"), které se na Bazoši objeví mezi nabídkami —
+// pro záznamy, které se do databáze dostaly dřív, než pojistka existovala.
 //
 //   node trh-bytu/purge-outside-region.js            # jen vypíše, co by smazal
 //   node trh-bytu/purge-outside-region.js --apply    # záloha databáze, pak smaže
@@ -15,17 +16,18 @@ import { copyFileSync, existsSync, rmSync, rmdirSync, readdirSync } from "node:f
 import path from "node:path";
 import { openDb, DATA_DIR } from "./db.js";
 import { REGION, REGION_WATCH } from "./region.js";
-import { outsideReason } from "./region-guard.js";
+import { outsideReason, notAnOfferReason } from "./region-guard.js";
 import { acquireTrackLock, releaseTrackLock } from "./track-lock.js";
 
 const apply = process.argv.includes("--apply");
+const REASON_LABELS = { point: "poloha mimo oblast", address: "adresa mimo oblast", demand: "poptávka, ne nabídka" };
 const db = openDb();
-const rows = db.prepare("SELECT id, source, address, status, first_seen_at, lat, lon FROM listings").all();
-const candidates = rows.map((r) => ({ ...r, reason: outsideReason(r, REGION_WATCH) })).filter((r) => r.reason);
+const rows = db.prepare("SELECT id, source, title, address, status, first_seen_at, lat, lon FROM listings").all();
+const candidates = rows.map((r) => ({ ...r, reason: outsideReason(r, REGION_WATCH) ?? notAnOfferReason(r) })).filter((r) => r.reason);
 
-console.log(`Sekce „${REGION.label}“: ${rows.length} nabídek, mimo sledovanou oblast ${candidates.length}.`);
+console.log(`Sekce „${REGION.label}“: ${rows.length} záznamů, k odstranění ${candidates.length} (mimo sledovanou oblast, nebo poptávky).`);
 for (const c of candidates) {
-  console.log(`  ${c.id} | ${c.status} | od ${c.first_seen_at.slice(0, 10)} | ${c.address || "(bez adresy)"} | ${c.reason === "point" ? "poloha" : "adresa"}`);
+  console.log(`  ${c.id} | ${c.status} | od ${c.first_seen_at.slice(0, 10)} | ${c.address || "(bez adresy)"} | ${REASON_LABELS[c.reason]}`);
 }
 if (!candidates.length) process.exit(0);
 if (!apply) {

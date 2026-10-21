@@ -60,6 +60,20 @@ export function splitByAddress(items, watch) {
   return { kept, dropped };
 }
 
+// Poptávky ("Poptávka bytu v …", "Koupím byt …") se na Bazoši občas objeví mezi nabídkami
+// k prodeji; nejsou to byty na prodej, do přehledu ani statistik nepatří. Jen začátek titulku.
+const DEMAND_TITLE_RE = /^\s*(?:poptáv(?:ka|ám|áme)|koupím|koupíme|sháním|sháníme|hledám\s+(?:ke\s+koupi|koupit)|odkoupím|vykoupím)(?![\p{L}])/iu;
+
+/** Je titulek poptávka (někdo byt shání), ne nabídka k prodeji? */
+export function isDemandAd(title) {
+  return DEMAND_TITLE_RE.test(String(title ?? ""));
+}
+
+/** Proč uložený záznam není nabídka k prodeji: "demand" (poptávka), jinak null. */
+export function notAnOfferReason(listing) {
+  return isDemandAd(listing.title) ? "demand" : null;
+}
+
 /**
  * Proč je už uložená nabídka mimo oblast: "point" (poloha), "address" (jen RealityMIX,
  * adresa nejmenuje žádnou lokalitu), jinak null. Stejná pravidla jako při sběru.

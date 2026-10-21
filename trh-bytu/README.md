@@ -1125,6 +1125,30 @@ Region bez Telegramu navíc při startu zahodí `TELEGRAM_BOT_TOKEN`, takže ani
 chybná cesta v kódu nemá čím poslat zprávu. Test `region.test.js` hlídá, že obě
 sekce mají různé složky dat. Další region = položka v `REGIONS` a jeho zdroje.
 
+## Doplňování údajů z textů a z portálu
+
+Stav, konstrukci a parametry bytu (patro, sklep, vlastnictví…) appka vyčítá z titulku a popisu
+inzerátu a u nových nabídek to dělá sama (`detect-own-fields.js`, `extract-params.js`). Pravidlo je
+**„raději nic než špatně“** — co text nebo portál neřekne jednoznačně, zůstane prázdné pro tvé hodnocení.
+
+- **Stav z portálového „Stav“ (Sreality, Bezrealitky) — jen jednoznačné hodnoty.** Novostavba /
+  Ve výstavbě → Novostavba, Po rekonstrukci → Po rekonstrukci, Před rekonstrukcí → Nutná rekonstrukce.
+  „Velmi dobrý“ a „Dobrý“ se **nemapují**: na tvých 146 ručních hodnoceních v Ústí se dělí všemi směry
+  („Velmi dobrý“: 7× po rekonstrukci, 9× udržovaný, 1× k rekonstrukci). Říká-li text něco jiného než portál,
+  zůstane stav prázdný.
+- **RealityMIX:** popis je na stránce, ale neukládá se do `description` (ovlivnil by slučování bytů napříč
+  portály), proto leží v `geo_json.text`. Stav, konstrukce i parametry se čtou i z něj (`listing-text.js`).
+- **„Zrekonstruovaná koupelna“ není byt po rekonstrukci:** zrekonstruovaná součást (koupelna, kuchyň, okna,
+  podlahy, rozvody…) se jako celková rekonstrukce nebere. Na datech v Ústí to nic nemění.
+- **Poptávky:** inzerát typu „Poptávka bytu v …“ nebo „Koupím byt …“ (občas se objeví mezi nabídkami na Bazoši)
+  se nezaeviduje; do `track.log` se zapíše „není nabídka (poptávka)“. Už uložené odstraní
+  `purge-outside-region.js` (viz „Nabídky mimo sledovanou oblast“).
+- **Doplnění už uložených:** `node trh-bytu/backfill-parse.js --offline` (sekce podle `TRH_REGION`, bez sítě) —
+  bezpečně opakovatelné, doplňuje jen prázdná pole a nikdy nepřepíše uloženou hodnotu, ani ručně zadanou.
+  Spuštěno pro Náchod 21. 10. 2026: stav +21, konstrukce +8, parametry z textů RealityMIX (patro +15, sklep +12,
+  vlastnictví +11, balkón +5, výtah +5, lodžie +3); chybějící údaje zůstaly u 27 z 55 bytů (před: 39 z 56),
+  hlavně stav, který text ani portál neříká. Ten je na tobě (podle fotek).
+
 ## Záloha dat do Dropboxu
 
 Historii nabídek nejde zpětně dohledat (portály ji nedrží), takže databáze na tomhle počítači je

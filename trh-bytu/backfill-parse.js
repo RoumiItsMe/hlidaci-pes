@@ -40,7 +40,8 @@
 import { openDb } from "./db.js";
 import { groupListings, mergePortalParams } from "./group.js";
 import { parseDisposition, parseAddressFromTitle, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
-import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
+import { proposeOwnFields } from "./detect-own-fields.js";
+import { listingText, descriptionForDetection } from "./listing-text.js";
 import { extractParamsFromText, mergeExtractedParams, normalizeOwnership, upgradeLegacyFloor } from "./extract-params.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
 import { fetchSrealityDetail } from "./detail/sreality.js";
@@ -119,7 +120,7 @@ const ownRows = PARAMS_ONLY
   ? []
   : db
       .prepare(
-        "SELECT id, title, description, own_condition, own_construction, own_revitalized FROM listings WHERE own_condition IS NULL OR own_construction IS NULL OR own_revitalized IS NULL"
+        "SELECT id, title, description, geo_json, params_json, own_condition, own_construction, own_revitalized FROM listings WHERE own_condition IS NULL OR own_construction IS NULL OR own_revitalized IS NULL"
       )
       .all();
 
@@ -128,34 +129,20 @@ let fixedConstruction = 0;
 let fixedRevitalized = 0;
 
 for (const row of ownRows) {
-  const updates = {};
-  const text = `${row.title || ""} ${row.description || ""}`;
-
-  // Kontrola `row.own_* == null` je tu záměrně, ne jen "detekce něco
-  // našla" — řádek se do `ownRows` dostal, i když třeba jen JEDNO ze tří
-  // polí je NULL; ostatní dvě může mít nastavené UŽIVATEL ručně a ty se
-  // nesmí přepsat, i kdyby detekce z textu vyšla na jinou hodnotu.
-  if (row.own_condition == null) {
-    const condition = detectOwnCondition(text);
-    if (condition != null) {
-      updates.own_condition = condition;
-      fixedCondition++;
-    }
+  // Navrhuje se jen to, co chybí (NULL) — ostatní pole může mít uživatel nastavené ručně a ta se
+  // nesmí přepsat, i kdyby detekce vyšla jinak (proposeOwnFields). Text je titulek + popis (u
+  // RealityMIX z geo_json, viz listing-text.js); stav navíc z portálového "Stav" (jen
+  // jednoznačné hodnoty, viz detect-own-fields.js).
+  let portalCondition = null;
+  try {
+    portalCondition = row.params_json ? JSON.parse(row.params_json).condition ?? null : null;
+  } catch {
+    portalCondition = null;
   }
-  if (row.own_construction == null) {
-    const construction = detectOwnConstruction(text);
-    if (construction != null) {
-      updates.own_construction = construction;
-      fixedConstruction++;
-    }
-  }
-  if (row.own_revitalized == null) {
-    const revitalized = detectOwnRevitalized(text);
-    if (revitalized != null) {
-      updates.own_revitalized = revitalized;
-      fixedRevitalized++;
-    }
-  }
+  const updates = proposeOwnFields({ text: listingText(row), portalCondition }, row);
+  if (updates.own_condition != null) fixedCondition++;
+  if (updates.own_construction != null) fixedConstruction++;
+  if (updates.own_revitalized != null) fixedRevitalized++;
 
   if (Object.keys(updates).length > 0) {
     const setClause = Object.keys(updates)
@@ -179,7 +166,7 @@ console.log(
 // hodnota se nepřepisuje. Navíc se sjednotí velikost písmen u vlastnictví
 // (dřív se ukládalo "družstevní" malými písmeny, což výběr v tabulce
 // nepoznal).
-const paramRows = db.prepare("SELECT id, title, description, params_json FROM listings").all();
+const paramRows = db.prepare("SELECT id, title, description, geo_json, params_json FROM listings").all();
 
 const filled = {};
 let upgradedNo = 0;
@@ -194,7 +181,7 @@ for (const row of paramRows) {
   } catch {
     original = {};
   }
-  const extracted = extractParamsFromText(row.title, row.description);
+  const extracted = extractParamsFromText(row.title, descriptionForDetection(row));
 
   // Podlaží se dřív ukládalo ve dvou různých číslováních podle zdroje (viz
   // formatFloor): "2. patro z 4" z portálu je ve skutečnosti 2. NP, "2. patro"

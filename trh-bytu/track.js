@@ -20,7 +20,7 @@ import { REGION, REGION_WATCH, KN_OPTIONS } from "./region.js";
 import { runOtherRegions } from "./region-runner.js";
 import { regionSources } from "./region-sources.js";
 import { runBackup } from "./backup.js";
-import { splitByAddress, isOutsideByPoint, nearestCenterKm } from "./region-guard.js";
+import { splitByAddress, isOutsideByPoint, nearestCenterKm, isDemandAd } from "./region-guard.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
 import { refreshKnScans } from "./kn-scan.js";
@@ -34,7 +34,7 @@ import { handleDisappeared } from "./relist.js";
 import { acquireTrackLock, releaseTrackLock } from "./track-lock.js";
 import { reservationChange } from "./reservation.js";
 import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
-import { detectOwnCondition, detectOwnConstruction, detectOwnRevitalized } from "./detect-own-fields.js";
+import { proposeOwnFields } from "./detect-own-fields.js";
 import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
 import { downloadPhotos } from "./photos.js";
 import { geoFields, geocodePending } from "./geo.js";
@@ -161,6 +161,11 @@ async function processSource(db, source, watch) {
 
     const existing = getListing(db, listingId);
     if (!existing) {
+      // Poptávka ("Poptávka bytu v …") není nabídka k prodeji — nezaeviduje se (viz region-guard.js).
+      if (isDemandAd(item.title)) {
+        log(`[${source.name}] není nabídka (poptávka), přeskočeno: ${item.id} — ${item.title}`);
+        continue;
+      }
       // Nový inzerát — dotáhnout detail (popis, fotky, případně reserved).
       const detail = await source.fetchDetail(item.url);
       // Poloha z detailu leží daleko od všech sledovaných lokalit (portál doplnil
@@ -218,7 +223,8 @@ async function processSource(db, source, watch) {
       // je má ve svém JSON prázdné (reálný případ: sreality:479404108má
       // nativně `floorInfo: null`, popis přitom patro říká) — nativní
       // hodnota od portálu má vždy přednost, viz mergeExtractedParams.
-      const params = mergeExtractedParams(extractParamsFromText(item.title, detail.description), detail.params || {});
+      // RealityMIX má popis v `geo.text`, ne v `description` (viz listing-text.js) — text se čte z obou.
+      const params = mergeExtractedParams(extractParamsFromText(item.title, detail.description || detail.geo?.text), detail.params || {});
 
       insertListing(db, {
         id: listingId,
@@ -244,14 +250,9 @@ async function processSource(db, source, watch) {
       // už nikdy nepřepíše, jedině uživatel ručně přes <select> — proto
       // stačí zapsat jednou tady, žádná ochrana proti přepsání navíc není
       // potřeba.
-      const ownFields = {};
-      const detectionText = `${item.title} ${detail.description || ""}`;
-      const ownCondition = detectOwnCondition(detectionText);
-      const ownConstruction = detectOwnConstruction(detectionText);
-      const ownRevitalized = detectOwnRevitalized(detectionText);
-      if (ownCondition != null) ownFields.own_condition = ownCondition;
-      if (ownConstruction != null) ownFields.own_construction = ownConstruction;
-      if (ownRevitalized != null) ownFields.own_revitalized = ownRevitalized;
+      // Stav bere i z portálového "Stav" (jen jednoznačné hodnoty, viz detect-own-fields.js)
+      // a u RealityMIX z textu v `geo.text`.
+      const ownFields = proposeOwnFields({ text: `${item.title} ${detail.description || detail.geo?.text || ""}`, portalCondition: detail.params?.condition });
       // Skutečné datum zveřejnění od portálu (jen Sreality/Bazoš to umí,
       // viz db.js) — appka mu nevěří naslepo, jen když je v minulosti (ne v
       // budoucnu, což by značilo špatně rozparsované datum) a ne řádově

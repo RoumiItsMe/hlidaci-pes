@@ -39,8 +39,15 @@ const PARTIAL_RENO_RE = /částečn\S*\s+(?:\S+\s+){0,2}(?:rekonstrukc\S*|zrekon
 // "Po rekonstrukci" — realitky/soukromí inzerenti popisují HOTOVOU
 // rekonstrukci bytu takhle. "Kompletní"/"celkové" volitelné, ale POKUD tam
 // je "částečné"/"dílčí", pravidlo výš má přednost (viz needsRenoOrRenovated).
-const RENOVATED_RE =
-  /po\s+(?:kompletní\s+|celkové\s+)?rekonstrukci|kompletně\s+zrekonstruov|zrekonstruovan|rekonstrukce\s+(?:dokončena|hotová)|prošel\s+(?:pečlivou\s+)?(?:kompletní\s+|celkovou\s+)?rekonstrukcí|prošel\s+rekonstrukcí/i;
+// "Zrekonstruovaná koupelna" (kuchyň, okna, podlahy…) je jedna součást, ne celý byt —
+// reálný případ: "postupná modernizace … zrekonstruovaná koupelna" (RealityMIX 8674677)
+// se jinak vyhodnotilo jako byt po rekonstrukci. Holé "zrekonstruovan…" proto platí jen,
+// když za ním nenásleduje takový prvek. Na datech v Ústí (195 inzerátů) to nic nemění.
+const RENOVATED_COMPONENTS = "koupeln|kuchyn|kuchyň|jádro|jádra|wc|toalet|okn|podlah|rozvod|elektro|střech|fasád|schodišt|vstup|balkon|lodži|sklep|chodb|výtah";
+const RENOVATED_RE = new RegExp(
+  `po\\s+(?:kompletní\\s+|celkové\\s+)?rekonstrukci|kompletně\\s+zrekonstruov|zrekonstruovan(?![\\wěščřžýáíéúůďťň]*\\s+(?:${RENOVATED_COMPONENTS}))|rekonstrukce\\s+(?:dokončena|hotová)|prošel\\s+(?:pečlivou\\s+)?(?:kompletní\\s+|celkovou\\s+)?rekonstrukcí|prošel\\s+rekonstrukcí`,
+  "i"
+);
 
 // "K rekonstrukci"/"původní stav" — bez rozlišení "byt" vs. "dům", protože
 // ve vzorku se vždy týkalo bytu samotného (RK popisují stav bytu, ne domu,
@@ -78,6 +85,59 @@ export function detectOwnCondition(text) {
   if (NOVOSTAVBA_RE.test(text)) candidates.add("novostavba");
   if (MAINTAINED_RE.test(text)) candidates.add("maintained");
   return candidates.size === 1 ? [...candidates][0] : null;
+}
+
+// Portálový "Stav" (Sreality, Bezrealitky: params.condition) — mapuje se JEN to, co je
+// jednoznačné. Ověřeno na 146 ručních hodnoceních v Ústí (stav k 2026-10-21):
+//   Novostavba / Ve výstavbě → novostavba   12 ze 12
+//   Po rekonstrukci          → po rekonstrukci 10 ze 12
+//   Před rekonstrukcí        → k rekonstrukci   1 z 1
+// "Velmi dobrý" (7× po rekonstrukci, 9× udržovaný, 1× k rekonstrukci) a "Dobrý" (6× k
+// rekonstrukci, 6× udržovaný, 2× po rekonstrukci) se u uživatele dělí všemi směry, tedy
+// se NEmapují — nechají se textu a ruční volbě. "V rekonstrukci" je rozpracované, taky ne.
+const PORTAL_CONDITION = {
+  novostavba: "novostavba",
+  "ve výstavbě": "novostavba",
+  "po rekonstrukci": "renovated",
+  "před rekonstrukcí": "needs_reno",
+};
+
+/** own_condition z portálového "Stav", jen u jednoznačných hodnot; jinak `null`. */
+export function conditionFromPortal(value) {
+  return PORTAL_CONDITION[String(value ?? "").trim().toLowerCase()] ?? null;
+}
+
+/**
+ * Stav bytu z textu a z portálového "Stav" dohromady. Souhlasí-li, nebo mluví jen jeden
+ * z nich, platí; protichůdné signály = `null` ("raději nic než špatně", ať rozhodne uživatel).
+ */
+export function resolveOwnCondition({ text, portalCondition }) {
+  const fromText = detectOwnCondition(text);
+  const fromPortal = conditionFromPortal(portalCondition);
+  if (fromText && fromPortal && fromText !== fromPortal) return null;
+  return fromText ?? fromPortal;
+}
+
+/**
+ * Návrh vlastního hodnocení (stav, konstrukce, revitalizace) z textu a z portálového "Stav".
+ * `current` = už uložené hodnoty (NULL = chybí) — ty se nikdy nepřepisují, navrhuje se jen
+ * to, co chybí. Společné pro nový inzerát (track.js) i doplnění starých (backfill-parse.js).
+ */
+export function proposeOwnFields({ text, portalCondition }, current = {}) {
+  const out = {};
+  if (current.own_condition == null) {
+    const value = resolveOwnCondition({ text, portalCondition });
+    if (value != null) out.own_condition = value;
+  }
+  if (current.own_construction == null) {
+    const value = detectOwnConstruction(text);
+    if (value != null) out.own_construction = value;
+  }
+  if (current.own_revitalized == null) {
+    const value = detectOwnRevitalized(text);
+    if (value != null) out.own_revitalized = value;
+  }
+  return out;
 }
 
 /** Odhadne own_construction ("panel"/"brick"), nebo `null`. */
