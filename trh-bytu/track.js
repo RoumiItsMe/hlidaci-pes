@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { REGION, REGION_WATCH, KN_OPTIONS } from "./region.js";
 import { runOtherRegions } from "./region-runner.js";
 import { regionSources } from "./region-sources.js";
+import { splitByAddress, isOutsideByPoint, nearestCenterKm } from "./region-guard.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
 import { refreshKnScans } from "./kn-scan.js";
@@ -60,6 +61,16 @@ try {
   // shodit celý sběrný běh.
 }
 
+// RealityMIX doplňuje výpis malého města (Letohrad) nabídkami odjinud — z okresu
+// i z jiného kraje (Pardubice); sdílený zdroj je nefiltruje. Nabídky s adresou
+// mimo sledované lokality se tu vyřadí (viz region-guard.js; zbytek chytí kontrola
+// polohy z detailu v processSource).
+async function fetchRealitymixInArea(watch) {
+  const { kept, dropped } = splitByAddress(await fetchRealitymix(watch), watch);
+  if (dropped.length) log(`[realitymix] mimo sledovanou oblast (přeskočeno): ${dropped.map((d) => `${d.id} (${d.address})`).join(", ")}`);
+  return kept;
+}
+
 const DEFAULT_SOURCES = [
   // Sreality stahujeme přes VŠECHNY stránky výpisu — jen z 1. stránky by
   // starší inzeráty vytlačené novějšími vypadaly jako zmizelé.
@@ -72,7 +83,7 @@ const DEFAULT_SOURCES = [
   // čte i u známých inzerátů (`soldFromDetail`), dokud nejsou označené jako
   // prodané.
   { name: "idnes", fetchList: fetchIdnes, fetchDetail: fetchIdnesDetail, soldFromDetail: true },
-  { name: "realitymix", fetchList: fetchRealitymix, fetchDetail: fetchRealitymixDetail },
+  { name: "realitymix", fetchList: fetchRealitymixInArea, fetchDetail: fetchRealitymixDetail },
   { name: "bazos", fetchList: fetchBazos, fetchDetail: fetchBazosDetail },
 ];
 
@@ -151,6 +162,14 @@ async function processSource(db, source, watch) {
     if (!existing) {
       // Nový inzerát — dotáhnout detail (popis, fotky, případně reserved).
       const detail = await source.fetchDetail(item.url);
+      // Poloha z detailu leží daleko od všech sledovaných lokalit (portál doplnil
+      // výpis nabídkou odjinud) — nezaeviduje se (viz region-guard.js). Neznámá
+      // poloha se nevylučuje.
+      if (isOutsideByPoint(detail.geo?.lat, detail.geo?.lon, watch)) {
+        log(`[${source.name}] mimo sledovanou oblast (${Math.round(nearestCenterKm(detail.geo.lat, detail.geo.lon, watch))} km od nejbližší lokality), přeskočeno: ${item.id}${item.address ? ` — ${item.address}` : ""}`);
+        await sleep(250);
+        continue;
+      }
       // Rezervace z výpisu (iDNES, RealityMIX, Bezrealitky) nebo z detailu
       // (Sreality, Bezrealitky).
       const status = item.reserved === true || detail.reserved === true ? "reserved" : "active";

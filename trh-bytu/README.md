@@ -310,9 +310,36 @@ rezervováno/staženo), zapíše se jen `status = "removed"` + datum — popis,
 fotky, parametry a celá časová osa zůstávají v databázi navždy, přesně tak,
 jak byly naposledy zaznamenané. V běžném kódu appky (`track.js`, `server.js`,
 `db.js`) není jediný `DELETE` nad tabulkami `listings`/`photos`/`events`;
-jedinou výjimkou je jednorázový úklid cizích fotek (`cleanup-foreign-photos.js`,
-viz „Kde jsou data"), který maže jen fotky, o kterých je jisté, že nejsou z
-galerie bytu.
+výjimkou jsou dva ručně spouštěné úklidové skripty: jednorázový úklid cizích fotek
+(`cleanup-foreign-photos.js`, viz „Kde jsou data"), který maže jen fotky, o kterých
+je jisté, že nejsou z galerie bytu, a `purge-outside-region.js` (viz „Nabídky mimo
+sledovanou oblast").
+
+## Nabídky mimo sledovanou oblast
+
+RealityMIX u malého města (např. Letohradu) doplní výpis nabídkami odjinud — z
+okresu (Králíky, Červená Voda) i z jiného kraje (Pardubice). Sdílený zdroj
+(`sources/realitymix.js`, používá ho i hlídací pes) je nefiltruje, proto si appka
+oblast hlídá sama (`region-guard.js`), ve dvou krocích:
+
+1. **Adresa z výpisu (jen RealityMIX):** adresa, která nejmenuje žádnou sledovanou
+   lokalitu (okres „okr. Ústí nad Orlicí“ ji jmenuje), se vyřadí ještě před
+   stažením detailu. Do `track.log` se zapíše „mimo sledovanou oblast
+   (přeskočeno): …“.
+2. **Poloha z detailu (všechny portály):** nová nabídka, jejíž bod leží dál než
+   okruh lokality + 8 km od **každého** středu, se nezaeviduje (Králíky ~19 km,
+   Pardubice ~45 km). Zapíše se „mimo sledovanou oblast (N km od nejbližší
+   lokality), přeskočeno“.
+
+Nabídka bez adresy nebo bez (použitelné) polohy se nevylučuje — nejistota nesmí
+schovat skutečnou nabídku. Sekce Náchod už obce filtruje přesně
+(`region-sources.js`), její nabídky se hlídají stejně podle polohy.
+
+**Úklid už uložených:** `node trh-bytu/purge-outside-region.js` jen vypíše, co by
+smazal; `--apply` nejdřív zkopíruje databázi do `data/backup-purge-<čas>.sqlite` a
+pak smaže nabídku, její události, fotky a události z katastru (jen když neběží
+sběr). Smazat je potřeba **před** dalším sběrem — cizí nabídka, která by v databázi
+zůstala, by se po vyfiltrování z výpisu tvářila jako „zmizela z nabídky“.
 
 ## Kdy appka řekne „zmizelo z nabídky"
 
