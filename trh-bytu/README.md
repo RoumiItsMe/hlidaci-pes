@@ -1125,6 +1125,67 @@ Region bez Telegramu navíc při startu zahodí `TELEGRAM_BOT_TOKEN`, takže ani
 chybná cesta v kódu nemá čím poslat zprávu. Test `region.test.js` hlídá, že obě
 sekce mají různé složky dat. Další region = položka v `REGIONS` a jeho zdroje.
 
+## Chat přes MCP — ptát se na data v Claude Desktop
+
+Appka má MCP server (`mcp-server.js`), přes který se dá v Claude Desktop (nebo jiném
+MCP klientovi) ptát na data běžnou řečí: „Které byty se prodaly v září a za kolik?“,
+„Průměrná cena za m² podle dispozice za poslední 3 měsíce?“, „Kolik nabídek zlevnilo?“,
+„Co nového se objevilo v Letohradě?“. **Všechno jen čte** (databáze se otevírá
+`readOnly`), nepotřebuje internet ani žádné klíče a appka (web) přitom nemusí běžet.
+
+**Nástroje** (`mcp-tools.js`):
+
+| Nástroj | K čemu |
+|---|---|
+| `trh_prehled` | počty nabídek, rezervací, prodejů a čekajících na ověření, medián ceny za m², stáří dat |
+| `prodane_byty` | prodané a téměř jistě prodané byty v období (od–do), filtr stavu, města, dispozice; cena prodeje s uvedením, zda je ověřená, nebo odhad |
+| `statistiky_cen` | průměr / medián / min / max ceny, ceny za m² a doby v nabídce; členění podle města, dispozice nebo měsíce; prodané i aktuální nabídky |
+| `nabidky` | aktuální nabídky s filtry (město, dispozice, cena, plocha) a řazením |
+| `zmeny_cen` | zlevnění a zdražení v období (řetěz změn jednoho bytu se spojí) |
+| `detail_bytu` | jeden byt: parametry, prodej, katastr, poznámka, celá časová osa |
+
+**Čísla jsou stejná jako v appce.** Nástroje používají tutéž logiku jako web
+(`entries.js` — byt = skupina nabídek napříč portály, stavy, ceny; `sale-status.js` — co je
+„Prodáno“ a co „Čeká na ověření“; `sale-stats.js` — cena prodeje: ověřená, jinak odhad
+poslední inzerované ceny −10 %). Chat tak neříká jiná čísla než Statistiky. U každé
+statistiky nástroj vrací, kolik bytů je za číslem a kolik z toho jsou odhady, a
+upozorní na malý vzorek; model je instruován, ať to řekne.
+
+**Dvě sekce = dva servery.** Sekce se volí proměnnou `TRH_REGION` (jako všude), takže se
+do nastavení klienta zapíšou dva servery a model může sekce porovnávat:
+
+```json
+{
+  "mcpServers": {
+    "trh-bytu-usti": {
+      "command": "node",
+      "args": ["C:/Users/roman/Documents/Hlídací pes/trh-bytu/mcp-server.js"]
+    },
+    "trh-bytu-nachod": {
+      "command": "node",
+      "args": ["C:/Users/roman/Documents/Hlídací pes/trh-bytu/mcp-server.js"],
+      "env": { "TRH_REGION": "nachod" }
+    }
+  }
+}
+```
+
+Do Claude Desktop: *Nastavení → Vývojář → Upravit konfiguraci* (soubor
+`%APPDATA%Claudeclaude_desktop_config.json`; k existujícím serverům jen přidej tyto
+dva), pak Claude Desktop **úplně restartuj**. Cesta musí být absolutní a `node` v PATH.
+
+**Co se děje s daty.** Do chatu jdou jen výsledky nástrojů (u `detail_bytu` i tvoje
+poznámka k bytu); soubory ani klíče se nečtou. Odkazy na byty (`http://localhost:4321/byt/…`)
+fungují, když appka běží.
+
+**Bez závislostí.** Protokol (JSON-RPC po řádcích přes stdio: `initialize`, `ping`,
+`tools/list`, `tools/call`) je napsaný ručně v `mcp-protocol.js` — oficiální SDK by do
+`package.json` (sdíleného s hlídacím psem, který ho instaluje na GitHub Actions) přitáhla
+desítky balíčků. Kompatibilita je ověřená oficiálním klientem SDK (mimo repo).
+Ruční spuštění `node trh-bytu/mcp-server.js` vypíše jen jeden řádek „připraven“ (na
+stderr) a čeká na zprávy na vstupu — ukončí se Ctrl+C; k běžnému používání ho spouští
+klient sám.
+
 ## Vědomá omezení (v1)
 
 - **Rezervaci u Bazoše appka nepozná** — Bazoš ji nemá. U bytu, který je jen
