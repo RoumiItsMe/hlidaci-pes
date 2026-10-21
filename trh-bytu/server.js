@@ -29,6 +29,8 @@ import { getNotifications, getNotificationsSeenAt, markNotificationsSeen, countU
 import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js";
 import { addressInfo } from "./address-info.js";
 import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime, parseRunSummary } from "./dashboard.js";
+import { computeEntries, SOURCE_LABELS, formatCzk, changeSources, priceLabel } from "./entries.js";
+import { effectivePriceForStats, renovatedSaleStats, almostSoldSaleStats } from "./sale-stats.js";
 import { readTrackLock } from "./track-lock.js";
 import { REGION, REGION_WATCH, OTHER_REGIONS, KN_OPTIONS } from "./region.js";
 
@@ -118,16 +120,7 @@ function startManualTrack() {
   return true;
 }
 
-const BYTY_WATCH = REGION_WATCH;
-
 const PORT = REGION.port;
-const SOURCE_LABELS = {
-  sreality: "Sreality.cz",
-  bezrealitky: "Bezrealitky.cz",
-  idnes: "Reality.iDNES.cz",
-  realitymix: "RealityMIX.cz",
-  bazos: "Bazoš.cz",
-};
 const STATUS_LABELS = {
   active: { text: "V nabídce", color: "#2563eb" },
   reserved: { text: "Rezervováno", color: "#d97706" },
@@ -315,9 +308,6 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function formatCzk(n) {
-  return n == null ? "—" : `${n.toLocaleString("cs-CZ")} Kč`;
-}
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -348,24 +338,6 @@ function updatesChips(firstSeenAt, change, sources) {
   return `${since}${changeChip}`;
 }
 
-// Portály, u kterých proběhla poslední změna skupiny — jen když skupina
-// spojuje víc portálů (jinak by to byla zbytečná informace navíc). Bere
-// všechny události téhož typu z téhož sběrného běhu (do 10 minut od
-// poslední), protože jeden běh často zaznamená zmizení na víc portálech
-// naráz. `events` = události všech členů skupiny.
-function changeSources(members, events, change) {
-  if (!change || new Set(members.map((m) => m.source)).size < 2) return null;
-  const sourceById = new Map(members.map((m) => [m.id, m.source]));
-  const changeTime = new Date(change.occurred_at).getTime();
-  const sources = new Set();
-  for (const e of events) {
-    if (e.event_type !== change.event_type) continue;
-    if (Math.abs(new Date(e.occurred_at).getTime() - changeTime) > 10 * 60 * 1000) continue;
-    const source = sourceById.get(e.listing_id);
-    if (source) sources.add(SOURCE_LABELS[source] || source);
-  }
-  return sources.size ? [...sources].join(" + ") : null;
-}
 
 // "Cena na vyžádání" je u portálů cena bez čísla (Dohodou, V textu...) —
 // v události ji appka drží jako null, tady se jen pojmenuje.
@@ -438,18 +410,6 @@ function cardTitle(rep, address, priceLabelText) {
   return `${head}${addressPart} — ${priceLabelText}`;
 }
 
-// Cena skupiny slovy pro titulek a detail. Cena bez čísla je věc portálů
-// (RK ji neuvádí), ne chybějící údaj — proto se píše výslovně ("cena na
-// vyžádání", u Bazoše i jeho vlastními slovy: Dohodou / Nabídněte / V
-// textu), ne jako pomlčka, která vypadá jako chyba appky. Cena vyčtená z
-// popisu se značí, protože text bývá zastaralý (RK cenu u inzerátu sníží a
-// v textu nechá původní).
-function priceLabel(members) {
-  const listing = bestPriceListing(members);
-  if (listing) return formatCzk(listing.price_czk) + (listing.price_from_text ? " (z textu inzerátu)" : "");
-  const notes = [...new Set(members.map((m) => parsePriceNote(m.title)).filter(Boolean))];
-  return `cena na vyžádání${notes.length ? ` (${notes.join(", ")})` : ""}`;
-}
 
 // Portály seskupené podle toho, jestli tam byt ještě je: "Sreality.cz +
 // Reality.iDNES.cz" a zvlášť "zmizelo: Bazoš.cz + RealityMIX.cz". Portál
@@ -543,157 +503,6 @@ const SORT_LABELS = [
   ["price_desc", "Cena ↓"],
 ];
 
-// Odvozené údaje spočítané JEDNOU za skupinu, sdílené mezi přehledem
-// (renderTable) a srovnávací tabulkou (renderComparisonTable) — obě jen
-// čtou, žádné opakované JSON.parse/reduce nad stejnou skupinou vícekrát na
-// dvou různých stránkách.
-function computeEntries(db) {
-  const allListings = db.prepare("SELECT * FROM listings").all();
-  // Skupiny (ne syrové řádky) — stejná nemovitost napříč portály se ukáže
-  // jen jednou, viz group.js.
-  const allGroups = groupListings(allListings);
-  // Kde plomby hlídá API katastru (kn-scan.js), ruční kontrola podle rozvrhu
-  // se nepřipomíná — bez skenů (bez klíče) vrací null a rozvrh platí celý.
-  // Kontext adres (geokódování + RÚIAN) se staví jednou pro hlídání plomb, novostavby i návrhy adres.
-  const actx = buildAddressContext(db, allListings, allGroups);
-  const watchFor = createWatchResolver(db, allListings, allGroups, Date.now(), actx);
-  const ruianCache = actx.ruianCache;
-
-  // Jedna náhledová fotka na inzerát (ta s nejnižším id = první stažená),
-  // jedním dotazem pro všechny skupiny najednou — ne N samostatných.
-  const firstPhotoByListing = new Map(
-    db
-      .prepare(`SELECT listing_id, local_path FROM photos WHERE id IN (SELECT MIN(id) FROM photos GROUP BY listing_id)`)
-      .all()
-      .map((r) => [r.listing_id, r.local_path])
-  );
-  function groupThumbnail(members) {
-    for (const m of members) {
-      const p = firstPhotoByListing.get(m.id);
-      if (p) return p;
-    }
-    return null;
-  }
-
-  // Všechny eventy jedním dotazem, seskupené podle inzerátu — latestChange
-  // (group.js) si z nich pro danou skupinu vybere nejnovější SKUTEČNOU
-  // změnu (viz komentář tam, proč ne portálové "naposledy upraveno").
-  const eventsByListing = new Map();
-  for (const e of db.prepare("SELECT listing_id, event_type, old_price_czk, new_price_czk, occurred_at FROM events").all()) {
-    if (!eventsByListing.has(e.listing_id)) eventsByListing.set(e.listing_id, []);
-    eventsByListing.get(e.listing_id).push(e);
-  }
-  function groupEvents(members) {
-    return members.flatMap((m) => eventsByListing.get(m.id) || []);
-  }
-
-  const entries = allGroups.map((g) => {
-    // "Přidáno" ukazuje NEJSTARŠÍ ZNÁMÉ datum (portálovo vlastní "Vloženo",
-    // viz earliestListedAt v group.js) — appka nemá jak potvrdit den
-    // přesně, ale je to výrazně blíž realitě než kdy si toho appka poprvé
-    // všimla, hlavně u bytů zaevidovaných dávno po jejich zveřejnění.
-    const firstSeenAt = earliestListedAt(g.members);
-    const events = groupEvents(g.members);
-    const change = latestChange(events);
-    const rep = primaryListing(g.members);
-    // Kdy appka byt (kteroukoli jeho nabídku) poprvé zaevidovala — na rozdíl
-    // od `firstSeenAt` výš (datum zveřejnění podle portálu, může být týdny
-    // staré u bytu, který appka objevila až dnes) je to okamžik, kdy se
-    // byt stal novinkou PRO UŽIVATELE, tedy to, podle čeho řadit "Nejnovější".
-    const discoveredAt = g.members.reduce((min, m) => (m.first_seen_at < min ? m.first_seen_at : min), g.members[0].first_seen_at);
-    const price = bestPrice(g.members);
-    const status = mergedStatus(g.members);
-    const removedAt = status === "removed" || status === "sold" ? latestRemovedAt(g.members) : null;
-    const { dropCount, originalPrice } = priceDropSummary(events);
-    const verdict = saleVerdict(g.members);
-    // Fáze prodeje po rezervaci a rozvrh kontrol v katastru (kn-schedule.js);
-    // `null`, když byt nemá platnou rezervaci nebo je pořád v nabídce.
-    const track = buildSaleTrack(g.members, events, Date.now(), watchFor(g));
-    // Zmizelý byt BEZ rezervace hlídá API katastru stejně jako rezervované
-    // (kn-scan.js, unreservedTrack): místo začátku rezervace se bere zmizení
-    // inzerátu. `needsConfirm` = po zmizení se objevila plomba, kterou appka
-    // nedokázala sama přiřadit.
-    const unreservedWatch = !track && status === "removed" && !verdict && removedAt ? watchFor(g)?.(removedAt) ?? null : null;
-    const triage = status === "removed" ? assessSale(g.members, events) : null;
-    // "Doba v nabídce" počítá do DNEŠKA u živých/rezervovaných nabídek,
-    // u zmizelých do data zmizení — obojí je "jak dlouho byl byt na trhu",
-    // jen s jiným koncovým bodem. `removedAt` je `null` u živých/
-    // rezervovaných, `?? nowIso()` proto pokryje obojí jedním výrazem.
-    const daysOnMarket = Math.round((new Date(removedAt ?? nowIso()) - new Date(firstSeenAt)) / (24 * 60 * 60 * 1000));
-    return {
-      g,
-      rep,
-      params: mergeParams(g.members),
-      address: bestAddress(g.members),
-      price,
-      priceLabel: priceLabel(g.members),
-      // Cena za m² — appka ji nikde nezíská hotovou, dopočítá se z ceny a
-      // plochy primárního záznamu (stejný zdroj plochy jako titulek řádku).
-      pricePerM2: price != null && rep.area_m2 ? Math.round(price / rep.area_m2) : null,
-      status,
-      firstSeenAt,
-      removedAt,
-      daysOnMarket,
-      priceDropCount: dropCount,
-      // Sleva celkem od prvně zaznamenané ceny do AKTUÁLNÍ (ne do poslední
-      // eventu) — u živé nabídky je "aktuální" = `price` teď, u zmizelé je
-      // to poslední cena, kterou appka viděla těsně před zmizením.
-      totalDiscountCzk: originalPrice != null && price != null ? originalPrice - price : null,
-      change,
-      changeWhere: changeSources(g.members, events, change),
-      discoveredAt,
-      // Výsledek ruční kontroly v katastru (viz saleVerdict v group.js) a
-      // odhad, jak pravděpodobně se zmizelý byt prodal (jen pro řazení
-      // fronty /kontrola, viz sale-triage.js).
-      addressInfo: (() => {
-        const info = addressInfo(g.members);
-        const suggestion = info.state === "missing" ? addressSuggestion(actx, g) : null;
-        return { ...info, suggestion: suggestion?.text ?? null, suggestionWhy: suggestion?.why ?? null };
-      })(),
-      // Novostavba, jejíž adresu RÚIAN zatím nezná: v katastru se zatím nedá ověřit (new-build.js).
-      newBuildPending: isNewBuildPending(g.members, ruianCache),
-      // Základní údaje, které uživatel označil jako nezjistitelné (unknown-fields.js).
-      unknownFields: parseUnknownFields(g.members),
-      track,
-      unreservedWatch,
-      // Čas se podívat do katastru: nastal kontrolní bod rozvrhu a po něm se
-      // ještě nekontrolovalo (viz kn-schedule.js).
-      saleCandidate: Boolean(track?.due),
-      knFiledAt: pickOwnValue(g.members, "kn_filed_at"),
-      plombaEnd: pickOwnValue(g.members, "kn_plomba_end"),
-      knAutoUnit: pickOwnValue(g.members, "kn_auto_unit"),
-      lvNumber: pickOwnValue(g.members, "lv_number"),
-      saleVerdict: verdict,
-      knCheckedAt: g.members.reduce((max, m) => (m.kn_checked_at && m.kn_checked_at > max ? m.kn_checked_at : max), "") || null,
-      triage,
-      // Neověřitelný byt (družstevní / dům bez jednotek) a téměř jistě prodaný
-      // (prodaný, nebo po rezervaci zmizel) — viz sale-record.js. Obojí řídí, jak
-      // se byt počítá ve statistikách.
-      unverifiable: Boolean(track?.unverifiable || unreservedWatch?.unverifiable),
-      almostSold: isAlmostSold({ status, verdict, wasReserved: Boolean(track) || Boolean(triage?.wasReserved) }),
-      // "Aktivita" pro výchozí řazení = novější z (kdy appka byt objevila,
-      // poslední skutečná změna) — čerstvě přidaný byt i dávno zaevidovaný
-      // byt s dnešní změnou ceny mají oba vyjít jako "nahoře".
-      activityAt: change && change.occurred_at > discoveredAt ? change.occurred_at : discoveredAt,
-      starred: isStarred(g.members),
-      hidden: isHidden(g.members),
-      thumb: groupThumbnail(g.members),
-      // Vlastní hodnocení uživatele (viz OWN_FIELDS v params.js) — appka se
-      // pokusí odhadnout z textu (viz detect-own-fields.js, track.js), ale
-      // nikdy nepřepíše, co appka/uživatel už jednou nastavili.
-      ownCondition: pickOwnValue(g.members, "own_condition"),
-      ownConstruction: pickOwnValue(g.members, "own_construction"),
-      ownRevitalized: pickOwnValue(g.members, "own_revitalized"),
-      statsInclude: pickOwnValue(g.members, "stats_include"),
-      notes: pickOwnValue(g.members, "notes"),
-      sellerMotivation: pickOwnValue(g.members, "seller_motivation"),
-      verifiedSalePrice: pickOwnValue(g.members, "verified_sale_price_czk"),
-      verifiedSaleDate: pickOwnValue(g.members, "verified_sale_date"),
-    };
-  });
-  for (const e of entries) e.city = extractCity(e.address, BYTY_WATCH);
-  return entries;
-}
 
 function renderTable(db, filters) {
   const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter } = filters;
@@ -1624,114 +1433,10 @@ function renderDashboard(db) {
     </div>`;
 }
 
-// Byt patří do statistiky "ceny po rekonstrukci", pokud to uživatel vědomě
-// nepřehlasoval (`statsInclude`, viz OWN_FIELDS "Ve statistice") — jinak
-// auto-kritérium: zmizel z nabídky (= pravděpodobně prodáno/rezervováno
-// jinde) nebo ho portál označil jako prodaný, A appka/uživatel ho označili
-// jako "Po rekonstrukci". Novostavba se SCHVÁLNĚ nepočítá do stejného koše
-// (jiný cenový segment), kdo ji chce zahrnout, přehlasuje ručně přes
-// "Zahrnout".
-function isEligibleForRenoStats(e) {
-  if (e.statsInclude === "exclude") return false;
-  if (e.statsInclude === "include") return true;
-  // Zmizelý byt, o kterém uživatel v katastru ověřil, že se neprodal, není
-  // doklad o ceně, za kterou se prodávají byty.
-  if (e.saleVerdict === "withdrawn") return false;
-  return (e.status === "removed" || e.status === "sold") && e.ownCondition === "renovated";
-}
 
-// Ověřená prodejní cena (uživatel si ji dohledal v katastru) má vždy
-// přednost — je to REÁLNÁ transakce. Bez ní appka bere poslední evidovanou
-// (inzerovanou) cenu těsně před zmizením — návod výslovně upozorňuje, že to
-// NENÍ prodejní cena (typicky o pár % výš), proto se u takových řádků
-// značí "odhad" a počet ověřených/odhadnutých se ukazuje zvlášť. To platí i
-// pro byt, který portál označil jako PRODÁNO: je to fakt o prodeji, ale cena
-// u inzerátu je jen poslední inzerovaná, ne kupní — jde do fronty Katastr
-// ověřit. Výjimka: družstevní byt (v katastru se ověřit nedá) — tam je byt
-// hotový a bere se poslední cena z portálu, ale SNÍŽENÁ o ASSUMED_PRICE_DISCOUNT
-// (kupní cena bývá nižší než inzerovaná) a ve statistikách je označená jako
-// odhad (`statsSalePrice`, sale-record.js).
-function effectivePriceForStats(e) {
-  // Poslední cena snížená o koeficient: portálem prodaný byt, který jde ověřit
-  // jen těžko (priceAssumed), i každý prodaný/zmizelý byt, který se v katastru
-  // ověřit nedá — jinak by o jeho ceně nebylo vůbec nic, a přitom jde o téměř
-  // jistý prodej.
-  const assumed = Boolean(e.track?.priceAssumed) || (e.unverifiable && (e.status === "removed" || e.status === "sold" || e.status === "reserved"));
-  return statsSalePrice({ verified: e.verifiedSalePrice, price: e.price, assumed });
-}
 
-// Souhrn "cena/m² u prodaných bytů po rekonstrukci" — PRIMÁRNĚ podle
-// města, uvnitř každého města rozpad podle dispozice (přesně v tomhle
-// pořadí chtěl uživatel, ne dvě oddělené tabulky vedle sebe). Vrací i
-// `count` u každého řádku, ať je i při řídkých datech vidět velikost
-// vzorku — appka si nic nevymýšlí za nedostatek dat, jen ho ukáže.
-function renovatedSaleStats(entries) {
-  return soldSaleStats(entries, isEligibleForRenoStats);
-}
 
-// Prodané a téměř jistě prodané byty bez ohledu na stav bytu: to, o co v
-// appce hlavně jde. Ruční "Ve statistice: vyřadit" platí i tady.
-function almostSoldSaleStats(entries) {
-  return soldSaleStats(entries, (e) => e.almostSold && e.statsInclude !== "exclude");
-}
 
-function soldSaleStats(entries, isEligible) {
-  const eligible = entries
-    .filter(isEligible)
-    .map((e) => ({
-      pricePerM2: (() => {
-        const { price } = effectivePriceForStats(e);
-        return price != null && e.rep.area_m2 ? price / e.rep.area_m2 : null;
-      })(),
-      disposition: e.rep.disposition || "—",
-      city: e.city || "—",
-      basis: effectivePriceForStats(e).basis, // verified | assumed | asking
-      // Pro rozklikávací seznam bytů za průměrem (viz renderCityStatsTable)
-      // — appka jinak ukazovala jen holé číslo bez možnosti ověřit, ze
-      // kterých konkrétních bytů vzniklo.
-      id: e.rep.id,
-      address: e.address || e.city,
-      areaM2: e.rep.area_m2,
-      evidence: saleEvidence(e.status),
-    }))
-    .filter((r) => r.pricePerM2 != null);
-
-  function summarize(rows) {
-    const values = rows.map((r) => r.pricePerM2);
-    return {
-      count: rows.length,
-      verifiedCount: rows.filter((r) => r.basis === "verified").length,
-      assumedCount: rows.filter((r) => r.basis === "assumed").length,
-      pendingCount: rows.filter((r) => r.basis === "pending").length,
-      avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
-      min: Math.round(Math.min(...values)),
-      max: Math.round(Math.max(...values)),
-      // Od nejlevnějšího po nejdražší — stejné pořadí, v jakém appka jinak
-      // ukazuje rozsah (min–max).
-      items: rows.slice().sort((a, b) => a.pricePerM2 - b.pricePerM2),
-    };
-  }
-
-  const byCity = new Map();
-  for (const r of eligible) {
-    if (!byCity.has(r.city)) byCity.set(r.city, new Map());
-    const byDisposition = byCity.get(r.city);
-    if (!byDisposition.has(r.disposition)) byDisposition.set(r.disposition, []);
-    byDisposition.get(r.disposition).push(r);
-  }
-
-  const cities = [...byCity.entries()]
-    .map(([city, byDisposition]) => {
-      const dispositions = [...byDisposition.entries()]
-        .map(([disposition, rows]) => ({ disposition, ...summarize(rows) }))
-        .sort((a, b) => b.count - a.count);
-      const totalCount = dispositions.reduce((sum, d) => sum + d.count, 0);
-      return { city, dispositions, totalCount };
-    })
-    .sort((a, b) => b.totalCount - a.totalCount);
-
-  return { cities, totalEligible: eligible.length };
-}
 
 // Seznam bytů za jedním průměrem — rozklikávací `<details>` uvnitř buňky
 // (žádný JS potřeba), ať jde ověřit, ze kterých konkrétních nabídek číslo
