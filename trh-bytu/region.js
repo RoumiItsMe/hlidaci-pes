@@ -34,6 +34,7 @@ export const REGIONS = {
     key: "default",
     label: "Ústí nad Orlicí a okolí",
     short: "Ústí n. O.",
+    backupName: "usti-nad-orlici", // podsložka zálohy (backup.js)
     port: 4321,
     dataDir: "data",
     telegram: true,
@@ -45,6 +46,7 @@ export const REGIONS = {
     key: "nachod",
     label: "Náchod a Nové Město nad Metují",
     short: "Náchod",
+    backupName: "nachod",
     port: 4323,
     dataDir: "data-nachod",
     telegram: false, // jen porovnávání nabídek, prodejů a katastr — žádné zprávy do Telegramu

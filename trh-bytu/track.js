@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { REGION, REGION_WATCH, KN_OPTIONS } from "./region.js";
 import { runOtherRegions } from "./region-runner.js";
 import { regionSources } from "./region-sources.js";
+import { runBackup } from "./backup.js";
 import { splitByAddress, isOutsideByPoint, nearestCenterKm } from "./region-guard.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
@@ -463,6 +464,10 @@ async function runLocked() {
   }
 
   db.close();
+
+  // Záloha dat do Dropboxu (viz backup.js) — až po zavření databáze, ať snímek obsahuje
+  // všechno z tohoto běhu. Nikdy neshodí sběr (selhání jen zapíše do logu).
+  log(runBackup({ dataDir: DATA_DIR, backupName: REGION.backupName }).line);
 }
 
 run()

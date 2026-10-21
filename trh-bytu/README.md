@@ -1125,6 +1125,29 @@ Region bez Telegramu navíc při startu zahodí `TELEGRAM_BOT_TOKEN`, takže ani
 chybná cesta v kódu nemá čím poslat zprávu. Test `region.test.js` hlídá, že obě
 sekce mají různé složky dat. Další region = položka v `REGIONS` a jeho zdroje.
 
+## Záloha dat do Dropboxu
+
+Historii nabídek nejde zpětně dohledat (portály ji nedrží), takže databáze na tomhle počítači je
+jediná kopie. Proto se po **každém sběru** (plánovaném i ručním „Aktualizovat teď“) zálohuje
+databáze každé sekce do složky v Dropboxu — `backup.js`:
+
+- **Kam:** `Dropbox\Trh bytu - zaloha\usti-nad-orlici` a `…\nachod` — Dropbox ji synchronizuje
+  sám. Složku appka najde podle vlastního `info.json` Dropboxu; jinou cestu (jiný Dropbox, OneDrive,
+  disk) nastavíš `TRH_BACKUP_DIR=…` v `.env.local`. Bez cíle se záloha přeskočí a do `track.log`
+  se to zapíše.
+- **Co:** konzistentní **snímek** databáze (`VACUUM INTO`), ne kopie živého souboru — živá databáze
+  v Dropboxu by se poškodila. Snímek se před uložením ověří (`integrity_check`) a teprve pak
+  přejmenuje. Jeden snímek na den (`trh-bytu-RRRR-MM-DD.sqlite`, další běh téhož dne ho nahradí),
+  drží se posledních 30; cizí soubory ve složce se nikdy nemažou.
+- **Fotky** (stovky MB, dohromady asi 1 GB) se zálohují **jen na požádání**: `TRH_BACKUP_PHOTOS=1`
+  v `.env.local`, nebo jednorázově `node trh-bytu/backup.js --photos`. Kopírují se jen nové soubory
+  a ze zálohy se nikdy nemaže (záloha není zrcadlo). Zapni, jen když to Dropbox unese.
+- **Ruční záloha:** `node trh-bytu/backup.js` (sekce podle `TRH_REGION`).
+- **Obnovení:** zavři appku, zkopíruj vybraný snímek jako `data/trh-bytu.sqlite` (u Náchodu
+  `data-nachod/`), smaž vedle něj `trh-bytu.sqlite-wal` a `-shm`, spusť appku. Zkouška obnovy
+  proběhla: snímek dá stejné počty bytů, prodejů i událostí jako živá databáze.
+- Záloha nikdy neshodí sběr — selhání se jen zapíše do logu.
+
 ## Stav bytu „V TOPu“ — za kolik se prodávají nejlepší byty
 
 Rekonstrukce má spoustu podob — někdy levná, někdy drahá. Ve výběru **Stav** (tabulka
