@@ -61,6 +61,7 @@ export const OWN_FIELDS = [
       ["needs_reno", "Nutná rekonstrukce"],
       ["maintained", "Udržovaný"],
       ["renovated", "Po rekonstrukci"],
+      ["top", "V TOPu"],
       ["novostavba", "Novostavba"],
     ],
   },

@@ -49,6 +49,15 @@ export function renovatedSaleStats(entries) {
   return soldSaleStats(entries, isEligibleForRenoStats);
 }
 
+// Prodané a téměř jistě prodané byty se stavem "V TOPu" (own_condition = top): za kolik
+// se prodávají nejlepší byty. Stejný vzorek a cena jako almostSoldSaleStats, jen užší.
+// Po rekonstrukci má spoustu podob (levná i drahá), proto TOP není součástí "Po
+// rekonstrukci" — je to samostatný koš a ceny se nemíchají. Ruční "Ve statistice:
+// vyřadit" platí i tady.
+export function topSaleStats(entries) {
+  return soldSaleStats(entries, (e) => e.almostSold && e.statsInclude !== "exclude" && e.ownCondition === "top");
+}
+
 // Prodané a téměř jistě prodané byty bez ohledu na stav bytu: to, o co v
 // appce hlavně jde. Ruční "Ve statistice: vyřadit" platí i tady.
 export function almostSoldSaleStats(entries) {
@@ -110,5 +119,8 @@ function soldSaleStats(entries, isEligible) {
     })
     .sort((a, b) => b.totalCount - a.totalCount);
 
-  return { cities, totalEligible: eligible.length };
+  // Souhrn přes všechna města a dispozice (cena/m² různých dispozic se tu míchá, ale u malého
+  // vzorku je to jediné číslo, které vůbec něco říká) — null, když není z čeho.
+  const overall = eligible.length ? (({ items, ...rest }) => rest)(summarize(eligible)) : null;
+  return { cities, totalEligible: eligible.length, overall };
 }

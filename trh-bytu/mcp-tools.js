@@ -89,7 +89,16 @@ function summarize(values) {
   return { prumer: mean(v), median: median(v), min: Math.round(Math.min(...v)), max: Math.round(Math.max(...v)) };
 }
 
-function matchesFilters(e, { mesto, dispozice, plochaOd, plochaDo }) {
+// Stav bytu = vlastní hodnocení "Stav" (params.js, OWN_FIELDS): kód pro chat → kód v databázi.
+const CONDITION_FIELD = OWN_FIELDS.find((f) => f.column === "own_condition");
+const CONDITION_CODES = { nutna_rekonstrukce: "needs_reno", udrzovany: "maintained", po_rekonstrukci: "renovated", v_topu: "top", novostavba: "novostavba", bez_hodnoceni: null };
+const CONDITION_ENUM = Object.keys(CONDITION_CODES);
+const CONDITION_HELP =
+  "Stav bytu podle vlastního hodnocení uživatele: nutna_rekonstrukce, udrzovany, po_rekonstrukci, v_topu (nejlepší stav — drahá, kvalitní rekonstrukce; nejde o ⭐ TOP z přehledu), novostavba, bez_hodnoceni (stav nevyplněn).";
+const conditionLabel = (e) => (e.ownCondition ? CONDITION_FIELD.options.find(([code]) => code === e.ownCondition)?.[1] ?? e.ownCondition : null);
+
+function matchesFilters(e, { mesto, dispozice, plochaOd, plochaDo, stavBytu }) {
+  if (stavBytu !== undefined && (e.ownCondition ?? null) !== CONDITION_CODES[stavBytu]) return false;
   if (mesto && !norm(e.city ?? "").includes(norm(mesto)) && !norm(e.address ?? "").includes(norm(mesto))) return false;
   if (dispozice && normDisposition(e.rep.disposition ?? "") !== normDisposition(dispozice)) return false;
   if (plochaOd != null && !(e.rep.area_m2 >= plochaOd)) return false;
@@ -144,6 +153,7 @@ function baseRow(e, baseUrl) {
     mesto: e.city || null,
     dispozice: e.rep.disposition || null,
     plochaM2: e.rep.area_m2 ?? null,
+    stavBytu: conditionLabel(e),
     portaly: portals(e),
   };
 }
@@ -243,6 +253,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
           stav: { type: "string", enum: ["vse", "potvrzene", "cekajici"], description: "vse = Prodáno i Čeká na ověření (výchozí); potvrzene = jen Prodáno; cekajici = jen Čeká na ověření." },
           mesto: { type: "string", description: "Jen byty z tohoto města (např. Letohrad), bez ohledu na diakritiku." },
           dispozice: { type: "string", description: "Jen tato dispozice (např. 2+1, 3+kk)." },
+          stav_bytu: { type: "string", enum: CONDITION_ENUM, description: CONDITION_HELP },
           limit: { type: "integer", description: "Nejvýš kolik bytů vrátit (výchozí 50, nejvíc 200)." },
         },
         additionalProperties: false,
@@ -253,7 +264,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
         if (odDen > doDen) throw new ToolInputError(`Začátek období (${odDen}) je později než konec (${doDen}).`);
         const stav = parseEnum(args.stav, "stav", ["vse", "potvrzene", "cekajici"], "vse");
         const limit = parseLimit(args.limit, 50);
-        const filters = { mesto: args.mesto, dispozice: args.dispozice };
+        const filters = { mesto: args.mesto, dispozice: args.dispozice, stavBytu: parseEnum(args.stav_bytu, "stav_bytu", CONDITION_ENUM, undefined) };
         const pool = entriesOf(db).filter((e) => (stav === "potvrzene" ? isConfirmedSale(e) : stav === "cekajici" ? isPendingSale(e) : isSoldOrAlmost(e)) && matchesFilters(e, filters));
         const undated = pool.filter((e) => !dayOf(saleMoment(e)));
         const inPeriod = pool
@@ -284,7 +295,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
       name: "statistiky_cen",
       title: "Statistiky cen",
       description:
-        "Průměr, medián, minimum a maximum ceny a ceny za m² (a doby v nabídce), volitelně členěné podle města, dispozice nebo měsíce. typ=prodane počítá z prodaných a téměř jistě prodaných bytů (cena prodeje: ověřená, jinak odhad; období se bere podle data prodeje), typ=nabidky z inzerovaných cen aktuálních nabídek. " +
+        "Průměr, medián, minimum a maximum ceny a ceny za m² (a doby v nabídce), volitelně členěné podle města, dispozice, měsíce nebo stavu bytu (na otázku „za kolik se prodávají byty v TOPu“ použij stav_bytu=v_topu). typ=prodane počítá z prodaných a téměř jistě prodaných bytů (cena prodeje: ověřená, jinak odhad; období se bere podle data prodeje), typ=nabidky z inzerovaných cen aktuálních nabídek. " +
         SALE_DEFINITIONS +
         " Vždy uveď, kolik bytů je za číslem a kolik z toho jsou odhady.",
       inputSchema: {
@@ -294,20 +305,21 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
           vzorek: { type: "string", enum: ["vse", "potvrzene"], description: "Jen pro typ=prodane. vse = jako Statistiky v appce (prodané, po rezervaci zmizelé i rezervované); potvrzene = jen Prodáno s potvrzenou cenou. Výchozí vse." },
           od: { type: "string", description: "Začátek období (RRRR-MM-DD). Pro prodane datum prodeje, pro nabidky datum, kdy se nabídka objevila. Výchozí: bez omezení." },
           do: { type: "string", description: "Konec období (RRRR-MM-DD). Výchozí: bez omezení." },
-          clenit_podle: { type: "string", enum: ["zadne", "mesto", "dispozice", "mesic"], description: "Jak výsledek rozdělit do skupin. Výchozí zadne (jeden souhrn)." },
+          clenit_podle: { type: "string", enum: ["zadne", "mesto", "dispozice", "mesic", "stav_bytu"], description: "Jak výsledek rozdělit do skupin. Výchozí zadne (jeden souhrn)." },
           mesto: { type: "string", description: "Jen byty z tohoto města." },
           dispozice: { type: "string", description: "Jen tato dispozice (např. 2+1)." },
+          stav_bytu: { type: "string", enum: CONDITION_ENUM, description: CONDITION_HELP },
         },
         additionalProperties: false,
       },
       handler(db, args) {
         const typ = parseEnum(args.typ, "typ", ["prodane", "nabidky"], "prodane");
         const vzorek = parseEnum(args.vzorek, "vzorek", ["vse", "potvrzene"], "vse");
-        const clenit = parseEnum(args.clenit_podle, "clenit_podle", ["zadne", "mesto", "dispozice", "mesic"], "zadne");
+        const clenit = parseEnum(args.clenit_podle, "clenit_podle", ["zadne", "mesto", "dispozice", "mesic", "stav_bytu"], "zadne");
         const od = parseDay(args.od, "od");
         const doDen = parseDay(args.do, "do");
         if (od && doDen && od > doDen) throw new ToolInputError(`Začátek období (${od}) je později než konec (${doDen}).`);
-        const filters = { mesto: args.mesto, dispozice: args.dispozice };
+        const filters = { mesto: args.mesto, dispozice: args.dispozice, stavBytu: parseEnum(args.stav_bytu, "stav_bytu", CONDITION_ENUM, undefined) };
         const inRange = (day) => day && (!od || day >= od) && (!doDen || day <= doDen);
 
         let rows;
@@ -335,7 +347,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
         }
 
         const keyOf = (r) =>
-          clenit === "mesto" ? r.e.city || "(neznámé město)" : clenit === "dispozice" ? r.e.rep.disposition || "(neznámá dispozice)" : clenit === "mesic" ? (r.day ?? "bez data").slice(0, 7) : "celkem";
+          clenit === "mesto" ? r.e.city || "(neznámé město)" : clenit === "dispozice" ? r.e.rep.disposition || "(neznámá dispozice)" : clenit === "mesic" ? (r.day ?? "bez data").slice(0, 7) : clenit === "stav_bytu" ? conditionLabel(r.e) ?? "bez hodnocení" : "celkem";
         const groups = new Map();
         for (const r of rows) {
           const k = keyOf(r);
@@ -379,6 +391,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
           cena_do: { type: "number", description: "Maximální inzerovaná cena v Kč." },
           plocha_od: { type: "number", description: "Minimální plocha v m²." },
           plocha_do: { type: "number", description: "Maximální plocha v m²." },
+          stav_bytu: { type: "string", enum: CONDITION_ENUM, description: CONDITION_HELP },
           razeni: { type: "string", enum: ["nejnovejsi", "cena_vzestupne", "cena_sestupne", "cena_za_m2"], description: "Výchozí nejnovejsi (podle toho, kdy se nabídka objevila)." },
           limit: { type: "integer", description: "Výchozí 30, nejvíc 200." },
         },
@@ -390,7 +403,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
         const limit = parseLimit(args.limit, 30);
         const cenaOd = parseNumber(args.cena_od, "cena_od");
         const cenaDo = parseNumber(args.cena_do, "cena_do");
-        const filters = { mesto: args.mesto, dispozice: args.dispozice, plochaOd: parseNumber(args.plocha_od, "plocha_od"), plochaDo: parseNumber(args.plocha_do, "plocha_do") };
+        const filters = { mesto: args.mesto, dispozice: args.dispozice, plochaOd: parseNumber(args.plocha_od, "plocha_od"), plochaDo: parseNumber(args.plocha_do, "plocha_do"), stavBytu: parseEnum(args.stav_bytu, "stav_bytu", CONDITION_ENUM, undefined) };
         const pool = entriesOf(db).filter((e) => {
           if (!(e.status === "active" || e.status === "reserved")) return false;
           if (stav === "v_nabidce" && e.status !== "active") return false;

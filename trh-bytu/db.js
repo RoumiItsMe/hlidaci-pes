@@ -111,7 +111,7 @@ const COLUMN_MIGRATIONS = [
   // condition/buildingType, které jsou skoro vždy prázdné, viz params.js).
   // Hodnoty jsou stabilní anglické klíče, viz OWN_FIELDS v params.js pro
   // popisky a povolené volby; NULL = zatím nezhodnoceno.
-  { table: "listings", column: "own_condition", ddl: "TEXT" }, // needs_reno | maintained | renovated | novostavba
+  { table: "listings", column: "own_condition", ddl: "TEXT" }, // needs_reno | maintained | renovated | top | novostavba
   { table: "listings", column: "own_construction", ddl: "TEXT" }, // panel | brick
   { table: "listings", column: "own_revitalized", ddl: "TEXT" }, // yes | no
   // Volný text — proč prodávající prodává (dědictví, rozvod, stěhování...),

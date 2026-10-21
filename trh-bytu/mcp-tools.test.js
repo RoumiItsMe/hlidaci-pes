@@ -42,7 +42,7 @@ function makeDb(fill) {
 const fixtures = (db) => {
   // A: prodáno, cena potvrzená (katastr)
   insertListing(db, listing("idnes:a", { disposition: "3+1", area_m2: 74, address: "Spořitelní, Letohrad", price_czk: 2_850_000, status: "sold", removed_at: "2026-10-03T06:00:00Z" }));
-  updateListingFields(db, "idnes:a", { verified_sale_price_czk: 2_850_000, verified_sale_date: "2026-10-10", kn_filed_at: "2026-10-10", sale_verdict: "sold", notes: "poznámka k bytu" });
+  updateListingFields(db, "idnes:a", { own_condition: "renovated", verified_sale_price_czk: 2_850_000, verified_sale_date: "2026-10-10", kn_filed_at: "2026-10-10", sale_verdict: "sold", notes: "poznámka k bytu" });
   insertEvent(db, { listing_id: "idnes:a", event_type: "created", occurred_at: "2026-09-22T08:00:00Z" });
   insertEvent(db, { listing_id: "idnes:a", event_type: "price_change", old_price_czk: 3_100_000, new_price_czk: 2_850_000, occurred_at: "2026-09-30T06:00:00Z" });
   // B: po rezervaci zmizel (čeká na ověření)
@@ -50,6 +50,7 @@ const fixtures = (db) => {
   insertEvent(db, { listing_id: "sreality:b", event_type: "created", occurred_at: "2026-09-22T08:00:00Z" });
   insertEvent(db, { listing_id: "sreality:b", event_type: "reserved", occurred_at: "2026-09-25T06:00:00Z" });
   insertEvent(db, { listing_id: "sreality:b", event_type: "removed", occurred_at: "2026-10-05T06:00:00Z" });
+  updateListingFields(db, "sreality:b", { own_condition: "top" });
   // C: portál označil prodáno, cena zatím neověřená
   insertListing(db, listing("bazos:c", { disposition: "2+kk", area_m2: 50, address: "Česká Třebová, ul. Trávník", price_czk: 2_500_000, status: "sold", removed_at: "2026-09-15T06:00:00Z" }));
   // F: prodáno dávno (mimo výchozí období)
@@ -65,6 +66,8 @@ const fixtures = (db) => {
   insertEvent(db, { listing_id: "sreality:o2", event_type: "price_change", old_price_czk: 4_500_000, new_price_czk: 4_300_000, occurred_at: "2026-10-10T06:00:00Z" });
   insertEvent(db, { listing_id: "sreality:o2", event_type: "price_change", old_price_czk: 4_300_000, new_price_czk: 4_200_000, occurred_at: "2026-10-15T06:00:00Z" });
   insertListing(db, listing("sreality:o3", { disposition: "3+1", area_m2: 80, address: "Žamberk, ul. Dlouhá", price_czk: 3_000_000, status: "reserved", first_seen_at: "2026-09-25T08:00:00Z" }));
+  updateListingFields(db, "sreality:o1", { own_condition: "top" });
+  updateListingFields(db, "sreality:o3", { own_condition: "top" });
 };
 
 const { db } = makeDb(fixtures);
@@ -243,6 +246,42 @@ test("detail_bytu: parametry, prodej, katastr, poznámka, časová osa, nabídky
   assert.equal(d.nabidky[0].url, "https://example.invalid/idnes:a");
   assert.equal(run("detail_bytu", { id: "bazos:e" }).skryty, true);
   assert.equal(run("detail_bytu", { id: "sreality:o1" }).prodej, null);
+});
+
+test("stav bytu: filtr stav_bytu (V TOPu, Po rekonstrukci, bez hodnocení) u prodaných bytů i nabídek; u řádků je stav slovy", () => {
+  assert.deepEqual(ids(run("prodane_byty", { stav_bytu: "v_topu" }).byty), ["sreality:b"]);
+  assert.deepEqual(ids(run("prodane_byty", { stav_bytu: "po_rekonstrukci" }).byty), ["idnes:a"]);
+  assert.deepEqual(ids(run("prodane_byty", { stav_bytu: "bez_hodnoceni" }).byty), ["bazos:c"]);
+  assert.deepEqual(ids(run("prodane_byty", { stav_bytu: "novostavba" }).byty), []);
+  const byId = Object.fromEntries(run("prodane_byty").byty.map((b) => [b.id, b.stavBytu]));
+  assert.deepEqual(byId, { "idnes:a": "Po rekonstrukci", "sreality:b": "V TOPu", "bazos:c": null });
+  assert.deepEqual(ids(run("nabidky", { stav_bytu: "v_topu" }).nabidky), ["sreality:o1", "sreality:o3"]);
+  assert.deepEqual(ids(run("nabidky", { stav_bytu: "v_topu", stav: "v_nabidce" }).nabidky), ["sreality:o1"]);
+  assert.equal(run("nabidky", { stav_bytu: "v_topu" }).nabidky[0].stavBytu, "V TOPu");
+});
+
+test("stav bytu: statistiky cen prodaných bytů v TOPu (stejný vzorek jako Statistiky v appce) a členění podle stavu", () => {
+  const top = run("statistiky_cen", { stav_bytu: "v_topu" });
+  assert.equal(top.celkem.pocetBytu, 2); // B (po rezervaci zmizel) a rezervovaný o3
+  assert.equal(top.celkem.cenaKc.min, 2_700_000); // obě ceny jsou odhad: 3 000 000 −10 %
+  assert.equal(top.celkem.cenaKc.max, 2_700_000);
+  assert.deepEqual(top.celkem.zakladCeny, { overenych: 0, odhadNejdeOverit: 0, odhadCekaNaOvereni: 2 });
+  assert.equal(run("statistiky_cen", { stav_bytu: "v_topu", vzorek: "potvrzene" }).celkem.pocetBytu, 0); // v TOPu zatím žádný potvrzený prodej
+  const groups = Object.fromEntries(run("statistiky_cen", { clenit_podle: "stav_bytu" }).skupiny.map((g) => [g.skupina, g.pocetBytu]));
+  assert.deepEqual(groups, { "V TOPu": 2, "Po rekonstrukci": 1, "bez hodnocení": 2 });
+  // nabídky v TOPu: inzerované ceny
+  const offers = run("statistiky_cen", { typ: "nabidky", stav_bytu: "v_topu" });
+  assert.equal(offers.celkem.pocetBytu, 2);
+  assert.equal(offers.celkem.cenaKc.min, 3_000_000);
+  assert.equal(offers.celkem.cenaKc.max, 3_500_000);
+});
+
+test("stav bytu: v detailu slovy, neplatná hodnota filtru se odmítne s výčtem možností", () => {
+  assert.deepEqual(run("detail_bytu", { id: "sreality:b" }).vlastniHodnoceni, { Stav: "V TOPu" });
+  assert.deepEqual(run("detail_bytu", { id: "idnes:a" }).vlastniHodnoceni, { Stav: "Po rekonstrukci" });
+  assert.throws(() => run("prodane_byty", { stav_bytu: "top" }), (err) => err instanceof ToolInputError && /v_topu/.test(err.message) && /stav_bytu/.test(err.message));
+  assert.throws(() => run("statistiky_cen", { clenit_podle: "stav" }), ToolInputError);
+  for (const name of ["prodane_byty", "statistiky_cen", "nabidky"]) assert.ok(tools[name].inputSchema.properties.stav_bytu.enum.includes("v_topu"), name);
 });
 
 test("chybný vstup: srozumitelná česká hláška (ToolInputError), nikdy tichý výsledek", () => {

@@ -1125,6 +1125,26 @@ Region bez Telegramu navíc při startu zahodí `TELEGRAM_BOT_TOKEN`, takže ani
 chybná cesta v kódu nemá čím poslat zprávu. Test `region.test.js` hlídá, že obě
 sekce mají různé složky dat. Další region = položka v `REGIONS` a jeho zdroje.
 
+## Stav bytu „V TOPu“ — za kolik se prodávají nejlepší byty
+
+Rekonstrukce má spoustu podob — někdy levná, někdy drahá. Ve výběru **Stav** (tabulka
+srovnání za „Víc sloupců“, detail bytu → Vlastní hodnocení) proto přibyla volba **V TOPu**
+(vedle Nutná rekonstrukce / Udržovaný / Po rekonstrukci / Novostavba): byt v nejlepším
+stavu, po kvalitní rekonstrukci. Je to subjektivní hodnocení, takže se nastavuje **ručně** —
+appka ho z textu inzerátu nehádá.
+
+- **Statistiky → „Byty v TOPu (prodané)“:** stejný vzorek a stejná cena jako v „Prodané a téměř
+  jistě prodané byty“ (prodané, po rezervaci zmizelé, zatím rezervované; cena ověřená, jinak
+  odhad −10 %), jen byty v TOPu — po městech a dispozicích, nahoře souhrn (průměr, rozsah,
+  kolik cen je ověřených). Ruční „Ve statistice: vyřadit“ platí.
+- **Samostatný koš:** stav je jedna hodnota, takže byt v TOPu **není** „Po rekonstrukci“ a do
+  statistiky „Ceny po rekonstrukci“ se nepočítá (ceny levných a drahých rekonstrukcí se
+  nemíchají). Chceš-li konkrétní TOP byt přesto zahrnout i tam, přehlasuj ho ve sloupci
+  „Ve statistice“ → Zahrnout.
+- **Nezaměnit s ⭐ TOP** z přehledu — to je označení zajímavého bytu, ne jeho stav.
+- **V chatu (MCP):** filtr `stav_bytu=v_topu` u `prodane_byty`, `statistiky_cen` a `nabidky`,
+  a členění `clenit_podle=stav_bytu` ve `statistiky_cen`; byty v seznamech mají `stavBytu`.
+
 ## Chat přes MCP — ptát se na data v Claude Desktop
 
 Appka má MCP server (`mcp-server.js`), přes který se dá v Claude Desktop (nebo jiném

@@ -30,7 +30,7 @@ import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js
 import { addressInfo } from "./address-info.js";
 import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPriceDrops, marketSnapshot, attention, missingEssentials, relativeTime, parseRunSummary } from "./dashboard.js";
 import { computeEntries, SOURCE_LABELS, formatCzk, changeSources, priceLabel } from "./entries.js";
-import { effectivePriceForStats, renovatedSaleStats, almostSoldSaleStats } from "./sale-stats.js";
+import { effectivePriceForStats, renovatedSaleStats, almostSoldSaleStats, topSaleStats } from "./sale-stats.js";
 import { readTrackLock } from "./track-lock.js";
 import { REGION, REGION_WATCH, OTHER_REGIONS, KN_OPTIONS } from "./region.js";
 
@@ -1516,6 +1516,12 @@ function renderStats(db) {
 
   const renoStats = renovatedSaleStats(entries);
   const soldStats = almostSoldSaleStats(entries);
+  const topStats = topSaleStats(entries);
+  const topOverall = topStats.overall
+    ? `Průměr ${formatCzk(topStats.overall.avg)}/m² (rozsah ${formatCzk(topStats.overall.min)}–${formatCzk(topStats.overall.max)}/m²${
+        topStats.overall.verifiedCount ? `, ověřená cena u ${topStats.overall.verifiedCount}` : ""
+      }).`
+    : "";
   const goneAfterReservation = entries.filter((e) => e.almostSold && e.status === "removed").length;
   const justReserved = entries.filter((e) => e.almostSold && e.status === "reserved").length;
 
@@ -1544,9 +1550,18 @@ function renderStats(db) {
     </p>
     ${soldStats.cities.length ? soldStats.cities.map(renderCityStatsTable).join("") : `<p class="muted">Zatím žádná data.</p>`}
 
+    <h2>Byty v TOPu (prodané)</h2>
+    <p class="muted">
+      Za kolik se prodávají byty se stavem „V TOPu“ (nastavíš ve sloupci Stav v tabulce srovnání nebo v detailu bytu; nejde o
+      ⭐ TOP z přehledu). Stejný vzorek a stejná cena jako v „Prodané a téměř jistě prodané byty“ výš, jen byty v TOPu. Nepočítají se
+      do „Ceny po rekonstrukci“ — je to samostatný koš, ať se ceny levných a drahých rekonstrukcí nemíchají.
+      Celkem ${topStats.totalEligible} bytů se známou cenou/m². ${topOverall}
+    </p>
+    ${topStats.cities.length ? topStats.cities.map(renderCityStatsTable).join("") : `<p class="muted">Zatím žádný prodaný byt ve stavu „V TOPu“.</p>`}
+
     <h2>Ceny po rekonstrukci (prodané byty)</h2>
     <p class="muted">
-      Byty zmizelé z nabídky nebo označené jako prodané, se stavem „Po rekonstrukci", případně ručně
+      Byty zmizelé z nabídky nebo označené jako prodané, se stavem „Po rekonstrukci" (byty „V TOPu“ jsou zvlášť výš), případně ručně
       přehlasované přes sloupec „Ve statistice" v tabulce srovnání. Cena je ověřená prodejní, pokud ji máš dohledanou
       v katastru (nebo zadanou ručně). Jinak je to poslední inzerovaná cena před zmizením nebo u prodaného bytu snížená o
       ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} % (kupní cena bývá nižší než inzerovaná), označená „čeká na ověření v katastru“, případně „nejde ověřit“
