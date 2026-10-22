@@ -36,23 +36,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Spuštění + commit jsou v jednom kroku (na rozdíl od dřívějška), protože
-      # při konfliktu na push potřebujeme detekci znovu spustit nad čerstvě
-      # staženým stavem — ne jen zkusit znovu `git push` se zastaralým diffem.
+      # Spuštění + commit jsou v jednom skriptu (scripts/run-and-commit.sh), protože při
+      # souběhu pushů se musí stav z tohoto běhu přenést přes nový stav z main.
       #
-      # Proč tenhle retry vůbec existuje: díky víc spouštěčům (cron-job.org
-      # každých 15 min + příležitostný GitHubův bonusový `schedule` + ruční
-      # spuštění) se může stát, že dva běhy skončí blízko sebe — typicky když
-      # jeden neobvykle dlouho visí na "Install dependencies" (viděno naostro:
-      # ~9 min misto obvyklých ~15s, pravděpodobně přechodná pomalost GitHub
-      # runneru/npm registry). `concurrency` skupina níže běhy sekvencuje, ale
-      # nezabrání tomu, aby jeden PŘESTO nestihl commitnout dřív, než druhý
-      # (spuštěný mezitím) dokončí svůj push — `git push` pak dostane "fetch
-      # first" odmítnutí. Řešení: stáhnout nejnovější stav a spustit detekci
-      # ZNOVU nad ním (ne slepě rebasovat starý diff) — tím se garantuje, že
-      # se nikdy nepošle duplicitní notifikace o inzerátu, který mezitím
-      # zachytil a nahlásil ten druhý běh.
-      - name: Spustit hlídacího psa (s retry při souběhu s jiným během)
+      # Proč: běh trvá i několik minut a mezitím může na main přibýt jiný commit (obyčejný push
+      # z počítače, příležitostný překryv spouštěčů). `git push` pak dostane "fetch first".
+      # Dřívější řešení stáhlo main, zahodilo stav a pustilo detekci znovu — jenže Telegram
+      # zprávy prvního průchodu už odešly, takže druhý průchod poslal tytéž znovu (22. 10. 2026:
+      # dvě změny ceny dvakrát, 4 zprávy místo 2). Teď detekce běží právě jednou a při
+      # odmítnutém pushi se stav přenese přes main trojcestným sloučením (scripts/merge-seen.js).
+      - name: Spustit hlídacího psa (stav se při souběhu pushů přenese, ne znovu spočítá)
         if: always()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -62,36 +55,4 @@ jobs:
         run: |
           git config user.name "hlidaci-pes-bot"
           git config user.email "actions@users.noreply.github.com"
-          for i in 1 2 3; do
-            # `node index.js` NESMÍ stát na vlastním řádku — shell běží s `set -e`
-            # (GitHub Actions default), a ten u prostého příkazu uvnitř cyklu
-            # ukončí celý skript OKAMŽITĚ při nenulovém exit kódu, ještě PŘED
-            # `SCRIPT_EXIT=$?` na dalším řádku (klasická past `set -e` v cyklu).
-            # Prakticky to znamenalo, že se commit+push (a tím i zápis
-            # aktualizovaného data/seen.json — nové inzeráty, health/alert
-            # počítadla) nikdy nespustil přesně tehdy, kdy šlo o vážnou chybu —
-            # tedy jediný případ, kdy na tom retry logika níž záleží. Zjištěno
-            # naostro 2026-09-29: běh s "vážnou chybou" (4 desky spadly na
-            # síťový výpadek runneru, čímž se přehouply přes práh 2 selhání a
-            # poslaly se Telegram alerty) skončil bez jediného git příkazu —
-            # aktualizovaný stav (vč. „už jsem alertoval") se ztratil s
-            # ephemeral runnerem, takže případná zpráva o zotavení příště
-            # nepřijde. `&&`/`||` řetězec drží `node index.js` mimo dosah `-e`.
-            node index.js && SCRIPT_EXIT=0 || SCRIPT_EXIT=$?
-            if ! git diff --quiet -- data/seen.json; then
-              git add data/seen.json
-              git commit -m "chore: aktualizace stavu hlídacího psa [skip ci]"
-              if git push; then
-                echo "Push OK (pokus $i)."
-                exit $SCRIPT_EXIT
-              fi
-              echo "Push selhal (pokus $i/3) — jiný běh mezitím pushnul. Stahuju nejnovější stav a zkouším detekci znovu."
-              git fetch origin main
-              git reset --hard origin/main
-            else
-              echo "Stav beze změny, není co commitovat."
-              exit $SCRIPT_EXIT
-            fi
-          done
-          echo "::error::Nepodařilo se commitnout stav ani po 3 pokusech (opakovaný souběh s jiným během)."
-          exit 1
+          bash scripts/run-and-commit.sh

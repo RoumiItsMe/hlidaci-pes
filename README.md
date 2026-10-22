@@ -255,9 +255,25 @@ stačit, skript to jen zaloguje jako běžné selhání (stejný alert-debounce 
      naposledy — 🔻 při zlevnění, 🔺 při zdražení). Přechod z/na "Cena na
      vyžádání" se nepočítá jako změna (žádná ze dvou stran není konkrétní
      číslo k porovnání), jen se cena tiše aktualizuje.
+
+   **Stejný byt na víc portálech = jedno upozornění** (`lib/dedup.js`). Realitka
+   typicky upraví inzerát i cenu na všech portálech naráz, takže by o jedné slevě
+   přišla zpráva z každého. Dvě vrstvy: *otisk nemovitosti* (cena + plocha z
+   titulku, napříč portály a bez časového limitu) a *otisk změny ceny* (shodný skok
+   „stará → nová cena“ ohlášený jiným portálem v posledních 72 hodinách). Druhý je
+   pro Bazoš, jehož RSS dává jen titulek („Prodej garsonky se zahradou…“) a cenu, takže
+   mu plocha chybí a první otisk nejde spočítat. Samotná cena by na dedup nestačila
+   (dva různé byty za 2 490 000 Kč jsou běžné); shodný skok navíc musí přijít z JINÉHO
+   portálu, aby se dva různé byty na jednom portálu nepotlačily navzájem.
 3. Aktualizovaný `data/seen.json` se po každém běhu commitne zpátky do
    repa — tak stav (vč. poslední známé ceny) přežije mezi jednotlivými
-   spuštěními Action.
+   spuštěními Action. Běh a commit řídí `scripts/run-and-commit.sh`.
+   **Když `git push` selže**, protože na `main` mezitím přibyl jiný commit (běh trvá i
+   několik minut, stačí obyčejný push z počítače), detekce se **nepouští znovu**: zprávy
+   prvního průchodu už odešly, takže druhý průchod by je poslal podruhé (22. 10. 2026:
+   dvě změny ceny dvakrát, 4 zprávy místo 2). Stav z běhu se místo toho přenese přes nový
+   stav z `main` trojcestným sloučením (`scripts/merge-seen.js`, `mergeStates` v
+   `lib/state.js`) a pushne se znovu. Test: `scripts/run-and-commit.test.js`.
 4. **První běh pro každou dvojici (sledování, zdroj)** aktuální nabídku jen
    "zabaseline" (uloží jako už viděnou, i s cenou) BEZ posílání notifikací
    — jinak by zaplavil Telegram desítkami zpráv o inzerátech, co tam visí

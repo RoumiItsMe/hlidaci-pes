@@ -50,7 +50,10 @@ import {
   setSourceItems,
   getFingerprintMap,
   setFingerprintMap,
+  getChangeMap,
+  setChangeMap,
 } from "./lib/state.js";
+import { computeFingerprint, changeKey, priceChangeDuplicate, CHANGE_WINDOW_MS } from "./lib/dedup.js";
 import { sendTelegramMessage, sleep } from "./lib/telegram.js";
 import { ACTIONS_LOG_URL, getHealth, alertFailure, alertRecoveryIfNeeded } from "./lib/health.js";
 import { runNoticeBoards } from "./lib/boards-runner.js";
@@ -106,25 +109,8 @@ function formatEditedNote(editedDateStr) {
   return `📝 Upraveno na Sreality: ${dateLabel}`;
 }
 
-// Otisk stejné reálné nemovitosti napříč portály: cena (přesná, agenti ji
-// typicky kopírují beze změny na všechny portály) + plocha v m² vytažená
-// z titulku (formát "X m²"/"X m2" je napříč všemi zdroji konzistentní).
-// Bez adresy/lokality — ty se mezi portály liší formátem příliš na to, aby
-// šly spolehlivě porovnat, a v našem malém geografickém okruhu je shoda
-// ceny + plochy sama o sobě už dost silný signál, že jde o tu samou věc.
-// Když cenu nebo plochu nejde zjistit, radši nededuplikovat vůbec (vrátí
-// null → nikdy se nepřiřadí k jiné položce) než riskovat, že se dvě různé
-// nemovitosti mylně sloučí a jedna z nich zmizí.
-const AREA_M2_RE = /(\d+(?:[.,]\d+)?)\s*m[²2]/i;
-
-function computeFingerprint(item) {
-  if (item.priceCzk == null) return null;
-  const m = item.title?.match(AREA_M2_RE);
-  if (!m) return null;
-  const areaM2 = Math.round(parseFloat(m[1].replace(",", ".")));
-  if (!Number.isFinite(areaM2)) return null;
-  return `${item.priceCzk}_${areaM2}`;
-}
+// Otisk stejné reálné nemovitosti napříč portály (cena + plocha z titulku) i otisk
+// změny ceny (stará > nová) pro portály bez plochy v titulku — viz lib/dedup.js.
 
 function formatNewItemMessage(watch, item) {
   const lines = [`${watch.emoji} Nová nabídka — ${watch.label} • ${item.sourceLabel}`, item.title];
@@ -161,6 +147,8 @@ async function run() {
   for (const watch of watches) {
     const fpKey = `${watch.key}:__fingerprints`;
     const seenFingerprints = getFingerprintMap(state, fpKey);
+    const changesKey = `${watch.key}:__changes`;
+    const recentChanges = getChangeMap(state, changesKey, CHANGE_WINDOW_MS);
 
     for (const src of SOURCES) {
       const stateKey = `${watch.key}:${src.name}`;
@@ -265,11 +253,16 @@ async function run() {
           // hlášení). Fingerprint se počítá z NOVÉ (už změněné) ceny, takže
           // je napříč portály shodný, a sdílí stejnou mapu `seenFingerprints`
           // jako nové nabídky — ať je otisk zapsaný odkudkoli, druhý portál
-          // se stejnou nemovitostí se potichu přeskočí.
-          if (fingerprint && seenFingerprints.has(fingerprint)) {
+          // se stejnou nemovitostí se potichu přeskočí. Portál bez plochy v
+          // titulku (Bazoš) otisk nemá, tam zabere shodný skok ceny (stará >
+          // nová) ohlášený jiným portálem (viz lib/dedup.js).
+          const duplicate = priceChangeDuplicate({ item, oldPriceCzk, newPriceCzk, seenFingerprints, recentChanges });
+          if (duplicate) {
             totalCrossPortalSkipped += 1;
             console.log(
-              `[${stateKey}] přeskakuji změnu ceny u nabídky ${item.id} — stejná nemovitost (${item.priceCzk} Kč, otisk ${fingerprint}) už nahlášena přes ${seenFingerprints.get(fingerprint)}.`
+              `[${stateKey}] přeskakuji změnu ceny u nabídky ${item.id} — stejná nemovitost (${oldPriceCzk} → ${newPriceCzk} Kč, ${
+                duplicate.reason === "flat" ? `otisk ${duplicate.fingerprint}` : "shodný skok ceny"
+              }) už nahlášena přes ${duplicate.via}.`
             );
             continue;
           }
@@ -280,6 +273,11 @@ async function run() {
             item.source === "sreality" ? formatEditedNote((await fetchListingDates(item.url)).edited) : null;
           await sendTelegramMessage(formatPriceChangeMessage(watch, item, oldPriceCzk, newPriceCzk, editedNote));
           if (fingerprint) seenFingerprints.set(fingerprint, src.label);
+          recentChanges.set(changeKey(oldPriceCzk, newPriceCzk), {
+            source: item.source,
+            sourceLabel: src.label,
+            at: new Date().toISOString(),
+          });
           totalPriceChanges += 1;
           await sleep(400);
         } catch (err) {
@@ -291,6 +289,7 @@ async function run() {
     }
 
     setFingerprintMap(state, fpKey, seenFingerprints, maxSeenPerSource);
+    setChangeMap(state, changesKey, recentChanges, 200);
   }
 
   // Úřední desky obcí (záměr prodeje bytu, dražby…) — nezávislé na portálech

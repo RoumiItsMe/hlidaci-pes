@@ -1,0 +1,2 @@
+# Shell skripty musí mít LF i na Windows (autocrlf) — CRLF v bashi rozbije každý řádek.
+*.sh text eol=lf

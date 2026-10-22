@@ -8,7 +8,7 @@
     "start": "node index.js",
     "track-sales": "node trh-bytu/track.js",
     "sales-app": "node trh-bytu/server.js",
-    "test": "node --test trh-bytu/*.test.js"
+    "test": "node --test trh-bytu/*.test.js lib/*.test.js scripts/*.test.js"
   },
   "engines": {
     "node": ">=22"
