@@ -298,6 +298,14 @@ upravit.
   byly ještě v nabídce, nahradil `node trh-bytu/upgrade-idnes-photos.js` (maže
   miniatury až po úspěšném stažení všech plných fotek); u zmizelých inzerátů už
   plné adresy nejdou získat, zůstávají miniatury.
+  **Videa v galerii iDNES se nestahují.** iDNES míchá mezi fotky videa
+  (`…/thumbs/video/<id>.mp4`, desítky MB); dřív se uložila jako `1.jpg`, prohlížeč je v
+  `<img>` nezobrazí, a byt tak zůstal bez miniatury (22. 10. 2026: 20 inzerátů, asi 700 MB;
+  např. Dukelská v Hylvátech). `detail/idnes.js` je přeskakuje a `fetchImageBuffer` v
+  `photos.js` navíc odmítne cokoli, co podle hlavičky odpovědi i prvních bajtů není
+  jpeg/png/webp/gif/avif. Už uložené odstranil `node trh-bytu/cleanup-non-image-photos.js`
+  (bez `--apply` jen vypíše; před smazáním zálohuje databázi, rozhoduje obsah souboru, ne
+  přípona).
 - `data/track.log` — log každého sběrného běhu.
 
 Nic z `data/` se necommituje do gitu (viz `.gitignore`) — je to čistě

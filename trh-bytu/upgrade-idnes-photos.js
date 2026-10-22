@@ -12,7 +12,7 @@
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { openDb, nowIso, insertPhoto, DATA_DIR, PHOTOS_DIR } from "./db.js";
-import { MAX_PHOTOS_PER_LISTING } from "./photos.js";
+import { MAX_PHOTOS_PER_LISTING, fetchImageBuffer } from "./photos.js";
 import { fetchIdnesDetail } from "./detail/idnes.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,9 +50,7 @@ for (const l of listings) {
   let ok = true;
   for (let i = 0; i < urls.length; i++) {
     try {
-      const res = await fetch(urls[i]);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
+      const buf = await fetchImageBuffer(urls[i]);
       const ext = (urls[i].match(/\.(jpe?g|png|webp)$/i)?.[1] || "jpg").toLowerCase().replace("jpeg", "jpg");
       const filename = `full_${stamp}_${i + 1}.${ext}`;
       writeFileSync(path.join(dir, filename), buf);

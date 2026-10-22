@@ -28,7 +28,7 @@ import path from "node:path";
 import * as cheerio from "cheerio";
 import { fetchText } from "../lib/http.js";
 import { openDb, nowIso, insertPhoto, DATA_DIR, PHOTOS_DIR } from "./db.js";
-import { MAX_PHOTOS_PER_LISTING } from "./photos.js";
+import { MAX_PHOTOS_PER_LISTING, fetchImageBuffer } from "./photos.js";
 import { fetchRealitymixDetail } from "./detail/realitymix.js";
 import { fetchBazosDetail } from "./detail/bazos.js";
 
@@ -92,11 +92,10 @@ async function downloadExtra(l, urls) {
   let added = 0;
   for (const url of urls) {
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = await fetchImageBuffer(url);
       const ext = (url.match(/\.(jpe?g|png|webp)(?:$|\?)/i)?.[1] || "jpg").toLowerCase().replace("jpeg", "jpg");
       const filename = `fix_${Date.now()}_${added + 1}.${ext}`;
-      writeFileSync(path.join(dir, filename), Buffer.from(await res.arrayBuffer()));
+      writeFileSync(path.join(dir, filename), buf);
       insertPhoto(db, { listing_id: l.id, local_path: `photos/${path.basename(dir)}/${filename}`, source_url: url, downloaded_at: nowIso() });
       added++;
     } catch (err) {

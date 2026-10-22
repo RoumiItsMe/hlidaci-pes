@@ -33,6 +33,32 @@ function extractGeo(html) {
   return { lat: Number(lat[1]), lon: Number(lon[1]), precision: null, street: null, houseNumber: null };
 }
 
+const THUMBS = "sta-reality2.1gr.cz/sta/compile/thumbs/";
+
+// Galerie iDNES míchá fotky s videi (`…/thumbs/video/<id>.mp4`, desítky MB). Video se dřív stahovalo
+// jako `1.jpg`, prohlížeč ho jako obrázek nezobrazil a byt zůstal bez náhledu (22. 10. 2026: 20 inzerátů).
+const isVideo = (src) => /\/thumbs\/video\/|\.(mp4|mov|webm|m4v)(?:$|\?)/i.test(src);
+
+/**
+ * Adresy fotek bytu z galerie `.b-gallery` (viz komentáře výše): plné velikosti z odkazů pro lightbox,
+ * bez nich miniatury z `<img>`. Videa se přeskakují; pořadí fotek zůstává.
+ * @param $ cheerio načtený detail inzerátu
+ */
+export function extractPhotoUrls($) {
+  const photoUrls = [];
+  const seen = new Set();
+  const add = (src) => {
+    if (!src || !src.includes(THUMBS) || isVideo(src) || seen.has(src)) return;
+    seen.add(src);
+    photoUrls.push(src);
+  };
+  $(".b-gallery a[data-fancybox]").each((_, el) => add(($(el).attr("href") || "").replace(/\?.*$/, "")));
+  if (photoUrls.length === 0) {
+    $(".b-gallery img").each((_, el) => add($(el).attr("src") || $(el).attr("data-src")));
+  }
+  return photoUrls;
+}
+
 export async function fetchIdnesDetail(url) {
   try {
     const html = await fetchText(url);
@@ -58,18 +84,7 @@ export async function fetchIdnesDetail(url) {
     // miniatury (pár kB) a lazy načítané velké náhledy. Adresa se bere bez
     // `?gt=r` (stejný soubor, stabilnější identita). Bez odkazů (změna
     // stránky) se spadne na `<img>`, ať appka nezůstane úplně bez fotek.
-    const THUMBS = "sta-reality2.1gr.cz/sta/compile/thumbs/";
-    const photoUrls = [];
-    const seen = new Set();
-    const add = (src) => {
-      if (!src || !src.includes(THUMBS) || seen.has(src)) return;
-      seen.add(src);
-      photoUrls.push(src);
-    };
-    $(".b-gallery a[data-fancybox]").each((_, el) => add(($(el).attr("href") || "").replace(/\?.*$/, "")));
-    if (photoUrls.length === 0) {
-      $(".b-gallery img").each((_, el) => add($(el).attr("src") || $(el).attr("data-src")));
-    }
+    const photoUrls = extractPhotoUrls($);
 
     return { description, photoUrls, reserved: false, sold, params: {}, geo: extractGeo(html) };
   } catch (err) {

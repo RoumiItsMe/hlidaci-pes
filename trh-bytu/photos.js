@@ -3,11 +3,56 @@
 // inzerátu z portálu odkaz na fotku obvykle přestane fungovat, takže
 // "jen si uložit URL" by časem znamenalo prázdné obrázky u prodaných bytů.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PHOTOS_DIR } from "./db.js";
 
 export const MAX_PHOTOS_PER_LISTING = 10;
+
+/**
+ * Druh obrázku podle prvních bajtů ("jpeg" | "png" | "webp" | "gif" | "avif"), jinak null — video,
+ * HTML chybová stránka, prázdný soubor. Přípona ani content-type to neřeknou: video z iDNES se
+ * ukládalo jako `1.jpg`, `<img>` ho nezobrazí a byt pak zůstal bez náhledu.
+ */
+export function imageKind(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "jpeg";
+  if (buf.subarray(0, 8).toString("hex") === "89504e470d0a1a0a") return "png";
+  if (buf.subarray(0, 4).toString("latin1") === "RIFF" && buf.subarray(8, 12).toString("latin1") === "WEBP") return "webp";
+  if (buf.subarray(0, 3).toString("latin1") === "GIF") return "gif";
+  // `ftyp` mají i videa (mp4, mov) — obrázek je jen s brandem avif.
+  if (buf.subarray(4, 8).toString("latin1") === "ftyp" && /^avi[fs]$/.test(buf.subarray(8, 12).toString("latin1"))) return "avif";
+  return null;
+}
+
+/** Totéž pro soubor na disku (čte jen prvních 16 bajtů, soubory bývají desítky MB). */
+export function imageKindOfFile(file) {
+  const fd = openSync(file, "r");
+  try {
+    const head = Buffer.alloc(16);
+    const n = readSync(fd, head, 0, 16, 0);
+    return imageKind(head.subarray(0, n));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Stáhne obrázek a vrátí jeho bajty; vyhodí chybu u všeho, co obrázek není. Video se pozná už podle
+ * hlavičky odpovědi, takže se jeho (desítky MB) tělo vůbec nestahuje; zbytek podle prvních bajtů.
+ */
+export async function fetchImageBuffer(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const type = res.headers.get("content-type") || "";
+  if (/^(video|audio|text)\//i.test(type)) {
+    await res.body?.cancel();
+    throw new Error(`není obrázek (${type})`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (!imageKind(buf)) throw new Error(`není obrázek (${type || "neznámý typ"}, ${buf.length} B)`);
+  return buf;
+}
 
 function extFromUrl(url) {
   const m = url.match(/\.(jpe?g|png|webp)(?:$|\?)/i);
@@ -44,9 +89,7 @@ export async function downloadPhotos(listingId, photoUrls, onWarn) {
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
+      const buf = await fetchImageBuffer(url);
       const filename = `${i + 1}.${extFromUrl(url)}`;
       writeFileSync(path.join(dir, filename), buf);
       // Vždy lomítko dopředu (ne path.join, který by na Windows vrátil
