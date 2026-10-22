@@ -214,6 +214,9 @@ const COLUMN_MIGRATIONS = [
   // Základní údaje, které uživatel označil jako nezjistitelné (JSON pole klíčů,
   // viz unknown-fields.js) — úkol "Doplnit chybějící údaje" je u bytu pak nehlídá.
   { table: "listings", column: "unknown_fields", ddl: "TEXT" },
+  // Ruční sloučení / rozdělení bytů (group.js, manual-groups.js): nabídky se stejným tokenem tvoří jeden byt
+  // a automatické spojování se jich netýká. NULL = automatika. Oddělená nabídka má token jen pro sebe.
+  { table: "listings", column: "manual_group", ddl: "TEXT" },
 ];
 
 function runMigrations(db) {

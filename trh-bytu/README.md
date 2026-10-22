@@ -811,6 +811,30 @@ inzerát se spojí, když text sedí a plocha druhého inzerátu se v něm zmiň
 ("…52 m²…"). Jako hlavní záznam se pak bere důvěryhodnější portál (Sreality,
 iDNES), takže se zobrazí jeho výměra; fotky se sloučí ze všech inzerátů.
 
+### Ruční sloučení a rozdělení (`/slouceni`)
+
+Automatika se občas plete (RealityMIX se sklepem má jinou výměru; dva různé byty se stejným textem), a
+heuristiku nejde doladit pro každý případ. Proto má uživatel **poslední slovo**:
+
+- **Oddělit** — u každé nabídky bytu (v detailu, sekce 🔗 *Sloučení nabídek*, i na stránce Sloučení). Nabídka zůstane
+  jako samostatný byt a už se k ničemu automaticky nepřipojí; ostatní nabídky bytu se nedotkne.
+- **Sloučit s jiným bytem** — výběr z bytů téže dispozice (nejbližší výměra první). Obě nabídky jsou pak jeden byt.
+- **Ano, týž byt** — potvrzení sloučeného bytu tak, jak je; byt se zamkne a přestane se připomínat.
+- **Vrátit na automatiku** — ruční zásah se zruší a nabídky se znovu seskupí podle cen, výměr a textu.
+
+Technicky je to sloupec `listings.manual_group` (token; `group.js`, `manual-groups.js`, testy `group-manual.test.js`).
+Nabídky se stejným tokenem jsou jeden byt a **automatika se jich netýká ani ve prospěch, ani v neprospěch** — ruční byt
+je uzavřený, nový inzerát téhož bytu na jiném portálu se k němu sám nepřipojí (spojíš ho ručně). Výjimka:
+znovu vložený inzerát (`replaced_by`) je týž byt vždy. Zásah se zapisuje na všechny dotčené nabídky v jedné transakci
+a bez ručních zásahů je seskupení bajt po bajtu stejné jako dřív (ověřeno porovnáním seskupení před/po na obou sekcích).
+
+**Co jde ke kontrole** (`group-review.js`, testy `group-review.test.js`): sloučené byty, kde si nabídky **protiřečí** —
+jiná výměra (mimo toleranci 1 m²) nebo jiná známá cena. Chybějící údaj (RK cenu nezveřejnila, portál plochu neuvádí)
+rozpor není, jinak by byla podezřelá každá nabídka „na vyžádání“. Spory se hledají mezi dvojicemi, ne přes souvislé
+komponenty: nabídka bez ceny by jinak „přemostila“ dvě nabídky s různou cenou. Pak se postupně vyřazuje nabídka s nejvíc
+spory (při shodě ta méně důvěryhodného portálu), vyřazené jsou ve výpisu zvýrazněné s důvodem („výměra 58 m² místo 52 m²“).
+V reálných datech to bylo při zavedení 8 bytů v Ústí a 7 v Náchodě — samé skutečně sporné případy.
+
 V řádku se takový byt jmenuje **"… — cena na vyžádání"**; znamená to, že
 cena není na žádném z portálů zveřejněná (appka ji nemá odkud přečíst),
 ne že by se nevyčetla. U Bazoše, který k takové ceně připisuje vlastní

@@ -68,6 +68,26 @@ function clusterByArea(members) {
  * jako samostatná skupina o jednom členovi.
  */
 export function groupListings(listings) {
+  // Ruční zásah uživatele (sloupec `manual_group`) vždy vyhrává nad automatikou: nabídky se stejnou hodnotou
+  // jsou jeden byt a automatické spojování se jich netýká — ani ve prospěch, ani v neprospěch. Oddělená nabídka
+  // je ruční skupina o jednom členu. Jinak platí pravidla výš, beze změny.
+  const manual = new Map();
+  const automatic = [];
+  for (const l of listings) {
+    if (!l.manual_group) automatic.push(l);
+    else if (manual.has(l.manual_group)) manual.get(l.manual_group).push(l);
+    else manual.set(l.manual_group, [l]);
+  }
+  const groups = automaticGroups(automatic);
+  for (const [token, members] of manual) {
+    groups.push({ key: `manual_${token}`, members, merged: new Set(members.map((m) => m.source)).size > 1, manual: true });
+  }
+  // Znovu vložený inzerát (`replaced_by`) je týž byt i u ruční skupiny; párování podle textu jen mezi automatickými.
+  return mergeLinkedGroups(groups, listings, automatic);
+}
+
+// Automatické seskupení (bez ručních zásahů): dispozice + cena přesně, plocha s tolerancí, viz výš.
+function automaticGroups(listings) {
   // Bucket = přesná shoda dispozice+cena (silný signál sám o sobě —
   // plocha se pak řeší až uvnitř bucketu s tolerancí, viz clusterByArea).
   const buckets = new Map();
@@ -94,7 +114,7 @@ export function groupListings(listings) {
     }
   }
 
-  return mergeLinkedGroups(groups, listings);
+  return groups;
 }
 
 // --- Shoda inzerátů podle textu (ne podle ceny) ---
@@ -229,7 +249,9 @@ function sameFlatAcrossPortals(a, b) {
 // dostat šanci rozpoznat, ne to rovnou zavřít na vstupu.)
 // `merged` (= nalezeno na víc PORTÁLECH) se přepočítá — dvě ID téhož portálu
 // ho nezapínají.
-function mergeLinkedGroups(groups, listings) {
+// `listings` = všechny nabídky (pro `replaced_by`), `pairwise` = jen ty, které se smí spojovat automaticky podle
+// textu/adresy (bez ručních skupin).
+function mergeLinkedGroups(groups, listings, pairwise = listings) {
   const groupIndexById = new Map();
   groups.forEach((g, i) => g.members.forEach((m) => groupIndexById.set(m.id, i)));
 
@@ -248,7 +270,7 @@ function mergeLinkedGroups(groups, listings) {
   }
 
   const byDisposition = new Map();
-  for (const l of listings) {
+  for (const l of pairwise) {
     if (l.disposition == null || l.area_m2 == null) continue;
     if (!byDisposition.has(l.disposition)) byDisposition.set(l.disposition, []);
     byDisposition.get(l.disposition).push(l);
@@ -277,6 +299,7 @@ function mergeLinkedGroups(groups, listings) {
       key: `linked_${members.map((m) => m.id).sort().join(",")}`,
       members,
       merged: new Set(members.map((m) => m.source)).size > 1,
+      ...(parts.some((g) => g.manual) ? { manual: true } : {}),
     };
   });
 }

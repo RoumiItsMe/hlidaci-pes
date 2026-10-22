@@ -509,6 +509,16 @@ a.addr-chip--candidate:hover { text-decoration: underline; }
 .kn-progress { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.6rem 0; padding: 0.5rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font-size: 0.9rem; }
 .kn-progress progress { width: 9rem; height: 0.7rem; }
 
+/* Ruční sloučení / rozdělení bytů (/slouceni a sekce "Sloučení nabídek" v detailu) */
+.merge-section { margin: 1rem 0; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.merge-members { margin: 0.4rem 0; padding: 0; list-style: none; }
+.merge-member { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; padding: 0.15rem 0; }
+.merge-member .kn-form { margin-top: 0; }
+.merge-member--weak { background: #fef3c7; border-radius: 4px; padding: 0.15rem 0.4rem; }
+.merge-why { color: #92400e; font-size: 0.85rem; }
+.merge-check { margin: 0.4rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.merge-check .kn-form { margin-top: 0; }
+.merge-section select { max-width: 100%; }
 /* Údaje z API katastru na kartě bytu (plomby po rezervaci) */
 .kn-plomba { margin: 0.4rem 0 0.2rem; padding: 0.4rem 0.6rem; border-left: 3px solid var(--border); font-size: 0.9rem; }
 .kn-plomba > div + div { margin-top: 0.2rem; }

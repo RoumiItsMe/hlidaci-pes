@@ -33,6 +33,8 @@ import { computeEntries, SOURCE_LABELS, formatCzk, changeSources, priceLabel } f
 import { effectivePriceForStats, renovatedSaleStats, almostSoldSaleStats, topSaleStats } from "./sale-stats.js";
 import { entryDiscount, percent, discountRangeLabel, discountFromGroups, MIN_CALIBRATION_SAMPLES } from "./price-discount.js";
 import { knLinks, priceStake, priceReadiness, verificationProgress } from "./kn-packet.js";
+import { reviewGroup, mergeCandidates } from "./group-review.js";
+import { planDetach, planLock, planRelease } from "./manual-groups.js";
 import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
 import { readTrackLock } from "./track-lock.js";
 import { REGION, REGION_WATCH, OTHER_REGIONS, KN_OPTIONS } from "./region.js";
@@ -396,7 +398,7 @@ ${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ""}
 <script src="/app.js" defer></script>
 </head>
 <body data-region="${REGION.key}">
-<header><a href="/" class="brand">🏠 Trh bytů</a> <span class="region-tag" title="${esc(REGION.label)}">${esc(REGION.short)}</span> <a href="/byty">🏘️ Byty</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a>${regionSwitch}${bell}</header>
+<header><a href="/" class="brand">🏠 Trh bytů</a> <span class="region-tag" title="${esc(REGION.label)}">${esc(REGION.short)}</span> <a href="/byty">🏘️ Byty</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a> <a href="/slouceni">🔗 Sloučení</a>${regionSwitch}${bell}</header>
 <main${wide ? ' class="wide"' : ""}>${body}</main>
 </body>
 </html>`;
@@ -1010,6 +1012,7 @@ function renderDetail(db, id) {
           discount,
         })
       : "";
+  const mergeSectionHtml = renderMergeSection(group, actx.groups);
   const saleSectionHtml = renderSaleSection({
     unverifiable: Boolean(saleTrack?.unverifiable || goneWatch?.unverifiable),
     rep,
@@ -1057,6 +1060,7 @@ function renderDetail(db, id) {
     ${retryHtml}
     ${mapLinks ? `<p class="muted">Bod z portálu na mapě: ${mapLinks}</p>` : ""}
     ${saleSectionHtml}
+    ${mergeSectionHtml}
     <div class="row-updates">${updates}</div>
     ${gallery ? `<div class="gallery">${gallery}</div>` : ""}
     ${paramRows ? `<h2>Parametry</h2><table class="params">${paramRows}</table>` : ""}
@@ -1568,7 +1572,7 @@ function renderStats(db) {
     <p><a href="/byty">← Zpět na seznam</a></p>
     <h1>Statistiky</h1>
     <ul>${countRows}</ul>
-    <p class="muted">Z toho ${mergedCount} nemovitostí nalezeno na víc portálech zároveň.</p>
+    <p class="muted">Z toho ${mergedCount} nemovitostí nalezeno na víc portálech zároveň — <a href="/slouceni">zkontrolovat sloučení</a>.</p>
     <h2>Zmizelé z nabídky za posledních 90 dní</h2>
     <p>${
       removedRecentWithData.length
@@ -1740,6 +1744,103 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
 // nalezení bytu v katastru a zapíše výsledek ruční kontroly.
 const KN_URL = "https://nahlizenidokn.cuzk.cz/";
 const KN_RECHECK_DAYS = 7;
+
+// --- Ruční sloučení a rozdělení bytů (manual-groups.js, group-review.js) ---
+//
+// Automatika spojuje nabídky téhož bytu z víc portálů podle ceny, výměry a textu; když se plete (RealityMIX se
+// sklepem má jinou výměru, dva různé byty se stejným textem), má uživatel poslední slovo. Zásah se zapisuje do
+// sloupce `manual_group` všech dotčených nabídek a vždy vyhrává nad automatikou.
+const MERGE_STATUS = { active: "v nabídce", reserved: "rezervováno", sold: "prodáno", removed: "zmizelo" };
+
+function mergeForm(encId, hidden, buttonHtml) {
+  return `<form class="ajax-form kn-form" method="post" action="/byt/${encId}/slouceni">${hidden}${buttonHtml}</form>`;
+}
+
+// Jedna nabídka bytu s tlačítkem "Oddělit" (jen když má byt víc nabídek). `weakNotes` = v čem se rozchází s ostatními.
+function mergeMemberRow(m, { encId, canDetach, weakNotes = null }) {
+  const area = m.area_m2 ? `${m.area_m2} m²` : "výměra neznámá";
+  const price = m.price_czk != null ? formatCzk(m.price_czk) : "bez ceny";
+  const detach = canDetach
+    ? mergeForm(
+        encId,
+        `<input type="hidden" name="listing" value="${esc(m.id)}">`,
+        `<button type="submit" name="action" value="detach" class="kn-btn kn-btn--later" onclick="return confirm('Oddělit tuhle nabídku od ostatních? Zůstane jako samostatný byt a už se k ničemu automaticky nepřipojí.')">Oddělit</button>`
+      )
+    : "";
+  return `<li class="merge-member${weakNotes ? " merge-member--weak" : ""}"><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(SOURCE_LABELS[m.source] || m.source)} ↗</a> <span class="muted">${esc(area)} · ${esc(price)} · ${esc(MERGE_STATUS[m.status] || m.status)}</span>${weakNotes && weakNotes.length ? ` <strong class="merge-why">${esc(weakNotes.join(", "))}</strong>` : ""} ${detach}</li>`;
+}
+
+// Sekce "Sloučení nabídek" v detailu bytu: nabídky bytu s možností oddělit, potvrzení a ruční sloučení s jiným bytem.
+function renderMergeSection(group, allGroups) {
+  const rep = primaryListing(group.members);
+  const encId = encodeURIComponent(rep.id);
+  const review = reviewGroup(group);
+  const weakById = new Map(review.weak.map((w) => [w.id, w.notes]));
+  const canDetach = group.members.length > 1;
+  const rows = group.members.map((m) => mergeMemberRow(m, { encId, canDetach, weakNotes: weakById.get(m.id) })).join("");
+  const candidates = mergeCandidates(allGroups, group);
+  const options = candidates
+    .map((g) => {
+      const r = primaryListing(g.members);
+      const portals = [...new Set(g.members.map((m) => SOURCE_LABELS[m.source] || m.source))].join(" + ");
+      const label = [r.disposition, r.area_m2 ? `${r.area_m2} m²` : null, bestAddress(g.members), priceLabel(g.members), portals].filter(Boolean).join(" · ");
+      return `<option value="${esc(r.id)}">${esc(label)}</option>`;
+    })
+    .join("");
+  const state = group.manual
+    ? `<p class="muted">✋ Byt je upravený ručně — automatika ho nemění. ${mergeForm(encId, "", `<button type="submit" name="action" value="release" class="kn-btn kn-btn--later" onclick="return confirm('Vrátit byt automatice? Nabídky se znovu seskupí podle cen, výměr a textu.')">Vrátit na automatiku</button>`)}</p>`
+    : review.level === "check"
+    ? `<p class="merge-check">⚠ Nabídky se v něčem rozcházejí (zvýrazněno). Je to opravdu týž byt? ${mergeForm(encId, "", `<button type="submit" name="action" value="lock" class="kn-btn kn-btn--sold">Ano, týž byt</button>`)}</p>`
+    : "";
+  const mergeFormHtml = options
+    ? mergeForm(
+        encId,
+        `<select name="target" required><option value="">Sloučit s jiným bytem…</option>${options}</select>`,
+        `<button type="submit" name="action" value="merge" class="kn-btn kn-btn--later" onclick="return confirm('Sloučit s vybraným bytem? Obě nabídky budou jeden byt a automatika se jich přestane týkat.')">Sloučit</button>`
+      )
+    : "";
+  return `<details class="merge-section"${review.level === "check" ? " open" : ""}>
+      <summary><strong>🔗 Sloučení nabídek</strong> <span class="muted">— ${group.members.length === 1 ? "jediná nabídka" : `${group.members.length} nabídek jednoho bytu`}${group.manual ? ", ručně upraveno" : ""}${review.level === "check" ? ", ke kontrole" : ""}</span></summary>
+      ${state}
+      <ul class="merge-members">${rows}</ul>
+      ${mergeFormHtml}
+    </details>`;
+}
+
+// Stránka /slouceni: sloučené byty, kde se nabídky rozcházejí (ke kontrole), a ručně upravené byty.
+function renderMergeReview(db) {
+  const groups = groupListings(db.prepare("SELECT * FROM listings").all());
+  const flagged = groups.filter((g) => g.merged && !g.manual).map((g) => ({ g, review: reviewGroup(g) })).filter((x) => x.review.level === "check");
+  const manual = groups.filter((g) => g.manual);
+  const card = ({ g, review }) => {
+    const rep = primaryListing(g.members);
+    const encId = encodeURIComponent(rep.id);
+    const weakById = new Map(review ? review.weak.map((w) => [w.id, w.notes]) : []);
+    const canDetach = g.members.length > 1;
+    const rows = g.members.map((m) => mergeMemberRow(m, { encId, canDetach, weakNotes: weakById.get(m.id) })).join("");
+    const action = g.manual
+      ? mergeForm(encId, "", `<button type="submit" name="action" value="release" class="kn-btn kn-btn--later" onclick="return confirm('Vrátit byt automatice?')">Vrátit na automatiku</button>`)
+      : mergeForm(encId, "", `<button type="submit" name="action" value="lock" class="kn-btn kn-btn--sold">Ano, týž byt</button>`);
+    return `<div class="kn-item">
+        <div class="kn-head"><a href="/byt/${encId}">${esc(cardTitle(rep, bestAddress(g.members), priceLabel(g.members)))}</a></div>
+        <ul class="merge-members">${rows}</ul>
+        ${action}
+      </div>`;
+  };
+  return `
+    <h1>Sloučení nabídek</h1>
+    <p class="muted">
+      Stejný byt inzerovaný na víc portálech appka spojuje sama podle ceny, výměry a textu inzerátu. Tady jsou byty, kde se
+      nabídky v něčem rozcházejí — obvykle jiná výměra (RealityMIX ji uvádí se sklepem) nebo cena. Většinou jde o tentýž byt:
+      potvrď ho, ať se už nepřipomíná. Když ne, oddělíš nabídku, která tam nepatří. Ruční zásah vždy vyhrává nad automatikou;
+      ručně upravený byt se dál automaticky nemění, dokud ho nevrátíš zpět. Nabídky sloučíš i ručně — v detailu bytu, sekce
+      „Sloučení nabídek“.
+    </p>
+    <h2>Ke kontrole (${flagged.length})</h2>
+    ${flagged.length ? `<div class="kn-list">${flagged.map(card).join("")}</div>` : `<p class="muted">Nic ke kontrole — nabídky sloučených bytů si neprotiřečí.</p>`}
+    <h2>Ručně upravené (${manual.length})</h2>
+    ${manual.length ? `<div class="kn-list">${manual.map((g) => card({ g, review: null })).join("")}</div>` : `<p class="muted">Zatím žádný byt, který bys sloučil nebo rozdělil ručně.</p>`}`;
+}
 
 // Údaje, podle kterých se byt v katastru hledá, jednou větou (a ke zkopírování): přesná adresa zapsaná uživatelem
 // (vč. jednotky) má přednost před přibližným místem z inzerátu; k tomu katastrální území z RÚIAN (v katastru se byt
@@ -2378,6 +2479,44 @@ const server = createServer(async (req, res) => {
       if (Object.keys(updates).length) for (const m of group.members) updateListingFields(db, m.id, updates);
     }
     res.writeHead(302, { Location: req.headers.referer || "/kontrola" });
+    return res.end();
+  }
+
+  if (url.pathname === "/slouceni" && req.method === "GET") {
+    return sendHtml(res, 200, layout("Sloučení nabídek — Trh bytů", renderMergeReview(db)));
+  }
+
+  // Ruční sloučení / rozdělení bytů (viz renderMergeSection). `action`: detach (nabídka `listing` samostatně), merge
+  // (spojit s bytem, jehož nabídka je `target`), lock (potvrdit byt tak, jak je), release (zpět na automatiku).
+  // Zapisuje se na všechny dotčené nabídky najednou (jedna transakce).
+  const mergeMatch = url.pathname.match(/^\/byt\/([^/]+)\/slouceni$/);
+  if (mergeMatch && req.method === "POST") {
+    const id = decodeURIComponent(mergeMatch[1]);
+    const fields = await parseBody(req);
+    const groups = groupListings(db.prepare("SELECT * FROM listings").all());
+    const groupOf = (listingId) => groups.find((g) => g.members.some((m) => m.id === listingId));
+    const group = groupOf(id);
+    let plan = null;
+    if (group) {
+      if (fields.action === "detach") plan = planDetach(group, fields.listing);
+      else if (fields.action === "lock") plan = planLock([group]);
+      else if (fields.action === "release") plan = planRelease(group);
+      else if (fields.action === "merge") {
+        const other = groupOf(fields.target);
+        if (other && other !== group) plan = planLock([group, other]);
+      }
+    }
+    if (plan) {
+      db.exec("BEGIN");
+      try {
+        for (const listingId of plan.ids) updateListingFields(db, listingId, { manual_group: plan.token });
+        db.exec("COMMIT");
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+    }
+    res.writeHead(302, { Location: req.headers.referer || `/byt/${encodeURIComponent(id)}` });
     return res.end();
   }
 
