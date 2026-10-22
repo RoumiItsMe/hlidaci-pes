@@ -76,6 +76,22 @@ Přepínač je v adrese (`?cols=all`), takže se zachová při filtrování a ř
 Filtry stavu a řazení v tabulce se vracejí do tabulky a drží zvolené město a
 sloupce (dřív odkaz filtru stavu vedl na přehled a řazení zapomnělo filtr).
 
+**Filtry tabulky srovnání** (panel nad tabulkou, `compare-filters.js`, testy `compare-filters.test.js`). Vedle stavu
+nabídky, „Chybí údaje“ a města jde tabulku zúžit podle:
+
+- **vlastnictví** (osobní / družstevní / … — jen hodnoty, které v datech opravdu jsou; „bez údaje“ najde byty, kterým
+  vlastnictví chybí, ať je můžeš doplnit), **dispozice** (od nejmenší: 1+kk, 1+1, 2+kk, …) a **hledání** (stejné jako na
+  stránce Byty — ulice, popis, ID…);
+- v **Další filtry**: stav bytu (vč. „bez hodnocení“), **cena od–do**, **plocha od–do**, **v nabídce aspoň N dní** a **jen
+  zlevněné**. Částku stačí napsat jako `3000000`, `3 000 000`, `3,5m` nebo `2500k`; neplatná hodnota filtr nezapne.
+
+Filtry se kombinují s řazením: třeba **jen osobní vlastnictví seřazené podle „Doba v nabídce“ sestupně** (nejdéle ležící
+byty nahoře), případně ještě „v nabídce aspoň 60 dní“ a pilulka *V nabídce* (ta vyřadí už zmizelé byty, jejichž doba je
+doba do zmizení). Aktivní filtry jsou pod panelem jako **odznaky s ✕** (zrušíš jeden) a „Zrušit všechny filtry“; v nadpisu
+je „17 z 79“. Byt bez ceny / plochy / doby rozsah nesplní (nevíme, kam patří). Filtry jsou v adrese
+(`/tabulka?vlastnictvi=Osobní&sort=days_dir_desc`), takže se drží při řazení kliknutím na hlavičku a jde si pohled uložit
+jako záložku v prohlížeči.
+
 **Hlavní přehled je řádkový** — 1 nemovitost = 1 řádek, ale hustší než
 holá tabulka: náhledová fotka (nebo "Bez fotky", když ji appka nemá u
 žádného sloučeného zdroje), čitelný nadpis ve tvaru

@@ -509,6 +509,21 @@ a.addr-chip--candidate:hover { text-decoration: underline; }
 .kn-progress { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.6rem 0; padding: 0.5rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font-size: 0.9rem; }
 .kn-progress progress { width: 9rem; height: 0.7rem; }
 
+/* Filtry tabulky Srovnání (compare-filters.js) */
+/* Přebíjí obecné `form { ... }` (sloupec, rámeček, pozadí, max-width). */
+.compare-filters { display: flex; flex-direction: column; gap: 0.4rem; max-width: none; padding: 0; background: none; border: none; margin: 0.6rem 0; }
+.cf-row { display: flex; flex-wrap: wrap; gap: 0.4rem 0.6rem; align-items: center; }
+.cf-row input[type="search"] { flex: 1 1 14rem; min-width: 10rem; max-width: 24rem; }
+.compare-filters button { align-self: auto; }
+.cf-more > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+.cf-more > .cf-row { margin-top: 0.4rem; }
+.cf-group { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
+.cf-num { width: 6.5rem; }
+.compare-filters .cf-check { flex-direction: row; align-items: center; gap: 0.35rem; font-size: 0.85rem; }
+.compare-filters .cf-check input { width: auto; }
+.cf-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.cf-chip { font-size: 0.82rem; padding: 0.15rem 0.6rem; border-radius: 999px; background: var(--card); border: 1px solid var(--border); text-decoration: none; color: var(--text); white-space: nowrap; }
+.cf-chip:hover { border-color: var(--accent); }
 /* Hledání na stránce Byty */
 /* Přebíjí obecné `form { ... }` (sloupec, rámeček, pozadí, max-width) — jedna řada: pole, tlačítko, zrušení. */
 .search-form { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.6rem 0; max-width: none; padding: 0; background: none; border: none; }

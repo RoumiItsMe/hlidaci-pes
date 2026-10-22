@@ -35,6 +35,7 @@ import { entryDiscount, percent, discountRangeLabel, discountFromGroups, MIN_CAL
 import { knLinks, priceStake, priceReadiness, verificationProgress } from "./kn-packet.js";
 import { reviewGroup, mergeCandidates } from "./group-review.js";
 import { parseQuery, searchEntry } from "./search.js";
+import { applyCompareFilters, compareFilterOptions, describeCompareFilters, COMPARE_FILTER_PARAMS, NONE as FILTER_NONE } from "./compare-filters.js";
 import { planDetach, planLock, planRelease } from "./manual-groups.js";
 import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
 import { readTrackLock } from "./track-lock.js";
@@ -758,12 +759,17 @@ function renderComparisonTable(db, filters) {
   const entries = computeEntries(db);
 
   const cityOptions = [...new Set(entries.map((e) => e.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
+  const filterOptions = compareFilterOptions(entries);
+  const conditionOptions = OWN_FIELDS.find((f) => f.column === "own_condition").options;
 
   // Skryté (křížkem vyřazené) se z tabulky srovnání vylučují stejně jako z
   // hlavního přehledu — je to uživatelovo "tohle mě nezajímá".
   let filtered = entries.filter((e) => !e.hidden);
+  const visibleCount = filtered.length;
   if (statusFilter) filtered = filtered.filter((e) => matchesStatusFilter(e, statusFilter));
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
+  // Vlastnictví, dispozice, stav, cena, plocha, doba v nabídce, zlevněné, hledání (compare-filters.js).
+  filtered = applyCompareFilters(filtered, filters);
   const missingCount = entries.filter((e) => missingEssentials(e).length > 0).length;
   if (missingView) filtered = filtered.filter((e) => missingEssentials(e).length > 0);
 
@@ -780,7 +786,14 @@ function renderComparisonTable(db, filters) {
     return dir === "asc" ? cmp : -cmp;
   });
 
-  const current = { status: statusFilter, city: cityFilter, sort: sortParam, cols: colsParam, chybi: missingFilter };
+  const current = {
+    status: statusFilter,
+    city: cityFilter,
+    sort: sortParam,
+    cols: colsParam,
+    chybi: missingFilter,
+    ...Object.fromEntries(COMPARE_FILTER_PARAMS.map((key) => [key, filters[key]])),
+  };
   const filterLinks = STATUS_FILTERS
     .map((s) => {
       const label = statusFilterLabel(s);
@@ -881,17 +894,54 @@ function renderComparisonTable(db, filters) {
     showAll ? "Méně sloupců" : `Víc sloupců (+${extraColumnCount})`
   }</a>`;
 
+  // Filtrační panel: nejčastější filtry vždy vidět, zbytek v "Další filtry" (rozbalené, když je nějaký zapnutý).
+  const option = (value, label, selected) => `<option value="${esc(value)}"${selected ? " selected" : ""}>${esc(label)}</option>`;
+  const ownershipSelect = `<select name="vlastnictvi" onchange="this.form.submit()" aria-label="Vlastnictví"><option value="">Vlastnictví (vše)</option>${filterOptions.ownerships.map((o) => option(o, o, filters.vlastnictvi === o)).join("")}${option(FILTER_NONE, "bez údaje", filters.vlastnictvi === FILTER_NONE)}</select>`;
+  const dispositionSelect = `<select name="dispozice" onchange="this.form.submit()" aria-label="Dispozice"><option value="">Dispozice (vše)</option>${filterOptions.dispositions.map((d) => option(d, d, filters.dispozice === d)).join("")}</select>`;
+  const conditionSelect = `<select name="stav_bytu" onchange="this.form.submit()" aria-label="Stav bytu"><option value="">Stav bytu (vše)</option>${conditionOptions.map(([code, label]) => option(code, label, filters.stav_bytu === code)).join("")}${option(FILTER_NONE, "bez hodnocení", filters.stav_bytu === FILTER_NONE)}</select>`;
+  const numberInput = (name, placeholder, label) =>
+    `<input type="text" inputmode="decimal" name="${name}" value="${esc(filters[name] || "")}" placeholder="${placeholder}" aria-label="${label}" class="cf-num" title="${label} (stačí číslo, i 3m = 3 000 000)">`;
+  const advancedActive = ["stav_bytu", "cena_od", "cena_do", "plocha_od", "plocha_do", "dnu_od", "zlevneno"].some((k) => filters[k]);
+  const chips = [
+    ...(cityFilter ? [{ label: `Město: ${cityFilter}`, clear: ["city"] }] : []),
+    ...describeCompareFilters(filters, { conditionLabel: (code) => conditionOptions.find(([c]) => c === code)?.[1] ?? code }),
+  ];
+  const clearAll = Object.fromEntries(["city", "chybi", ...COMPARE_FILTER_PARAMS].map((key) => [key, null]));
+  const chipsHtml = chips.length
+    ? `<div class="cf-chips">${chips
+        .map((c) => `<a class="cf-chip" href="${buildQuery(current, Object.fromEntries(c.clear.map((key) => [key, null])), "/tabulka")}" title="Zrušit tenhle filtr">${esc(c.label)} ✕</a>`)
+        .join("")}<a class="filter" href="${buildQuery(current, clearAll, "/tabulka")}">Zrušit všechny filtry</a></div>`
+    : "";
+  const countLabel = filtered.length === visibleCount ? `${filtered.length}` : `${filtered.length} z ${visibleCount}`;
+
   return `
-    <h1>Srovnání bytů (${filtered.length})</h1>
+    <h1>Srovnání bytů (${countLabel})</h1>
     <div class="filters">${filterLinks}${missingLink}</div>
+    <form method="get" action="/tabulka" class="compare-filters">
+      <input type="hidden" name="status" value="${esc(statusFilter || "")}">
+      <input type="hidden" name="chybi" value="${esc(missingFilter || "")}">
+      <input type="hidden" name="sort" value="${esc(sortParam || "")}">
+      <input type="hidden" name="cols" value="${esc(colsParam || "")}">
+      <div class="cf-row">
+        <select name="city" onchange="this.form.submit()" aria-label="Město">${cityOptionsHtml}</select>
+        ${ownershipSelect}
+        ${dispositionSelect}
+        <input type="search" name="q" value="${esc(filters.q || "")}" placeholder="Hledat: ulice, popis, ID…" aria-label="Hledat byt" autocomplete="off">
+        <button type="submit">Filtrovat</button>
+      </div>
+      <details class="cf-more"${advancedActive ? " open" : ""}>
+        <summary>Další filtry</summary>
+        <div class="cf-row">
+          ${conditionSelect}
+          <span class="cf-group">Cena ${numberInput("cena_od", "od", "Cena od (Kč)")}–${numberInput("cena_do", "do", "Cena do (Kč)")} Kč</span>
+          <span class="cf-group">Plocha ${numberInput("plocha_od", "od", "Plocha od (m²)")}–${numberInput("plocha_do", "do", "Plocha do (m²)")} m²</span>
+          <span class="cf-group">V nabídce aspoň ${numberInput("dnu_od", "dní", "Doba v nabídce aspoň (dní)")} dní</span>
+          <label class="cf-check"><input type="checkbox" name="zlevneno" value="1"${filters.zlevneno === "1" ? " checked" : ""} onchange="this.form.submit()"> Jen zlevněné</label>
+        </div>
+      </details>
+    </form>
     <div class="toolbar">
-      <form method="get" action="/tabulka" class="select-filters">
-        <input type="hidden" name="status" value="${esc(statusFilter || "")}">
-        <input type="hidden" name="chybi" value="${esc(missingFilter || "")}">
-        <input type="hidden" name="sort" value="${esc(sortParam || "")}">
-        <input type="hidden" name="cols" value="${esc(colsParam || "")}">
-        <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
-      </form>
+      ${chipsHtml}
       ${colsLink}
     </div>
     <div class="compare-wrap">
@@ -2386,6 +2436,8 @@ const server = createServer(async (req, res) => {
       sort: url.searchParams.get("sort") || null,
       cols: url.searchParams.get("cols") === "all" ? "all" : null,
       chybi: url.searchParams.get("chybi") === "udaje" ? "udaje" : null,
+      // Filtry tabulky (compare-filters.js): texty z URL, nebo null.
+      ...Object.fromEntries(COMPARE_FILTER_PARAMS.map((key) => [key, (url.searchParams.get(key) || "").slice(0, 200) || null])),
     };
     return sendHtml(res, 200, layout("Srovnání — Trh bytů", renderComparisonTable(db, filters), { wide: true }));
   }
