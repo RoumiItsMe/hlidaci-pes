@@ -138,6 +138,8 @@ function captureGeoIfMissing(existing, fields, detail) {
   Object.assign(fields, geoFields(detail.geo));
 }
 
+const NOT_AN_OFFER_LABELS = { demand: "poptávka", rental: "pronájem", share: "jen podíl na bytě" };
+
 async function processSource(db, source, watch) {
   let items;
   try {
@@ -164,11 +166,19 @@ async function processSource(db, source, watch) {
       // Poptávka ("Poptávka bytu v …") ani pronájem není nabídka bytu k prodeji — nezaeviduje se (viz region-guard.js).
       const notAnOffer = notAnOfferReason({ title: item.title, url: item.url, priceCzk: item.priceCzk });
       if (notAnOffer) {
-        log(`[${source.name}] není nabídka k prodeji (${notAnOffer === "rental" ? "pronájem" : "poptávka"}), přeskočeno: ${item.id} — ${item.title}`);
+        log(`[${source.name}] není nabídka k prodeji (${NOT_AN_OFFER_LABELS[notAnOffer]}), přeskočeno: ${item.id} — ${item.title}`);
         continue;
       }
       // Nový inzerát — dotáhnout detail (popis, fotky, případně reserved).
       const detail = await source.fetchDetail(item.url);
+      // Prodej jen podílu na bytě (id. 1/2) se pozná až z textu, který výpis nemá — RealityMIX ho
+      // nese v geo.text, ostatní v description (viz region-guard.js, listing-text.js).
+      const notAnOfferByText = notAnOfferReason({ title: item.title, description: detail.description, geo_json: detail.geo });
+      if (notAnOfferByText) {
+        log(`[${source.name}] není nabídka k prodeji (${NOT_AN_OFFER_LABELS[notAnOfferByText]}), přeskočeno: ${item.id} — ${item.title}`);
+        await sleep(250);
+        continue;
+      }
       // Poloha z detailu leží daleko od všech sledovaných lokalit (portál doplnil
       // výpis nabídkou odjinud) — nezaeviduje se (viz region-guard.js). Neznámá
       // poloha se nevylučuje.

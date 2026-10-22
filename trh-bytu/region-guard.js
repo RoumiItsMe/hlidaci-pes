@@ -14,6 +14,7 @@
 
 import { haversineKm } from "../lib/geo.js";
 import { stripDiacritics } from "./geo-suggest.js";
+import { listingText } from "./listing-text.js";
 
 // Okruh lokality (config.js: 5 km) + tolik km navíc — bod portálu bývá posazený
 // do středu obce nebo ulice a okraj okruhu by jinak chytl i nabídky z jeho kraje.
@@ -84,10 +85,39 @@ export function isRentalAd({ title, url, price_czk: price, priceCzk }) {
   return RENTAL_URL_RE.test(String(url ?? "")) || RENTAL_TITLE_RE.test(String(title ?? "")) || (typeof amount === "number" && amount > 0 && amount < MIN_SALE_PRICE_CZK);
 }
 
-/** Proč záznam není nabídka bytu k prodeji: "demand" (poptávka), "rental" (pronájem), jinak null. */
+// Podíl na bytě (id. 1/2, "spoluvlastnický podíl o velikosti 1/2 bytové jednotky", dražba poloviny):
+// kupuje se část bytu a cena je za ni, takže v přehledu cen bytů nemá co dělat (zkresluje
+// statistiky; reálně dražba poloviny bytu v Knapovci za 680 000 Kč). Nehledá se holé slovo
+// "podíl" — podíl na společných částech domu ("1656/10000") nebo na pozemku je u běžného bytu
+// normální — ale zlomek u slova byt/jednotka/nemovitost/dům nebo za "id."/"ideální". Patro
+// ("2/5") nebo velký jmenovatel se tím nechytí.
+const FRACTION = String.raw`(?:(?<![\d/])[1-9]\d?\s?\/\s?[1-9]\d?(?![\d/])|[½⅓⅔¼¾⅕⅙⅛])`;
+const OF_SIZE = String.raw`(?:(?:o|ve)\s+velikosti\s+|ve\s+výši\s+)?`;
+const FLAT_WORD = String.raw`(?:byt|bytov|jednotk|nemovit|dom|dům)`;
+const SHARE_RES = [
+  // "id. 1/2", "ideální 1/2", "id. podíl o velikosti 1/2", "ideální spoluvlastnický podíl ½"
+  new RegExp(String.raw`(?<![\p{L}])(?:id\.|ideáln\p{L}*)\s*(?:spoluvlastnick\p{L}*\s+)?(?:podíl\p{L}*\s+)?${OF_SIZE}${FRACTION}`, "iu"),
+  // "podíl o velikosti 1/2 bytové jednotky", "spoluvlastnický podíl 1/3 na bytě"
+  new RegExp(String.raw`podíl\p{L}*\s+${OF_SIZE}${FRACTION}\s+(?:na\s+)?${FLAT_WORD}`, "iu"),
+  // "prodej 1/2 bytu", "nabízíme polovinu bytové jednotky", "předmětem dražby je ideální ½ nemovitosti"
+  new RegExp(String.raw`(?<![\p{L}])(?:prodej\p{L}*|prodám|prodáme|nabízím|nabízíme|dražb\p{L}*|předmětem\s+\p{L}+(?:\s+je)?)\s+(?:se\s+)?(?:ideáln\p{L}*\s+)?(?:${FRACTION}|polovin\p{L}*|půlk\p{L}*)\s+(?:z\s+)?${FLAT_WORD}`, "iu"),
+];
+
+/** Je to prodej jen PODÍLU na bytě (id. 1/2…), ne celého bytu? Text = titulek + popis. */
+export function isSharePurchase(text) {
+  const value = String(text ?? "");
+  return SHARE_RES.some((re) => re.test(value));
+}
+
+/**
+ * Proč záznam není nabídka bytu k prodeji: "demand" (poptávka), "rental" (pronájem), "share"
+ * (jen podíl na bytě), jinak null. Podíl se pozná z textu, takže ho jde posoudit jen tam, kde
+ * záznam nese popis (`description` / `geo_json`) — výpis ho nemá, viz track.js.
+ */
 export function notAnOfferReason(listing) {
   if (isDemandAd(listing.title)) return "demand";
   if (isRentalAd(listing)) return "rental";
+  if (isSharePurchase(listingText(listing))) return "share";
   return null;
 }
 

@@ -772,10 +772,19 @@ nestahuje.
 reálný případ: byt 3+1 na Křibu je na Sreality, iDNES, Bazoši i RealityMIX a
 u žádného ceny není) se neslučují podle ceny, ale **podle textu**: stejná
 dispozice, plocha (±1 m²) a shodný úsek popisu (porovnává se úsek z
-vnitřku popisu, protože iDNES předsazuje titulek). Portál bez popisu
-(RealityMIX) se spojí přes **přesnou shodu adresy včetně ulice** (na pořadí částí nezáleží) — jen město
-nestačí. Porovnávají se jen inzeráty z různých portálů a jen dvojice, kde
-aspoň jeden cenu nemá; dva inzeráty s různou cenou jsou vždy dva byty.
+vnitřku popisu, protože iDNES předsazuje titulek). Text se porovnává **bez
+interpunkce** (portály liší jen tečku × vykřičník) a u RealityMIX se bere z
+`geo_json.text`, kam se jeho popis ukládá. Jen když se z textu rozhodnout
+nedá (žádný nebo příliš krátký), spojí se přes **přesnou shodu adresy včetně
+ulice** (na pořadí částí nezáleží) — jen město nestačí. Porovnávají se jen
+inzeráty z různých portálů a jen dvojice, kde aspoň jeden cenu nemá nebo mají
+stejnou; dva inzeráty s různou cenou jsou vždy dva byty.
+
+**Stejná cena, ale jiná výměra.** Portály uvádějí u téhož bytu různou plochu
+(RealityMIX počítá se sklepem: 58 m² místo 52 m², 54 místo 36 m²). Takový
+inzerát se spojí, když text sedí a plocha druhého inzerátu se v něm zmiňuje
+("…52 m²…"). Jako hlavní záznam se pak bere důvěryhodnější portál (Sreality,
+iDNES), takže se zobrazí jeho výměra; fotky se sloučí ze všech inzerátů.
 
 V řádku se takový byt jmenuje **"… — cena na vyžádání"**; znamená to, že
 cena není na žádném z portálů zveřejněná (appka ji nemá odkud přečíst),
@@ -1179,6 +1188,14 @@ inzerátu a u nových nabídek to dělá sama (`detect-own-fields.js`, `extract-
 - **Poptávky:** inzerát typu „Poptávka bytu v …“ nebo „Koupím byt …“ (občas se objeví mezi nabídkami na Bazoši)
   se nezaeviduje; do `track.log` se zapíše „není nabídka (poptávka)“. Už uložené odstraní
   `purge-outside-region.js` (viz „Nabídky mimo sledovanou oblast“).
+- **Podíly na bytě:** inzerát, který prodává jen část bytu („id. 1/2“, „spoluvlastnický podíl o velikosti
+  1/2 bytové jednotky“, dražba poloviny bytu), se nezaeviduje — cena je za podíl a zkreslila by přehled
+  cen i statistiky. Pozná se z titulku a popisu (u RealityMIX z `geo_json.text`), takže až po stažení
+  detailu; `track.log`: „není nabídka k prodeji (jen podíl na bytě)“. Hledá se **zlomek u slova
+  byt / jednotka / nemovitost / dům nebo za „id.“ / „ideální“**. Holé „podíl“ ne: podíl na společných
+  částech domu (`1656/10000`) nebo na pozemku je u běžného bytu normální a patro (`2/5`) taky. Družstevní
+  podíl (převod celého bytu) se nevylučuje. Už uložené odstraní `purge-outside-region.js`. Hlídací pes
+  (Telegram) tohle pravidlo nemá, takže takový inzerát může dál přijít jako oznámení.
 - **Doplnění už uložených:** `node trh-bytu/backfill-parse.js --offline` (sekce podle `TRH_REGION`, bez sítě) —
   bezpečně opakovatelné, doplňuje jen prázdná pole a nikdy nepřepíše uloženou hodnotu, ani ručně zadanou.
   Spuštěno pro Náchod 21. 10. 2026: stav +21, konstrukce +8, parametry z textů RealityMIX (patro +15, sklep +12,

@@ -20,12 +20,12 @@ import { outsideReason, notAnOfferReason } from "./region-guard.js";
 import { acquireTrackLock, releaseTrackLock } from "./track-lock.js";
 
 const apply = process.argv.includes("--apply");
-const REASON_LABELS = { point: "poloha mimo oblast", address: "adresa mimo oblast", demand: "poptávka, ne nabídka", rental: "pronájem, ne prodej" };
+const REASON_LABELS = { point: "poloha mimo oblast", address: "adresa mimo oblast", demand: "poptávka, ne nabídka", rental: "pronájem, ne prodej", share: "jen podíl na bytě, ne celý byt" };
 const db = openDb();
-const rows = db.prepare("SELECT id, source, title, url, price_czk, address, status, first_seen_at, lat, lon FROM listings").all();
+const rows = db.prepare("SELECT id, source, title, url, price_czk, address, status, first_seen_at, lat, lon, description, geo_json FROM listings").all();
 const candidates = rows.map((r) => ({ ...r, reason: outsideReason(r, REGION_WATCH) ?? notAnOfferReason(r) })).filter((r) => r.reason);
 
-console.log(`Sekce „${REGION.label}“: ${rows.length} záznamů, k odstranění ${candidates.length} (mimo sledovanou oblast, poptávky, pronájmy).`);
+console.log(`Sekce „${REGION.label}“: ${rows.length} záznamů, k odstranění ${candidates.length} (mimo sledovanou oblast, poptávky, pronájmy, podíly na bytě).`);
 for (const c of candidates) {
   console.log(`  ${c.id} | ${c.status} | od ${c.first_seen_at.slice(0, 10)} | ${c.address || "(bez adresy)"} | ${REASON_LABELS[c.reason]}`);
 }

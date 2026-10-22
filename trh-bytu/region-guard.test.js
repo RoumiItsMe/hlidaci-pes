@@ -113,3 +113,50 @@ test("pronájem mezi nabídkami: pozná se podle URL, titulku nebo ceny v řádu
   assert.equal(notAnOfferReason({ title: "Pronájem bytu", url: "https://x/6" }), "rental");
   assert.equal(notAnOfferReason({ title: "Prodej bytu", url: "https://x/7", price_czk: 2_000_000 }), null);
 });
+
+import { isSharePurchase } from "./region-guard.js";
+
+test("podíl na bytě (id. 1/2, spoluvlastnický podíl, dražba poloviny) se pozná; celý byt a běžné podíly ne", () => {
+  // reálný text dražby poloviny bytu v Knapovci
+  const knapovec = "Prodej bytu, 2+1, 72 m² Předmětem dražby jsou následující nemovité věci: Byt a nebytová prostora ve vlastnictví povinného, podílem ½, a to: Spoluvlastnický podíl o velikosti 1/2 bytové jednotky č.3/1 v obci Ústí nad Orlicí, včetně příslušenství a podílu o velikosti 1656/10000 na společných částech domu";
+  for (const text of [
+    knapovec,
+    "Prodej id. 1/2 bytu 2+1 v Letohradě",
+    "Nabízím ideální 1/3 bytu 3+1 v Žamberku",
+    "Prodej ideálního podílu o velikosti 1/2 bytové jednotky 2+kk",
+    "Ideální ½ bytu, zbytek vlastní prodávající",
+    "Spoluvlastnický podíl 1/4 na bytě 2+1, cena za podíl",
+    "Prodám podíl ve výši 1/2 bytu v osobním vlastnictví",
+    "nabízíme polovinu bytové jednotky v Ústí nad Orlicí",
+    "Prodej id. podílu 1/2",
+  ]) {
+    assert.equal(isSharePurchase(text), true, text);
+  }
+  for (const text of [
+    "Prodej bytu 2+1, 54 m², cihlový, v ceně podíl 1656/10000 na společných částech domu",
+    "K bytu náleží podíl na společných částech domu a pozemku 1/20 na pozemku parc. č. 12",
+    "Spoluvlastnický podíl 1/20 na pozemku parc. č. 12 je součástí prodeje bytu",
+    "V ceně podíl o velikosti 1/6 pozemku p.č.560, zahrada",
+    "Podlaží: 2/5, byt 3+1 s lodžií, výtah",
+    "Byt ve 3/4 patře, ideální pro rodinu, ideální 3+1",
+    "Nabízím družstevní podíl spojený s právem nájmu bytu 3+1",
+    "Převod dr. podílu, byt 3+kk",
+    "Okolí je ideální pro rodiny s dětmi. Prodej bytu 1/2 hodiny od centra",
+    "Spoluvlastnický podíl na pozemku kolem domu, který lze využívat k parkování",
+    "Polovina bytu je po rekonstrukci, druhá polovina původní",
+    "",
+    null,
+    undefined,
+  ]) {
+    assert.equal(isSharePurchase(text), false, String(text));
+  }
+});
+
+test("notAnOfferReason: podíl se pozná z titulku i z popisu (RealityMIX ho má v geo_json), poptávka a pronájem mají přednost", () => {
+  assert.equal(notAnOfferReason({ title: "Prodej id. 1/2 bytu 2+1" }), "share");
+  assert.equal(notAnOfferReason({ title: "Prodej bytu 2+1", description: "Prodáváme ideální 1/2 bytové jednotky." }), "share");
+  assert.equal(notAnOfferReason({ title: "Prodej bytu, 2+1", geo_json: JSON.stringify({ text: "Spoluvlastnický podíl o velikosti 1/2 bytové jednotky č.3/1" }) }), "share");
+  assert.equal(notAnOfferReason({ title: "Prodej bytu 2+1", description: "Krásný byt po rekonstrukci.", geo_json: "{neplatný json" }), null);
+  assert.equal(notAnOfferReason({ title: "Poptávka bytu", description: "id. 1/2 bytu" }), "demand");
+  assert.equal(notAnOfferReason({ title: "Pronájem bytu", description: "id. 1/2 bytu" }), "rental");
+});

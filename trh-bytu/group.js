@@ -16,6 +16,8 @@
 // by tiše smazalo jeden reálný byt z přehledu. Radši dva řádky pro tutéž
 // nemovitost navíc, než jeden řádek omylem za dvě různé.
 
+import { descriptionForDetection } from "./listing-text.js";
+
 // Max. rozdíl v ploše (m²), co appka ještě bere jako "tentýž byt" napříč
 // portály. 1 m² pokrývá pozorovaný reálný rozdíl (51 vs 52 m² pro
 // identický inzerát); víc než to už je riziko, že jde o dva různé byty se
@@ -113,9 +115,22 @@ const MIN_DESCRIPTION_LEN = 100;
 const DESCRIPTION_SNIPPET_START = 60;
 const DESCRIPTION_SNIPPET_LEN = 100;
 
+// Bez interpunkce: portály tentýž text liší jen tečkou nebo vykřičníkem ("…v Ústí nad Orlicí!" ×
+// "…v Ústí nad Orlicí.") a doslovná shoda úseku by je pak rozlišila (reálný případ: Dukelská,
+// iDNES × RealityMIX).
 function normalizedText(text) {
-  return (text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  return (text || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
+
+// Popis inzerátu pro porovnávání: `description`, u RealityMIX (ten ho do sloupce neukládá, viz
+// detail/realitymix.js) text z geo_json. Bez toho RealityMIX nešlo poznat podle textu a
+// duplicita se rozpoznala jen při shodě plochy v toleranci — RealityMIX ji má často jinou
+// (sklep, balkon: 58 m² místo 52 m²).
+const textOf = (listing) => descriptionForDetection(listing);
 
 /**
  * Stejná dispozice, plocha v toleranci a shodný úvod popisu. Použité
@@ -133,8 +148,8 @@ export function sameAdByDescription(a, b) {
 
 // Jen text: true/false, nebo null, když se z popisů rozhodnout nedá.
 function descriptionsMatch(a, b) {
-  const da = normalizedText(a.description);
-  const db = normalizedText(b.description);
+  const da = normalizedText(textOf(a));
+  const db = normalizedText(textOf(b));
   if (da.length < MIN_DESCRIPTION_LEN || db.length < MIN_DESCRIPTION_LEN) return null;
   const [shorter, longer] = da.length <= db.length ? [da, db] : [db, da];
   return longer.includes(shorter.slice(DESCRIPTION_SNIPPET_START, DESCRIPTION_SNIPPET_START + DESCRIPTION_SNIPPET_LEN));
@@ -160,7 +175,7 @@ function areasCompatible(a, b) {
   if (a.area_m2 == null || b.area_m2 == null) return false;
   if (Math.abs(a.area_m2 - b.area_m2) <= AREA_TOLERANCE_M2) return true;
   const near = (areas, x) => areas.some((v) => Math.abs(v - x) <= AREA_TOLERANCE_M2);
-  return near(mentionedAreas(a.description), b.area_m2) || near(mentionedAreas(b.description), a.area_m2);
+  return near(mentionedAreas(textOf(a)), b.area_m2) || near(mentionedAreas(textOf(b)), a.area_m2);
 }
 
 // Adresa rozložená na části bez okresního dovětku ("okr. Ústí nad Orlicí"
