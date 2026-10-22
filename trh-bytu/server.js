@@ -34,6 +34,7 @@ import { effectivePriceForStats, renovatedSaleStats, almostSoldSaleStats, topSal
 import { entryDiscount, percent, discountRangeLabel, discountFromGroups, MIN_CALIBRATION_SAMPLES } from "./price-discount.js";
 import { knLinks, priceStake, priceReadiness, verificationProgress } from "./kn-packet.js";
 import { reviewGroup, mergeCandidates } from "./group-review.js";
+import { parseQuery, searchEntry } from "./search.js";
 import { planDetach, planLock, planRelease } from "./manual-groups.js";
 import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
 import { readTrackLock } from "./track-lock.js";
@@ -527,8 +528,12 @@ const SORT_LABELS = [
 
 
 function renderTable(db, filters) {
-  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter } = filters;
+  const { status: statusFilter, sort = "newest", city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter, q: searchQuery } = filters;
   const showHidden = hiddenView === "show";
+  // Hledání (search.js): kombinuje se s ostatními filtry; každé slovo musí být v bytu někde (adresa, název, ID,
+  // popis…). Když se hledá, ukážou se i skryté byty — kdo hledá konkrétní byt, chce ho najít, i když ho dřív vyřadil.
+  const searchTokens = parseQuery(searchQuery);
+  const searching = searchTokens.length > 0;
   const entries = computeEntries(db);
   const allGroups = entries.map((e) => e.g);
 
@@ -551,7 +556,7 @@ function renderTable(db, filters) {
   if (showHidden) {
     filtered = filtered.filter((e) => e.hidden);
   } else {
-    filtered = filtered.filter((e) => !e.hidden || (statusFilter === "reserved" && e.status === "reserved"));
+    filtered = filtered.filter((e) => searching || !e.hidden || (statusFilter === "reserved" && e.status === "reserved"));
     if (statusFilter) filtered = filtered.filter((e) => matchesStatusFilter(e, statusFilter));
   }
   if (cityFilter) filtered = filtered.filter((e) => e.city === cityFilter);
@@ -565,9 +570,25 @@ function renderTable(db, filters) {
   const suggestionCount = entries.filter(hasSuggestion).length;
   if (addressFilter === "navrh") filtered = filtered.filter(hasSuggestion);
   else if (addressFilter) filtered = filtered.filter(needsAddress);
+  const searchMatches = new Map();
+  if (searching) {
+    filtered = filtered.filter((e) => {
+      const match = searchEntry(e, searchTokens);
+      if (match) searchMatches.set(e, match);
+      return Boolean(match);
+    });
+  }
   filtered = [...filtered].sort(SORTERS[sort] || SORTERS.newest);
+  // Výchozí řazení při hledání: nejdřív byty, kde slova sedí už v adrese / názvu / ID, pak ty, kde jen v popisu
+  // (řazení je stabilní, uvnitř skupiny zůstává obvyklé pořadí). Výslovně zvolené řazení podle ceny se nemění.
+  if (searching && sort === "newest") filtered.sort((a, b) => searchMatches.get(a).tier - searchMatches.get(b).tier);
 
-  const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter };
+  const current = { status: statusFilter, sort, city: cityFilter, ownership: ownershipFilter, top: topFilter, hidden: hiddenView, adresa: addressFilter, q: searchQuery };
+  const hiddenInputs = (except = []) =>
+    Object.entries({ status: statusFilter, sort, top: topFilter, hidden: hiddenView, adresa: addressFilter, city: cityFilter, ownership: ownershipFilter, q: searchQuery })
+      .filter(([name]) => !except.includes(name))
+      .map(([name, value]) => `<input type="hidden" name="${name}" value="${esc(value || "")}">`)
+      .join("");
 
   const filterLinks = STATUS_FILTERS
     .map((s) => {
@@ -634,6 +655,8 @@ function renderTable(db, filters) {
       const descriptionSource = pickDescription(g.members);
       const snippet = descriptionSource ? truncate(descriptionSource.description, 220) : "";
       const updates = updatesChips(firstSeenAt, change, changeWhere);
+      const found = searchMatches.get(entry)?.context;
+      const matchLine = found ? `<div class="row-match">${esc(found.before)}<mark>${esc(found.match)}</mark>${esc(found.after)}</div>` : "";
 
       return `<div class="row${starred ? " row--starred" : ""}${hidden && !showHidden ? " row--hidden" : ""}">
         <div class="row-actions">${rowActionButtons(rep.id, starred, hidden)}</div>
@@ -642,7 +665,7 @@ function renderTable(db, filters) {
           <div class="row-body">
             <div class="row-title">${starred ? "⭐ " : ""}${esc(cardTitle(rep, address, priceText_))}</div>
             ${paramsLine ? `<div class="row-params">${esc(paramsLine)}</div>` : ""}
-            ${snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : ""}
+            ${matchLine || (snippet ? `<div class="row-snippet">${esc(snippet)}</div>` : "")}
             <div class="row-updates">${updates}</div>
             <div class="row-meta">
               <span class="badge" style="background:${st.color}">${esc(st.text)}</span>${saleChip}
@@ -656,16 +679,18 @@ function renderTable(db, filters) {
     .join("");
 
   return `
-    <h1>Byty (${filtered.length})</h1>
+    <h1>Byty (${filtered.length})${searching ? ` <span class="muted">— hledání „${esc(searchQuery.trim())}“</span>` : ""}</h1>
+    <form method="get" action="/byty" class="search-form" role="search">
+      ${hiddenInputs(["q"])}
+      <input type="search" name="q" value="${esc(searchQuery || "")}" placeholder="Hledat: ulice, název, popis, ID inzerátu…" aria-label="Hledat byt" autocomplete="off">
+      <button type="submit">Hledat</button>
+      ${searching ? `<a class="filter" href="${buildQuery(current, { q: null })}">✕ Zrušit hledání</a>` : ""}
+    </form>
     <div class="filters">${filterLinks}${topLink}${addressLink}${suggestionLink}${hiddenLink}</div>
     <div class="toolbar">
       <div class="filters">${sortLinks}</div>
       <form method="get" action="/byty" class="select-filters">
-        <input type="hidden" name="status" value="${esc(statusFilter || "")}">
-        <input type="hidden" name="sort" value="${esc(sort)}">
-        <input type="hidden" name="top" value="${esc(topFilter || "")}">
-        <input type="hidden" name="hidden" value="${esc(hiddenView || "")}">
-        <input type="hidden" name="adresa" value="${esc(addressFilter || "")}">
+        ${hiddenInputs(["city", "ownership"])}
         <select name="city" onchange="this.form.submit()">${cityOptionsHtml}</select>
         <select name="ownership" onchange="this.form.submit()">${ownershipOptionsHtml}</select>
       </form>
@@ -2349,6 +2374,7 @@ const server = createServer(async (req, res) => {
       top: url.searchParams.get("top") || null,
       hidden: url.searchParams.get("hidden") || null,
       adresa: url.searchParams.get("adresa") || null,
+      q: (url.searchParams.get("q") || "").slice(0, 200) || null,
     };
     return sendHtml(res, 200, layout("Byty — Trh bytů", renderTable(db, filters)));
   }

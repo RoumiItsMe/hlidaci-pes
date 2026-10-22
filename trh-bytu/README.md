@@ -119,6 +119,20 @@ nenašla). Všechny filtry/řazení se kombinují a odkazy mezi sebou
 zachovávají zvolený stav ostatních (klik na "Cena ↑" nezruší zvolené
 město).
 
+**Hledání** (pole nad filtry, `search.js`, testy `search.test.js`): najde konkrétní byt podle ulice, názvu, ID
+inzerátu nebo čehokoli z popisu. Hledá se **bez ohledu na diakritiku a velikost písmen** („sporitelni“ najde
+„Spořitelní“) a **každé zadané slovo musí v bytu být** (kdekoli — slova se nemusí držet pohromadě). Prohledává se adresa
+(i přesná adresa zapsaná v detailu), název, ID a odkaz inzerátu (z odkazu se dá najít i ulice), poznámka, LV, dispozice,
+výměra, cena (i „3 450 000“ s mezerami) a **celý popis všech nabídek bytu** — každý portál má jiný text, takže stačí, aby
+slovo uvedl kterýkoli. Slovo můžeš zadat jen zčásti („dukel“).
+
+- Kombinuje se se všemi filtry a řazením (stav, město, vlastnictví, ⭐ TOP…); odkazy mezi filtry hledání zachovávají,
+  „✕ Zrušit hledání“ ho odebere a nechá ostatní.
+- **Při hledání se ukážou i skryté byty** (označené „skryto“): kdo hledá konkrétní byt, chce ho najít, i když ho dřív vyřadil.
+  Jen pohled „Skryté“ zůstává pohledem na skryté.
+- Pořadí: nejdřív byty, kde slova sedí už v adrese / názvu / ID, pak ty, kde jen v popisu (u nich je pod názvem **úryvek
+  se zvýrazněnou shodou**, ať je vidět, proč byt vyšel). Výslovně zvolené řazení podle ceny se nemění.
+
 **Výchozí řazení ("Nejnovější") jde ve čtyřech skupinách za sebou:**
 1. byty **se změnou, které jsou zároveň TOP** (viz níž),
 2. byty **se změnou**,

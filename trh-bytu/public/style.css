@@ -509,6 +509,13 @@ a.addr-chip--candidate:hover { text-decoration: underline; }
 .kn-progress { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.6rem 0; padding: 0.5rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font-size: 0.9rem; }
 .kn-progress progress { width: 9rem; height: 0.7rem; }
 
+/* Hledání na stránce Byty */
+/* Přebíjí obecné `form { ... }` (sloupec, rámeček, pozadí, max-width) — jedna řada: pole, tlačítko, zrušení. */
+.search-form { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.6rem 0; max-width: none; padding: 0; background: none; border: none; }
+.search-form input[type="search"] { flex: 1 1 18rem; min-width: 12rem; max-width: 36rem; }
+.search-form button { align-self: auto; }
+.row-match { margin: 0.2rem 0; font-size: 0.85rem; color: var(--muted); }
+.row-match mark { background: #fde68a; color: inherit; padding: 0 0.1em; border-radius: 2px; }
 /* Ruční sloučení / rozdělení bytů (/slouceni a sekce "Sloučení nabídek" v detailu) */
 .merge-section { margin: 1rem 0; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
 .merge-members { margin: 0.4rem 0; padding: 0; list-style: none; }
