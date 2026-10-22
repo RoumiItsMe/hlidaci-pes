@@ -32,6 +32,7 @@ import { indexEntriesByListing, recentOffers, recentSales, saleMoment, recentPri
 import { computeEntries, SOURCE_LABELS, formatCzk, changeSources, priceLabel } from "./entries.js";
 import { effectivePriceForStats, renovatedSaleStats, almostSoldSaleStats, topSaleStats } from "./sale-stats.js";
 import { entryDiscount, percent, discountRangeLabel, discountFromGroups, MIN_CALIBRATION_SAMPLES } from "./price-discount.js";
+import { knLinks, priceStake, priceReadiness, verificationProgress } from "./kn-packet.js";
 import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
 import { readTrackLock } from "./track-lock.js";
 import { REGION, REGION_WATCH, OTHER_REGIONS, KN_OPTIONS } from "./region.js";
@@ -992,6 +993,23 @@ function renderDetail(db, id) {
   // Zmizelý byt bez rezervace nemá rozvrh, ale jde u něj poznat, že se v katastru ověřit nedá.
   const goneRemovedAt = !saleTrack && status === "removed" && !verdict ? latestRemovedAt(members) : null;
   const goneWatch = goneRemovedAt ? watchFor(agroup)(goneRemovedAt) : null;
+  // Podklady k ověření ceny jen u bytů, kde se o prodeji vůbec uvažuje (ne u bytu v nabídce a ne po "Neprodáno").
+  const discount = discountFromGroups(actx.groups).discount;
+  const knScan = kn?.building?.isknId ? loadKnScans(db).get(kn.building.isknId) : null;
+  const saleSectionPacket =
+    status !== "active" && verdict !== "withdrawn"
+      ? renderKnPacket({
+          members,
+          lookup: knLookupText({ rep, params: mergeParams(members), address: bestAddress(members), city: extractCity(bestAddress(members), REGION_WATCH), ai, kn, lv: pickOwnValue(members, "lv_number") }),
+          scan: knScan,
+          unitNumber: parseUnitNumber(ai.unit) ?? parseUnitNumber(pickOwnValue(members, "kn_auto_unit")),
+          knFiledAt: pickOwnValue(members, "kn_filed_at"),
+          plombaEnd: pickOwnValue(members, "kn_plomba_end"),
+          lastPrice: bestPrice(members),
+          verifiedPrice: pickOwnValue(members, "verified_sale_price_czk"),
+          discount,
+        })
+      : "";
   const saleSectionHtml = renderSaleSection({
     unverifiable: Boolean(saleTrack?.unverifiable || goneWatch?.unverifiable),
     rep,
@@ -1001,7 +1019,8 @@ function renderDetail(db, id) {
     track: saleTrack,
     addressInfo: ai,
     scan: saleTrack && kn?.building?.isknId ? loadKnScans(db).get(kn.building.isknId) : null,
-    discount: discountFromGroups(actx.groups).discount,
+    discount,
+    packet: saleSectionPacket,
   });
 
   return `
@@ -1678,7 +1697,7 @@ function saleStageText({ verdict, track, price, saleDate, filed, portalSold = fa
 // formulář se všemi údaji o prodeji. Zapisuje přes stejný endpoint jako fronta
 // Katastr (action "record"), takže cokoli se tu doplní, je hned vidět tam i ve
 // statistikách — a naopak.
-function renderSaleSection({ rep, members, status, verdict, track, addressInfo: ai, scan, unverifiable = false, discount = ASSUMED_PRICE_DISCOUNT }) {
+function renderSaleSection({ rep, members, status, verdict, track, addressInfo: ai, scan, unverifiable = false, discount = ASSUMED_PRICE_DISCOUNT, packet = "" }) {
   const price = pickOwnValue(members, "verified_sale_price_czk");
   const saleDate = pickOwnValue(members, "verified_sale_date");
   const filed = pickOwnValue(members, "kn_filed_at");
@@ -1707,6 +1726,7 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
   return `<details class="sale-section" id="prodej"${status !== "active" || hasData ? " open" : ""}>
       <summary><strong>🏛️ Prodej a katastr</strong> <span class="muted">— ${esc(stage)}</span></summary>
       <p class="muted">Cena, datum prodeje i podaný vklad znamenají, že je byt prodaný — appka ho tak označí všude (fronta Katastr, přehled, statistiky). Prázdné pole údaj smaže.</p>
+      ${packet}
       ${plomba}
       <p class="muted">${unitLine}</p>
       ${form}
@@ -1720,6 +1740,51 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
 // nalezení bytu v katastru a zapíše výsledek ruční kontroly.
 const KN_URL = "https://nahlizenidokn.cuzk.cz/";
 const KN_RECHECK_DAYS = 7;
+
+// Údaje, podle kterých se byt v katastru hledá, jednou větou (a ke zkopírování): přesná adresa zapsaná uživatelem
+// (vč. jednotky) má přednost před přibližným místem z inzerátu; k tomu katastrální území z RÚIAN (v katastru se byt
+// hledá podle k.ú. + čísla popisného, ne podle města), číslo LV a parametry bytu.
+function knLookupText({ rep, params, address, city, ai, kn, lv }) {
+  const specs = [rep.disposition, rep.area_m2 ? `${rep.area_m2} m²` : null, params?.floorInfo].filter(Boolean).join(" · ");
+  const place =
+    ai.state === "known"
+      ? [ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", ")
+      : `${address || city || ""} (${ai.state === "unknown" ? "přesná adresa nedohledatelná" : "jen přibližně — přesná adresa nebyla zapsána"})`;
+  return [place, kn ? `k.ú. ${kn.ku.nazev} [${kn.ku.kod}]` : null, lv ? `LV ${lv}` : null, specs].filter(Boolean).join(" — ");
+}
+
+// Podklady k ověření ceny (kn-packet.js): odkaz rovnou na jednotku / dům v katastru, údaje ke zkopírování, jestli už jde
+// cenu dohledat, a co je ve hře (odhad, který ověřená cena nahradí). Katastr ukáže vlastníka a další údaje až po
+// CAPTCHA — tu řešíš ty. Sdílí ho fronta Katastr i sekce "Prodej a katastr" v detailu bytu.
+function renderKnPacket({ members, lookup, scan, unitNumber, knFiledAt, plombaEnd, lastPrice, verifiedPrice, discount }) {
+  const links = knLinks({ scan, unitNumber });
+  const href = links.unit ?? links.building ?? KN_URL;
+  const openLabel = links.unit ? "Otevřít jednotku v katastru" : links.building ? "Otevřít dům v katastru" : "Otevřít katastr";
+  const ready = priceReadiness({ knFiledAt, plombaEnd });
+  const readyText = ready
+    ? ready.state === "ready"
+      ? `✅ Cenu už jde dohledat — ${plombaEnd ? "plomba skončila" : "od podání vkladu uplynulo víc než měsíc"} (${formatDateOnly(ready.day)}).`
+      : `⏳ Cenu zatím nehledej — dohledatelná bude zhruba od ${formatDateOnly(ready.day)}.`
+    : "";
+  const stake = priceStake({ lastPrice, verifiedPrice, discount });
+  const stakeText = stake
+    ? `Ve statistikách se teď počítá ~${formatCzk(stake.estimate)} (poslední cena ${formatCzk(stake.lastPrice)} −${percent(stake.discount)} %, rozpětí ${formatCzk(stake.low)}–${formatCzk(stake.high)}). Ověřená kupní cena odhad nahradí.`
+    : "";
+  const statusText = (m) => (m.status === "active" ? "v nabídce" : m.status === "sold" ? "prodáno" : m.status === "reserved" ? "rezervováno" : "zmizelo");
+  const listingLinks = members
+    .map((m) => `<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(SOURCE_LABELS[m.source] || m.source)} ↗</a> <span class="muted">${esc(statusText(m))}</span></li>`)
+    .join("");
+  return `<div class="kn-packet">
+      <div class="kn-packet-row">
+        <a class="kn-open" href="${esc(href)}" target="_blank" rel="noopener">${esc(openLabel)} ↗</a>
+        <button type="button" class="kn-copy btn-secondary" data-copy="${esc(lookup)}" title="Zkopíruje k.ú., číslo domu a jednotky, LV a parametry bytu">Zkopírovat údaje</button>
+      </div>
+      ${links.unitMissing ? `<div class="muted">⚠ Zapsaná jednotka v domě podle katastru neexistuje — odkaz vede na dům.</div>` : ""}
+      ${readyText ? `<div class="kn-ready kn-ready--${ready.state}">${esc(readyText)}</div>` : ""}
+      ${stakeText ? `<div class="muted kn-stake">${esc(stakeText)}</div>` : ""}
+      <details class="kn-direct"><summary>Původní inzeráty</summary><ul>${listingLinks}</ul></details>
+    </div>`;
+}
 
 // Přehled "co ze zmizelých bytů bez rezervace se dá dohledat a co ne" (vanish-trace.js): číslo "zmizelo 27,
 // hlídá se 7" samo o sobě nevypovídá — družstevní byty a stažené balíky se dohledat nedají z principu,
@@ -1823,20 +1888,28 @@ function renderKnQueue(db) {
   // podle k.ú. + čísla popisného, ne podle názvu města — a číslo LV, když ho
   // uživatel při první kontrole zapsal.
   const lookupFor = (e) => {
-    const specs = [e.rep.disposition, e.rep.area_m2 ? `${e.rep.area_m2} m²` : null, e.params.floorInfo].filter(Boolean).join(" · ");
-    const ai = e.addressInfo;
-    const place =
-      ai.state === "known"
-        ? [ai.exact, ai.unit ? `jednotka ${ai.unit}` : null].filter(Boolean).join(", ")
-        : `${e.address || e.city || ""} (${ai.state === "unknown" ? "přesná adresa nedohledatelná" : "jen přibližně — přesná adresa nebyla zapsána"})`;
     const ag = knActx.groups.find((g) => g.members.some((m) => m.id === e.rep.id));
     const kn = ag ? knInfoForGroup(knActx, ag, resolveForGroup(knActx, ag)) : null;
-    const lookup = [place, kn ? `k.ú. ${kn.ku.nazev} [${kn.ku.kod}]` : null, e.lvNumber ? `LV ${e.lvNumber}` : null, specs].filter(Boolean).join(" — ");
+    const lookup = knLookupText({ rep: e.rep, params: e.params, address: e.address, city: e.city, ai: e.addressInfo, kn, lv: e.lvNumber });
     const houseFacts = kn?.building
       ? ` <span class="muted">(dům: č.p. ${esc(kn.building.cp.join(", "))}${kn.building.floors ? `, ${kn.building.floors} podlaží` : ""}${kn.building.flats ? `, ${kn.building.flats} bytů` : ""})</span>`
       : "";
     return { lookup, houseFacts, buildingId: kn?.building?.isknId ?? null };
   };
+
+  // Podklady k ověření ceny (renderKnPacket): odkaz do katastru, údaje ke zkopírování, dohledatelnost ceny.
+  const knPacket = (e, { lookup, buildingId }) =>
+    renderKnPacket({
+      members: e.g.members,
+      lookup,
+      scan: buildingId ? knScans.get(buildingId) : null,
+      unitNumber: parseUnitNumber(e.addressInfo.unit) ?? parseUnitNumber(e.knAutoUnit),
+      knFiledAt: e.knFiledAt,
+      plombaEnd: e.plombaEnd,
+      lastPrice: e.price,
+      verifiedPrice: e.verifiedSalePrice,
+      discount: entryDiscount(e),
+    });
 
   // Časová osa bytu v jedné větě: co se kdy stalo.
   const timeline = (e) => {
@@ -1868,6 +1941,7 @@ function renderKnQueue(db) {
           `<details class="kn-direct"><summary>Znám rovnou cenu</summary>${actionForm(encId, `${saleFields(e)}${btn("sold", "Prodáno", "kn-btn--sold")}`)}</details>`;
     return `<div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}${houseFacts}</div>
         <div class="muted">${timeline(e)}</div>
+        ${knPacket(e, { lookup, buildingId })}
         ${plombaBlock(e, buildingId)}
         ${forms}`;
   };
@@ -1938,6 +2012,7 @@ function renderKnQueue(db) {
         </div>
         <div class="kn-lookup"><strong>Do katastru:</strong> ${esc(lookup)}${houseFacts}</div>
         <div class="muted">Zmizel ${esc(formatDateOnly(e.removedAt))} · ${esc(t.reasons.join(" · ") || "bez zvláštního signálu")}${checked}</div>
+        ${knPacket(e, { lookup, buildingId })}
         ${plomba}
         ${actionForm(encId, `${saleFields(e)}${btn("sold", "Prodáno", "kn-btn--sold")}${btn("withdrawn", "Neprodáno", "")}${btn("check", "Zatím nic", "kn-btn--later")}`)}
       </div>`;
@@ -1993,8 +2068,21 @@ function renderKnQueue(db) {
     : "";
   const nextUp = waiting[0];
 
+  // Proč se ověřování vyplatí: ceny prodaných bytů jsou z velké části odhad a slevu u odhadů appka odvodí
+  // ze skutečných cen, až jich bude dost (price-discount.js).
+  const progress = verificationProgress(entries[0]?.discount, MIN_CALIBRATION_SAMPLES);
+  const progressHtml = `<div class="kn-progress">
+      <progress max="${progress.needed}" value="${Math.min(progress.verified, progress.needed)}"></progress>
+      ${
+        progress.calibrated
+          ? `Ověřené prodejní ceny: <strong>${progress.verified}</strong> — sleva u odhadů (${percent(progress.discount)} %) je odvozená z nich, každá další ji zpřesní.`
+          : `Ověřené prodejní ceny: <strong>${progress.verified} z ${progress.needed}</strong>. Až jich bude ${progress.needed}, odvodí appka slevu u odhadů ze skutečných cen (teď pevných ${percent(progress.discount)} %) a statistiky přestanou stát jen na odhadu.`
+      }
+    </div>`;
+
   return `
     <h1>Kontrola v katastru</h1>
+    ${progressHtml}
     <p class="muted">
       Po rezervaci trvá, než se prodej v <a href="${KN_URL}" target="_blank" rel="noopener">katastru nemovitostí</a> vůbec
       ukáže — kupec s hotovostí podá návrh na vklad za 1–3 týdny, s hypotékou za 6–12 týdnů. Appka proto připomíná kontrolu

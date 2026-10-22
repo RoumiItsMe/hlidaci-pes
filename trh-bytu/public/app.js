@@ -217,3 +217,37 @@ document.addEventListener("submit", async (event) => {
   document.addEventListener("submit", close, true);
   window.addEventListener("resize", place);
 })();
+
+// Schránka: moderní API, a když není dostupné nebo ho prohlížeč odmítne (jiný než zabezpečený kontext, vložený
+// prohlížeč), starší cesta přes skrytý <textarea>. Vrací, jestli se kopírování povedlo.
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      return document.execCommand("copy");
+    } catch {
+      return false;
+    } finally {
+      area.remove();
+    }
+  }
+}
+
+// Tlačítko "Zkopírovat údaje" ve frontě Katastr: text k zkopírování je v data-copy. Delegovaně na dokumentu,
+// protože se obsah <main> po uložení formuláře vyměňuje (viz výš) a posluchač na tlačítku by zanikl.
+document.addEventListener("click", async (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-copy]") : null;
+  if (!button) return;
+  const original = button.textContent;
+  button.textContent = (await copyText(button.dataset.copy)) ? "Zkopírováno ✓" : "Kopírování se nepovedlo";
+  setTimeout(() => {
+    button.textContent = original;
+  }, 1500);
+});

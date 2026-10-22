@@ -549,6 +549,23 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
   zeptá); LV a jednotka zůstávají, ty patří bytu. Formuláře ve frontě Katastr jsou
   předvyplněné tím, co už je zapsané jinde. Při startu se jednorázově dopočítá
   verdikt u starších záznamů, které mají cenu, datum nebo vklad, ale verdikt ne.
+- **Podklady k ověření ceny** (`kn-packet.js`, testy `kn-packet.test.js`; v kartě bytu ve frontě i v sekci
+  **🏛️ Prodej a katastr** v detailu bytu po prodeji či zmizení). Katastr cenu přes API nedává, takže ji
+  zapisuješ ručně — appka ti jen připraví, ať to je rychlé:
+  - **Odkaz rovnou na jednotku** („Otevřít jednotku v katastru ↗“), když je číslo jednotky známé a v domě
+    existuje, jinak **na dům** (`ZobrazObjekt.aspx?typ=Jednotka|Budova&id=…` na nahlizenidokn.cuzk.cz;
+    id vrací API katastru při skenu domu). Bez skenu jen obecný odkaz do katastru. Vlastníka a další údaje katastr
+    ukáže až po vyřešení CAPTCHA — to appka nedělá a dělat nebude. Zapsaná jednotka, která v domě podle
+    katastru neexistuje, se označí varováním.
+  - **„Zkopírovat údaje“**: k.ú., číslo domu / jednotka, LV a parametry bytu jedním řádkem do schránky (totéž
+    jako řádek „Do katastru“).
+  - **Kdy cenu hledat:** po konci plomby, nebo když od podání vkladu uplynulo víc než ~měsíc (rozhodnutí o
+    vkladu), je cena „už dohledatelná“ (✅); dřív „zatím nehledej, dohledatelná bude od …“ (⏳).
+  - **Co je ve hře:** kolik se bytu teď počítá do statistik (poslední cena −X %, s rozpětím) a že ho ověřená cena
+    nahradí. U bytu s ověřenou cenou se nezobrazuje.
+  - **Původní inzeráty** (odkazy na všechny portály bytu) — k porovnání adresy, patra a popisu.
+  - Nahoře na stránce je **ukazatel postupu**: kolik ověřených cen appka má z 10 potřebných pro odvození slevy
+    ze skutečných dat (viz „Rozpětí odhadu a odvozená sleva“).
 - **Rozvrh kontrol** (nahoře na stránce, štítek **🔎 kandidát prodeje** v
   přehledu u bytů, které jsou právě k vyřízení): po rezervaci trvá, než se prodej
   v katastru vůbec ukáže — kupec s hotovostí podá návrh na vklad za 1–3 týdny,

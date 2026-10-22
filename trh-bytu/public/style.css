@@ -496,6 +496,19 @@ a.addr-chip--candidate:hover { text-decoration: underline; }
 /* `form label` (výš) skládá popisek nad pole — tady má být v jedné řadě. */
 .kn-form .kn-date { flex-direction: row; align-items: center; gap: 0.35rem; }
 .kn-form .kn-date input { width: auto; }
+/* Podklady k ověření ceny (kn-packet.js): odkaz do katastru, kopírování údajů, dohledatelnost, co je ve hře */
+.kn-packet { margin: 0.4rem 0 0.2rem; font-size: 0.9rem; }
+.kn-packet-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.kn-packet .kn-open { font-weight: 600; }
+.kn-packet .kn-copy { padding: 0.15rem 0.6rem; font-size: 0.85rem; cursor: pointer; }
+.kn-packet > div + div, .kn-packet > details { margin-top: 0.3rem; }
+.kn-ready--ready { color: #15803d; }
+.kn-ready--waiting { color: var(--muted); }
+.kn-packet ul { margin: 0.3rem 0 0 1rem; padding: 0; }
+/* Ukazatel postupu ověřování cen (nahoře na /kontrola) */
+.kn-progress { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.6rem 0; padding: 0.5rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font-size: 0.9rem; }
+.kn-progress progress { width: 9rem; height: 0.7rem; }
+
 /* Údaje z API katastru na kartě bytu (plomby po rezervaci) */
 .kn-plomba { margin: 0.4rem 0 0.2rem; padding: 0.4rem 0.6rem; border-left: 3px solid var(--border); font-size: 0.9rem; }
 .kn-plomba > div + div { margin-top: 0.2rem; }
