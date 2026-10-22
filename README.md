@@ -431,6 +431,12 @@ jsou uložené jako GitHub Secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
   spolehlivěji než to, co jsme pozorovali u GitHubu.
 - iDNES a RealityMIX nemají GPS na inzerátech ani skutečný radius-search →
   u bytů jen samotné město, u pozemků aproximace (viz tabulka výše).
+- **RealityMIX doplňuje výpis města „podobnými“ nabídkami z jiných míst** (zjištěno
+  21. 10. 2026: Pardubice, Moravská Třebová, Skuteč — chodily jako nové nabídky).
+  `sources/realitymix.js` proto vyřazuje karty, jejichž adresa míří mimo okres Ústí nad
+  Orlicí (`isInsideOkres`: „okr. X“ musí být Ústí n. O.; bez „okr.“ musí jít o okresní město
+  nebo sledovanou lokalitu; bez adresy se nevyřazuje). Jiné obce téhož okresu (Králíky,
+  Červená Voda) zůstávají — hlídá se celý okres. Test: `trh-bytu/realitymix-okres.test.js`.
 - Pokud portál za 15 minut zveřejní víc nových inzerátů, než kolik jich je
   na první stránce výpisu daného dotazu (typicky 15–50), nejstarší z nich
   se nemusí zachytit. U tak malé lokality je to velmi nepravděpodobné.

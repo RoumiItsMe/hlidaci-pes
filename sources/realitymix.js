@@ -88,6 +88,33 @@ async function fetchForUrl(url, watch) {
   return items;
 }
 
+// RealityMIX doplňuje výpis města (zejména malého, např. Letohradu) "podobnými" nabídkami z JINÝCH
+// míst — reálně Pardubice, Moravská Třebová (okr. Svitavy) nebo Skuteč (okr. Chrudim) — a ty by se
+// hlásily jako nové nabídky v okolí. Karta nemá GPS, jen adresu: "Ulice, [část,] Obec, okr. Okres".
+// Okres se v adrese píše u všech míst kromě okresního města samotného ("Jilemnického, Ústí nad
+// Orlicí", "Gagarinova, Pardubice II, Pardubice").
+//  - "okr. X" → platí jen okr. Ústí nad Orlicí (Králíky, Červená Voda... zůstávají — hlídá se celý okres);
+//  - bez "okr." → musí jít o Ústí nad Orlicí nebo o některou sledovanou lokalitu;
+//  - bez adresy → nelze posoudit, nabídka se nevyřazuje (nic nesmí propadnout).
+const OKRES_NAME = "Ústí nad Orlicí";
+
+function normalizeText(s) {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .trim();
+}
+
+export function isInsideOkres(address, locationLabels = []) {
+  const text = normalizeText(address);
+  if (!text) return true;
+  const okres = text.match(/okr\.\s*([^,]+)/);
+  if (okres) return okres[1].trim().startsWith(normalizeText(OKRES_NAME));
+  return text.includes(normalizeText(OKRES_NAME)) || locationLabels.some((label) => text.includes(normalizeText(label)));
+}
+
 export async function fetchRealitymix(watch) {
   const perFetch = [];
   for (const loc of watch.locations) {
@@ -98,5 +125,6 @@ export async function fetchRealitymix(watch) {
       }
     }
   }
-  return mergeUniqueById(perFetch);
+  const labels = watch.locations.map((loc) => loc.label);
+  return mergeUniqueById(perFetch).filter((item) => isInsideOkres(item.address, labels));
 }
