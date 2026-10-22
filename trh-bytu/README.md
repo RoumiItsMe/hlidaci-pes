@@ -155,7 +155,10 @@ Každý řádek (i detail bytu) má dvě malá kolečka v pravém horním rohu:
 
 Obě jsou nezávislé na sobě i na stavu appky (aktivní/rezervováno/zmizelo)
 a ukládají se stejně jako poznámky v detailu — appka o nich nikdy nic
-sama nerozhoduje.
+sama nerozhoduje. Příznak platí pro **celý byt**: čte se z kterékoli jeho nabídky a přepnutí se zapíše na všechny
+najednou (`planFlagToggle` v `group.js`). Dřív se přepínala jen nabídka z URL, a když příznak zůstal na jiné nabídce
+téhož bytu (po sloučení portálů), nešel odebrat — hlavní nabídka ho neměla, klik ho nastavil znovu (22. 10. 2026: 4 byty
+s TOP a 2 skryté v Ústí).
 
 Město se vytahuje z adresy (viz `extractCity` v `parse.js`) — nejdřív
 zkusí, jestli adresa obsahuje jméno některého ze 4 hlavních sledovaných

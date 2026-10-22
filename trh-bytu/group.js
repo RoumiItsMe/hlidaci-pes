@@ -514,6 +514,16 @@ export function isHidden(members) {
 }
 
 /**
+ * Přepnutí příznaku bytu (`starred` = TOP, `hidden` = skryto): nová hodnota a ID VŠECH nabídek, na které se zapíše.
+ * Čte se z celé skupiny (viz isStarred/isHidden výš), takže se musí i zapisovat na celou skupinu — dřív se přepínala
+ * jen nabídka z URL, a když příznak zůstal na jiné nabídce téhož bytu (po sloučení portálů), nešel odebrat:
+ * hlavní nabídka ho neměla, klik ho nastavil znovu a byt zůstal TOP / skrytý.
+ */
+export function planFlagToggle(members, column) {
+  return { ids: members.map((m) => m.id), value: members.some((m) => m[column]) ? 0 : 1 };
+}
+
+/**
  * Hodnota vlastního pole uživatele (own_condition/own_construction/
  * own_revitalized, notes, verified_sale_*, viz db.js) přes CELOU skupinu,
  * stejná úvaha jako u isStarred/isHidden výš — appka na tahle pole vždy

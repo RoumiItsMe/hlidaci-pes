@@ -9,7 +9,7 @@ import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
-import { groupListings, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
+import { groupListings, planFlagToggle, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
@@ -366,6 +366,23 @@ function eventDetail(e) {
 // pro toggle) — a v řádku je vědomě SOUROZENEC obalujícího odkazu na
 // detail (`.row-link`), ne jeho potomek: `<button>` uvnitř `<a>` je
 // neplatné HTML a klik by bublal i na navigaci na detail.
+// Přepne příznak bytu (TOP / skrytí) na VŠECH jeho nabídkách najednou — viz planFlagToggle v group.js. Byt se hledá
+// podle id nabídky z URL; neznámé id nic nezmění.
+function toggleFlag(listingId, column) {
+  if (column !== "starred" && column !== "hidden") throw new Error(`neznámý příznak: ${column}`);
+  const group = findGroupForListing(db.prepare("SELECT * FROM listings").all(), listingId);
+  if (!group) return;
+  const { ids, value } = planFlagToggle(group.members, column);
+  db.exec("BEGIN");
+  try {
+    for (const id of ids) db.prepare(`UPDATE listings SET ${column} = ? WHERE id = ?`).run(value, id);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
 function rowActionButtons(id, starred, hidden) {
   const encId = encodeURIComponent(id);
   const starBtn = `<form method="post" action="/byt/${encId}/star" class="row-action-form"><button type="submit" class="icon-btn${starred ? " icon-btn--active" : ""}" title="${starred ? "Odebrat z TOP" : "Označit jako TOP"}">${starred ? "⭐" : "☆"}</button></form>`;
@@ -2556,18 +2573,14 @@ const server = createServer(async (req, res) => {
   // kdyby se mezitím přerovnalo pořadí SOURCE_PRIORITY pro tu nemovitost.
   const starMatch = url.pathname.match(/^\/byt\/([^/]+)\/star$/);
   if (starMatch && req.method === "POST") {
-    const id = decodeURIComponent(starMatch[1]);
-    const row = db.prepare("SELECT starred FROM listings WHERE id = ?").get(id);
-    if (row) db.prepare("UPDATE listings SET starred = ? WHERE id = ?").run(row.starred ? 0 : 1, id);
+    toggleFlag(decodeURIComponent(starMatch[1]), "starred");
     res.writeHead(302, { Location: req.headers.referer || "/byty" });
     return res.end();
   }
 
   const hideMatch = url.pathname.match(/^\/byt\/([^/]+)\/hide$/);
   if (hideMatch && req.method === "POST") {
-    const id = decodeURIComponent(hideMatch[1]);
-    const row = db.prepare("SELECT hidden FROM listings WHERE id = ?").get(id);
-    if (row) db.prepare("UPDATE listings SET hidden = ? WHERE id = ?").run(row.hidden ? 0 : 1, id);
+    toggleFlag(decodeURIComponent(hideMatch[1]), "hidden");
     res.writeHead(302, { Location: req.headers.referer || "/byty" });
     return res.end();
   }
