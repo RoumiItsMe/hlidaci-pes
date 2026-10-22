@@ -898,6 +898,26 @@ Družstevní byt se pozná podle vlastnictví z inzerátu (nebo ručně opraven�
 „Doplnit parametry“), případně podle toho, že dům v katastru nemá jednotky; takové
 byty se přes API ani nekontrolují.
 
+### Rozpětí odhadu a odvozená sleva
+
+Ověřených prodejních cen je zatím pár (katastr ceny nedává, zapisuješ je ručně), takže ceny
+u většiny prodaných bytů jsou odhad „poslední cena −10 %“. Aby číslo nepůsobilo jistěji, než je:
+
+- **Rozpětí.** U každého průměru, za kterým stojí aspoň jeden odhad, se pod číslem ukáže, kam
+  se průměr dostane při slevě o 5 procentních bodů víc a míň („při slevě 5–15 %: 44 619 Kč–49 869
+  Kč/m²“). Ověřené ceny se nehýbou, takže rozpětí vzniká jen z bytů s odhadem; když jsou všechny
+  ceny ověřené, rozpětí se nezobrazuje. Počítá `soldSaleStats` v `sale-stats.js`
+  (`avgLow` = vyšší sleva, `avgHigh` = nižší).
+- **Sleva se odvodí z dat.** Pevných 10 % platí jen do doby, než je **aspoň 10 ověřených prodejů**
+  (`MIN_CALIBRATION_SAMPLES` v `price-discount.js`). Pak se použije **medián** skutečného rozdílu
+  mezi poslední inzerovanou a ověřenou kupní cenou, na celá procenta a v mezích 0–30 %. Medián
+  proto, aby jeden extrémní prodej slevu neodvedl; zjevné překlepy (rozdíl mimo −10 až 50 %) se do
+  vzorku nepočítají. Stránka Statistiky a MCP píšou, kolik ověřených prodejů appka má
+  a zda je sleva pevná, nebo odvozená.
+- **Jedna sleva pro celou sekci.** Spočítá ji `computeEntries` jednou a připojí k bytům
+  (`entry.discount`), takže statistiky, detail bytu, fronta Katastr i chat počítají stejně. Každá sekce
+  (Ústí, Náchod) má vlastní, protože data jsou oddělená.
+
 **Telegram upozornění:** appka na rezervaci pošle i zprávu přes stejného
 Telegram bota jako hlídací pes (`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` v
 `.env.local` v kořeni repa — appka na ně jinak nesahá, jen kvůli týhle jedné
@@ -1275,9 +1295,10 @@ MCP klientovi) ptát na data běžnou řečí: „Které byty se prodaly v zář
 **Čísla jsou stejná jako v appce.** Nástroje používají tutéž logiku jako web
 (`entries.js` — byt = skupina nabídek napříč portály, stavy, ceny; `sale-status.js` — co je
 „Prodáno“ a co „Čeká na ověření“; `sale-stats.js` — cena prodeje: ověřená, jinak odhad
-poslední inzerované ceny −10 %). Chat tak neříká jiná čísla než Statistiky. U každé
-statistiky nástroj vrací, kolik bytů je za číslem a kolik z toho jsou odhady, a
-upozorní na malý vzorek; model je instruován, ať to řekne.
+poslední inzerované ceny −10 %, případně sleva odvozená z ověřených prodejů). Chat tak neříká jiná čísla
+než Statistiky. U každé statistiky nástroj vrací, kolik bytů je za číslem a kolik z toho jsou odhady
+(`zakladCeny`), **rozpětí průměru za m² při jiné slevě** (`rozpetiPrumeruZaM2Kc`), odkud se sleva bere
+(`slevaOdhadu`) a upozorní na malý vzorek; model je instruován, ať to řekne.
 
 **Dvě sekce = dva servery.** Sekce se volí proměnnou `TRH_REGION` (jako všude), takže se
 do nastavení klienta zapíšou dva servery a model může sekce porovnávat:

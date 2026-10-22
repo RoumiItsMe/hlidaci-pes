@@ -12,7 +12,8 @@ import { computeEntries } from "./entries.js";
 import { saleMoment, marketSnapshot } from "./dashboard.js";
 import { isConfirmedSale, isPendingSale, isSoldOrAlmost } from "./sale-status.js";
 import { effectivePriceForStats } from "./sale-stats.js";
-import { ASSUMED_PRICE_DISCOUNT, saleEvidence } from "./sale-record.js";
+import { saleEvidence } from "./sale-record.js";
+import { entryDiscount, percent, discountRange, discountRangeLabel, MIN_CALIBRATION_SAMPLES } from "./price-discount.js";
 import { stripDiacritics } from "./geo-suggest.js";
 import { PARAM_FIELDS, OWN_FIELDS } from "./params.js";
 import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
@@ -107,12 +108,28 @@ function matchesFilters(e, { mesto, dispozice, plochaOd, plochaDo, stavBytu }) {
   return true;
 }
 
-const BASIS_LABELS = {
-  verified: "ověřená kupní cena",
-  assumed: `odhad (poslední inzerovaná cena −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %, v katastru nejde ověřit)`,
-  pending: `odhad (poslední inzerovaná cena −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %, čeká na ověření v katastru)`,
-  none: "cena neznámá",
-};
+// Popisek původu ceny; sleva je ta, kterou appka u bytu opravdu použila (pevná 10 % nebo odvozená z ověřených prodejů).
+const basisLabel = (basis, discount) =>
+  ({
+    verified: "ověřená kupní cena",
+    assumed: `odhad (poslední inzerovaná cena −${percent(discount)} %, v katastru nejde ověřit)`,
+    pending: `odhad (poslední inzerovaná cena −${percent(discount)} %, čeká na ověření v katastru)`,
+    none: "cena neznámá",
+  })[basis];
+
+/** Odkud se bere sleva u odhadů — pro odpověď v chatu (stejná informace jako na stránce Statistiky). */
+function discountInfo(e) {
+  const info = e?.discount ?? { discount: entryDiscount(e), calibrated: false, samples: 0 };
+  return {
+    slevaZPosledniCenyProcent: percent(info.discount),
+    rozpetiSlevyProcent: discountRangeLabel(info.discount),
+    odvozenaZOverenychProdeju: info.calibrated,
+    pocetOverenychProdeju: info.samples,
+    poznamka: info.calibrated
+      ? `Sleva je odvozená z ${info.samples} ověřených prodejů (medián rozdílu mezi poslední inzerovanou a kupní cenou).`
+      : `Sleva je zatím pevných ${percent(info.discount)} % (ověřených prodejů je ${info.samples} z ${MIN_CALIBRATION_SAMPLES} potřebných pro odvození z dat).`,
+  };
+}
 const EVIDENCE_LABELS = { sold: "portál označil jako prodáno", gone: "po rezervaci zmizelo z portálů", reserved: "zatím rezervováno" };
 
 function momentSource(e) {
@@ -172,7 +189,7 @@ function saleRow(e, baseUrl) {
     datumProdejeZdroj: momentSource(e),
     posledniInzerovanaCenaKc: e.price ?? null,
     cenaProdejeKc: price,
-    cenaProdejeZaklad: BASIS_LABELS[basis],
+    cenaProdejeZaklad: basisLabel(basis, entryDiscount(e)),
     cenaZaM2Kc: price != null && area ? Math.round(price / area) : null,
     dnuVNabidce: e.daysOnMarket,
     pocetSnizeniCeny: e.priceDropCount,
@@ -190,12 +207,12 @@ function evidenceCounts(rows) {
   return { portalOznacilJakoProdano: count("sold"), poRezervaciZmizeloZPortalu: count("gone"), zatimRezervovano: count("reserved") };
 }
 
-function priceNotes(rows, label = "ceny") {
+function priceNotes(rows, label = "ceny", discount = entryDiscount(undefined)) {
   const c = basisCounts(rows);
   const notes = [];
   if (c.odhadNejdeOverit + c.odhadCekaNaOvereni > 0) {
     notes.push(
-      `Z ${bytu(rows.length)} má ${c.overenych} ověřenou kupní cenu z katastru a ${c.odhadNejdeOverit + c.odhadCekaNaOvereni} jen ODHAD (poslední inzerovaná cena −${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %) — ${label} jsou proto orientační.`
+      `Z ${bytu(rows.length)} má ${c.overenych} ověřenou kupní cenu z katastru a ${c.odhadNejdeOverit + c.odhadCekaNaOvereni} jen ODHAD (poslední inzerovaná cena −${percent(discount)} %, rozpětí ${discountRangeLabel(discount)}) — ${label} jsou proto orientační.`
     );
   }
   if (rows.length > 0 && rows.length < SMALL_SAMPLE) notes.push(`Malý vzorek (${bytu(rows.length)}) — čísla vypovídají jen velmi málo.`);
@@ -211,7 +228,7 @@ function entriesOf(db) {
 const SALE_DEFINITIONS =
   "Prodáno = byt je označený jako prodaný A jeho cena prodeje je potvrzená (z katastru, nebo to v katastru nejde ověřit, tak platí poslední cena). " +
   "Čeká na ověření = portál označil prodej, ale cena v katastru ještě není potvrzená, nebo byt po rezervaci zmizel z portálů (téměř jistý prodej, bez potvrzení). " +
-  `Cena prodeje: ověřená kupní cena z katastru, jinak ODHAD = poslední inzerovaná cena snížená o ${Math.round(ASSUMED_PRICE_DISCOUNT * 100)} %.`;
+  `Cena prodeje: ověřená kupní cena z katastru, jinak ODHAD = poslední inzerovaná cena snížená o slevu (zatím pevných ${percent(entryDiscount(undefined))} %; od ${MIN_CALIBRATION_SAMPLES} ověřených prodejů ji appka odvodí z reálných cen — aktuální hodnota a rozpětí jsou v odpovědi ve „slevaOdhadu“). U odhadů uváděj rozpětí, ne jedno číslo.`;
 
 export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
   return [
@@ -279,7 +296,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
         const notes = [SALE_DEFINITIONS];
         if (undated.length) notes.push(`${undated.length} prodaných bytů nemá žádné datum, takže se do období nevešly.`);
         if (rows.length > limit) notes.push(`Vráceno prvních ${limit} z ${rows.length} (nejnovější prodeje první).`);
-        notes.push(...priceNotes(inPeriod.map((e) => effectivePriceForStats(e)).filter((p) => p.price != null), "ceny"));
+        notes.push(...priceNotes(inPeriod.map((e) => effectivePriceForStats(e)).filter((p) => p.price != null), "ceny", entryDiscount(inPeriod[0])));
         return {
           obdobi: { od: odDen, do: doDen },
           pocet: rows.length,
@@ -287,6 +304,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
           pocetCekajicichNaOvereni: inPeriod.filter(isPendingSale).length,
           souhrnCenyProdeje: summarize(priced.map((r) => r.cenaProdejeKc)),
           souhrnCenyZaM2: summarize(priced.map((r) => r.cenaZaM2Kc)),
+          slevaOdhadu: discountInfo(inPeriod[0]),
           byty: rows.slice(0, limit),
           upozorneni: notes,
         };
@@ -355,17 +373,42 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
           if (!groups.has(k)) groups.set(k, []);
           groups.get(k).push(r);
         }
+        // Průměr ceny za m² při jiné slevě než základní: odhady (poslední cena −X %) jsou nejistější než ověřené
+        // ceny, proto se k průměru přidává rozpětí. Ověřené ceny se nehýbou; bez odhadů se rozpětí vynechá.
+        const spreadOf = (list) => {
+          if (!list.some((r) => r.basis === "assumed" || r.basis === "pending")) return {};
+          const base = entryDiscount(list[0].e);
+          const range = discountRange(base);
+          const avgAt = (discount) =>
+            mean(
+              list
+                .map((r) => {
+                  const { price } = effectivePriceForStats(r.e, discount);
+                  return price != null && r.e.rep.area_m2 ? price / r.e.rep.area_m2 : null;
+                })
+                .filter((v) => v != null)
+            );
+          return {
+            rozpetiPrumeruZaM2Kc: {
+              slevaProcent: discountRangeLabel(base),
+              priVyssiSleve: avgAt(range.max),
+              zaklad: avgAt(base),
+              priNizsiSleve: avgAt(range.min),
+              poznamka: "Průměr ceny za m² při slevě o 5 procentních bodů víc a míň u odhadů; ověřené ceny se nemění.",
+            },
+          };
+        };
         const describe = (key, list) => ({
           skupina: key,
           pocetBytu: list.length,
           cenaKc: summarize(list.map((r) => r.price)),
           cenaZaM2Kc: summarize(list.map((r) => r.perM2)),
           dnuVNabidce: summarize(list.map((r) => r.days)),
-          ...(typ === "prodane" ? { zakladCeny: basisCounts(list), podleDokladu: evidenceCounts(list) } : {}),
+          ...(typ === "prodane" ? { zakladCeny: basisCounts(list), podleDokladu: evidenceCounts(list), ...spreadOf(list) } : {}),
           ...(list.length < SMALL_SAMPLE ? { poznamka: "malý vzorek" } : {}),
         });
         const skupiny = [...groups.entries()].sort((a, b) => (clenit === "mesic" ? (a[0] < b[0] ? -1 : 1) : b[1].length - a[1].length)).map(([k, list]) => describe(k, list));
-        if (typ === "prodane") notes.push(...priceNotes(rows, "ceny"));
+        if (typ === "prodane") notes.push(...priceNotes(rows, "ceny", entryDiscount(rows[0]?.e)));
         else if (rows.length > 0 && rows.length < SMALL_SAMPLE) notes.push(`Malý vzorek (${bytu(rows.length)}).`);
         if (!rows.length) notes.push("Za zadaných podmínek není žádný byt s cenou.");
         return {
@@ -373,6 +416,7 @@ export function createTools({ baseUrl = null, now = () => Date.now() } = {}) {
           obdobi: { od, do: doDen },
           clenitPodle: clenit,
           celkem: describe("celkem", rows),
+          slevaOdhadu: typ === "prodane" ? discountInfo(rows[0]?.e) : undefined,
           skupiny: clenit === "zadne" ? undefined : skupiny,
           upozorneni: notes,
         };

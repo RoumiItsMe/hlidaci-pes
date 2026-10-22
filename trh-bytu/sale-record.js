@@ -122,8 +122,10 @@ export function currentSaleState(members) {
 // uživatel zadá skutečnou cenu (nebo se ověří v katastru), platí ta.
 export const ASSUMED_PRICE_DISCOUNT = 0.1;
 
-export function assumedSalePrice(lastPrice) {
-  return lastPrice == null ? null : Math.round(lastPrice * (1 - ASSUMED_PRICE_DISCOUNT));
+// `discount` je výchozí ASSUMED_PRICE_DISCOUNT; jakmile je ověřených prodejů dost, předá se sleva odvozená
+// z nich (price-discount.js), případně posunutá o rozpětí.
+export function assumedSalePrice(lastPrice, discount = ASSUMED_PRICE_DISCOUNT) {
+  return lastPrice == null ? null : Math.round(lastPrice * (1 - discount));
 }
 
 /**
@@ -135,10 +137,10 @@ export function assumedSalePrice(lastPrice) {
  *    cena neověří;
  *  - `none`: žádná cena není (inzerát jen "na vyžádání").
  */
-export function statsSalePrice({ verified, price, assumed }) {
+export function statsSalePrice({ verified, price, assumed, discount = ASSUMED_PRICE_DISCOUNT }) {
   if (verified != null) return { price: verified, basis: "verified" };
   if (price == null) return { price: null, basis: "none" };
-  return { price: assumedSalePrice(price), basis: assumed ? "assumed" : "pending" };
+  return { price: assumedSalePrice(price, discount), basis: assumed ? "assumed" : "pending" };
 }
 
 /**

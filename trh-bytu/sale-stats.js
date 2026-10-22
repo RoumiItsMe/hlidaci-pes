@@ -2,7 +2,8 @@
 // stránka Statistiky) i MCP server (mcp-tools.js), aby chat počítal stejně jako appka.
 // Čisté funkce nad "entry" z computeEntries (entries.js).
 
-import { statsSalePrice, saleEvidence } from "./sale-record.js";
+import { statsSalePrice, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
+import { entryDiscount, discountRange } from "./price-discount.js";
 
 // Ověřená prodejní cena (uživatel si ji dohledal v katastru) má vždy
 // přednost — je to REÁLNÁ transakce. Bez ní appka bere poslední evidovanou
@@ -15,13 +16,15 @@ import { statsSalePrice, saleEvidence } from "./sale-record.js";
 // hotový a bere se poslední cena z portálu, ale SNÍŽENÁ o ASSUMED_PRICE_DISCOUNT
 // (kupní cena bývá nižší než inzerovaná) a ve statistikách je označená jako
 // odhad (`statsSalePrice`, sale-record.js).
-export function effectivePriceForStats(e) {
+// `discount` = sleva z poslední ceny u odhadu; výchozí je ta, kterou k bytu připojil computeEntries
+// (odvozená z ověřených prodejů, jinak 10 %). Statistiky ji zadávají výslovně pro rozpětí.
+export function effectivePriceForStats(e, discount = entryDiscount(e)) {
   // Poslední cena snížená o koeficient: portálem prodaný byt, který jde ověřit
   // jen těžko (priceAssumed), i každý prodaný/zmizelý byt, který se v katastru
   // ověřit nedá — jinak by o jeho ceně nebylo vůbec nic, a přitom jde o téměř
   // jistý prodej.
   const assumed = Boolean(e.track?.priceAssumed) || (e.unverifiable && (e.status === "removed" || e.status === "sold" || e.status === "reserved"));
-  return statsSalePrice({ verified: e.verifiedSalePrice, price: e.price, assumed });
+  return statsSalePrice({ verified: e.verifiedSalePrice, price: e.price, assumed, discount });
 }
 
 // Byt patří do statistiky "ceny po rekonstrukci", pokud to uživatel vědomě
@@ -65,13 +68,16 @@ export function almostSoldSaleStats(entries) {
 }
 
 function soldSaleStats(entries, isEligible) {
+  // Sleva pro odhad (viz price-discount.js) je u všech bytů stejná; rozpětí = sleva o 5 p. b. míň a víc.
+  // Ověřené ceny se nemění, takže rozpětí vzniká jen z bytů s odhadem.
+  const info = entries.find((e) => e.discount)?.discount ?? { discount: ASSUMED_PRICE_DISCOUNT, calibrated: false, samples: 0 };
+  const range = discountRange(info.discount);
   const eligible = entries
     .filter(isEligible)
     .map((e) => ({
-      pricePerM2: (() => {
-        const { price } = effectivePriceForStats(e);
-        return price != null && e.rep.area_m2 ? price / e.rep.area_m2 : null;
-      })(),
+      pricePerM2: perM2At(e, range.base),
+      pricePerM2Low: perM2At(e, range.max), // vyšší sleva = nižší cena
+      pricePerM2High: perM2At(e, range.min),
       disposition: e.rep.disposition || "—",
       city: e.city || "—",
       basis: effectivePriceForStats(e).basis, // verified | assumed | asking
@@ -85,6 +91,8 @@ function soldSaleStats(entries, isEligible) {
     }))
     .filter((r) => r.pricePerM2 != null);
 
+  const mean = (values) => Math.round(values.reduce((s, v) => s + v, 0) / values.length);
+
   function summarize(rows) {
     const values = rows.map((r) => r.pricePerM2);
     return {
@@ -92,7 +100,10 @@ function soldSaleStats(entries, isEligible) {
       verifiedCount: rows.filter((r) => r.basis === "verified").length,
       assumedCount: rows.filter((r) => r.basis === "assumed").length,
       pendingCount: rows.filter((r) => r.basis === "pending").length,
-      avg: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
+      avg: mean(values),
+      // Průměr při vyšší / nižší slevě než základní (viz výš); shodné s `avg`, když jsou všechny ceny ověřené.
+      avgLow: mean(rows.map((r) => r.pricePerM2Low)),
+      avgHigh: mean(rows.map((r) => r.pricePerM2High)),
       min: Math.round(Math.min(...values)),
       max: Math.round(Math.max(...values)),
       // Od nejlevnějšího po nejdražší — stejné pořadí, v jakém appka jinak
@@ -122,5 +133,11 @@ function soldSaleStats(entries, isEligible) {
   // Souhrn přes všechna města a dispozice (cena/m² různých dispozic se tu míchá, ale u malého
   // vzorku je to jediné číslo, které vůbec něco říká) — null, když není z čeho.
   const overall = eligible.length ? (({ items, ...rest }) => rest)(summarize(eligible)) : null;
-  return { cities, totalEligible: eligible.length, overall };
+  return { cities, totalEligible: eligible.length, overall, discount: { ...range, calibrated: info.calibrated, samples: info.samples } };
+}
+
+// Cena za m² bytu při dané slevě (odhad), nebo null, když cena či plocha chybí.
+function perM2At(e, discount) {
+  const { price } = effectivePriceForStats(e, discount);
+  return price != null && e.rep.area_m2 ? price / e.rep.area_m2 : null;
 }

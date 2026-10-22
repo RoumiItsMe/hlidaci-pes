@@ -61,13 +61,14 @@ test("TOP statistika: cena je ověřená, jinak odhad −10 %; souhrn přes vše
   assert.deepEqual(effectivePriceForStats(estimated), { price: 2_700_000, basis: "pending" });
   const stats = topSaleStats([verified, estimated]);
   assert.equal(stats.cities.length, 2);
-  assert.deepEqual(stats.overall, { count: 2, verifiedCount: 1, assumedCount: 0, pendingCount: 1, avg: 52_000, min: 50_000, max: 54_000 });
+  // avgLow / avgHigh: totéž při slevě 15 % / 5 % (ověřená cena se nemění): (50 000 + 51 000) / 2 a (50 000 + 57 000) / 2
+  assert.deepEqual(stats.overall, { count: 2, verifiedCount: 1, assumedCount: 0, pendingCount: 1, avg: 52_000, avgLow: 50_500, avgHigh: 53_500, min: 50_000, max: 54_000 });
   assert.equal(stats.overall.items, undefined); // souhrn nenese seznam bytů
 });
 
 test("TOP statistika bez bytů v TOPu: prázdná, souhrn null (žádné vymyšlené číslo)", () => {
   const stats = topSaleStats([entry({ ownCondition: null }), entry({ ownCondition: "maintained" })]);
-  assert.deepEqual(stats, { cities: [], totalEligible: 0, overall: null });
+  assert.deepEqual(stats, { cities: [], totalEligible: 0, overall: null, discount: { base: 0.1, min: 0.05, max: 0.15, calibrated: false, samples: 0 } });
   assert.equal(topSaleStats([]).overall, null);
 });
 
@@ -76,4 +77,30 @@ test("souhrn 'overall' je i u ostatních statistik a odpovídá součtu po měst
   const stats = almostSoldSaleStats(entries);
   assert.equal(stats.overall.count, stats.cities.reduce((sum, c) => sum + c.totalCount, 0));
   assert.equal(stats.overall.count, 3);
+});
+
+test("rozpětí: odhad se počítá při slevě o 5 p. b. míň a víc, ověřené ceny se nehýbou", () => {
+  const verified = entry({ verifiedSalePrice: 3_500_000, rep: { id: "sreality:v", disposition: "3+1", area_m2: 70 } }); // 50 000 Kč/m²
+  const estimated = entry({ price: 3_000_000, rep: { id: "sreality:e", disposition: "3+1", area_m2: 50 } });
+  const only = almostSoldSaleStats([estimated]).overall; // samé odhady
+  assert.equal(only.avgLow, 51_000); // 3 000 000 − 15 %
+  assert.equal(only.avg, 54_000); // − 10 %
+  assert.equal(only.avgHigh, 57_000); // − 5 %
+  const allVerified = almostSoldSaleStats([verified]).overall;
+  assert.deepEqual([allVerified.avgLow, allVerified.avg, allVerified.avgHigh], [50_000, 50_000, 50_000]); // žádný odhad → žádné rozpětí
+});
+
+test("kalibrovaná sleva z ověřených prodejů přepíše pevných 10 % ve výpočtu i v rozpětí", () => {
+  const calibrated = { discount: 0.06, calibrated: true, samples: 12 };
+  const estimated = entry({ price: 3_000_000, discount: calibrated });
+  assert.deepEqual(effectivePriceForStats(estimated), { price: 2_820_000, basis: "pending" }); // − 6 %
+  const stats = almostSoldSaleStats([estimated]);
+  assert.deepEqual(stats.discount, { base: 0.06, min: 0.01, max: 0.11, calibrated: true, samples: 12 });
+  assert.deepEqual([stats.overall.avgLow, stats.overall.avg, stats.overall.avgHigh], [53_400, 56_400, 59_400]); // 11 % / 6 % / 1 %
+});
+
+test("sleva se nikdy nesnižuje pod 0: u malé kalibrované slevy rozpětí končí na 0 %", () => {
+  const stats = almostSoldSaleStats([entry({ price: 3_000_000, discount: { discount: 0.03, calibrated: true, samples: 10 } })]);
+  assert.equal(stats.discount.min, 0);
+  assert.equal(stats.overall.avgHigh, 60_000); // bez slevy: 3 000 000 / 50
 });

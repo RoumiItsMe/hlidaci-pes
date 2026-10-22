@@ -10,6 +10,7 @@ import { buildAddressContext, addressSuggestion } from "./auto-address.js";
 import { createWatchResolver } from "./kn-scan.js";
 import { buildSaleTrack } from "./kn-schedule.js";
 import { isAlmostSold } from "./sale-record.js";
+import { estimateDiscount } from "./price-discount.js";
 import { isNewBuildPending } from "./new-build.js";
 import { parseUnknownFields } from "./unknown-fields.js";
 import { addressInfo } from "./address-info.js";
@@ -211,5 +212,10 @@ export function computeEntries(db) {
     };
   });
   for (const e of entries) e.city = extractCity(e.address, BYTY_WATCH);
+  // Sleva z inzerované ceny na kupní pro byty bez ověřené ceny: pevná, dokud není dost ověřených prodejů
+  // (viz price-discount.js). Spočítá se jednou za celou sekci a jde ke každému bytu, ať všechny plochy
+  // (statistiky, detail, MCP) počítají se stejnou slevou.
+  const discount = estimateDiscount(entries);
+  for (const e of entries) e.discount = discount;
   return entries;
 }

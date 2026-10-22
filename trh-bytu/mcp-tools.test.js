@@ -350,3 +350,45 @@ test("dohledatelnost_zmizelych: zmizelé bez rezervace roztříděné; byt bez a
   assert.match(r.byty[0].proc, /chybí adresa/);
   assert.ok(r.upozorneni.some((u) => /nemusí být prodej/.test(u)));
 });
+
+test("statistiky_cen (prodané): u odhadů přibude rozpětí průměru za m² a informace o slevě; bez odhadů ne", () => {
+  const r = run("statistiky_cen");
+  const spread = r.celkem.rozpetiPrumeruZaM2Kc;
+  assert.equal(spread.slevaProcent, "5–15 %");
+  assert.equal(spread.zaklad, r.celkem.cenaZaM2Kc.prumer); // základ je stejný průměr jako ve výpisu
+  assert.ok(spread.priVyssiSleve < spread.zaklad && spread.zaklad < spread.priNizsiSleve, JSON.stringify(spread));
+  assert.deepEqual(
+    { ...r.slevaOdhadu, poznamka: undefined },
+    { slevaZPosledniCenyProcent: 10, rozpetiSlevyProcent: "5–15 %", odvozenaZOverenychProdeju: false, pocetOverenychProdeju: 1, poznamka: undefined }
+  );
+  assert.match(r.slevaOdhadu.poznamka, /pevných 10 %.*1 z 10/);
+  assert.match(r.upozorneni.join(" "), /rozpětí 5–15 %/);
+  // jen potvrzené (ověřená cena): žádný odhad, takže ani rozpětí
+  assert.equal(run("statistiky_cen", { vzorek: "potvrzene" }).celkem.rozpetiPrumeruZaM2Kc, undefined);
+});
+
+test("prodane_byty: informace o slevě jde s výsledkem a popisek základu ceny nese rozpětí použité slevy", () => {
+  const r = run("prodane_byty");
+  assert.equal(r.slevaOdhadu.slevaZPosledniCenyProcent, 10);
+  assert.match(r.byty.find((b) => b.id === "bazos:c").cenaProdejeZaklad, /−10 %/);
+});
+
+test("kalibrace: z 10 ověřených prodejů se sleva odvodí a použije v odhadech (statistiky i řádky)", () => {
+  const { db: calibrated } = makeDb((d) => {
+    for (let i = 1; i <= 10; i++) {
+      const id = `bazos:v${i}`;
+      insertListing(d, listing(id, { disposition: "2+1", area_m2: 50, address: "Letohrad, ul. Hlavní", price_czk: 3_000_000, status: "sold", removed_at: "2026-10-01T06:00:00Z" }));
+      updateListingFields(d, id, { verified_sale_price_czk: 2_850_000, verified_sale_date: "2026-10-05", sale_verdict: "sold" }); // 5 % pod inzerovanou
+    }
+    insertListing(d, listing("sreality:odhad", { disposition: "3+1", area_m2: 60, address: "Žamberk, ul. Tichá", price_czk: 4_000_000, status: "sold", removed_at: "2026-10-02T06:00:00Z" }));
+  });
+  const stats = tools.statistiky_cen.handler(calibrated, { typ: "prodane" });
+  assert.equal(stats.slevaOdhadu.odvozenaZOverenychProdeju, true);
+  assert.equal(stats.slevaOdhadu.slevaZPosledniCenyProcent, 5);
+  assert.equal(stats.slevaOdhadu.pocetOverenychProdeju, 10);
+  assert.equal(stats.slevaOdhadu.rozpetiSlevyProcent, "0–10 %");
+  const rows = tools.prodane_byty.handler(calibrated, { od: "2026-09-01" }).byty;
+  const estimated = rows.find((b) => b.id === "sreality:odhad");
+  assert.equal(estimated.cenaProdejeKc, 3_800_000); // 4 000 000 − 5 %, ne − 10 %
+  assert.match(estimated.cenaProdejeZaklad, /−5 %/);
+});
