@@ -2,9 +2,10 @@
 // atd. — podobně jako je Sreality/Bazoš ukazují u vlastní nabídky). Pořadí
 // pole = pořadí zobrazení v detailu.
 //
-// Strukturovaně (JSON na detailu) je dávají jen Sreality a Bezrealitky —
-// viz detail/sreality.js a detail/bezrealitky.js. iDNES/RealityMIX/Bazoš
-// vracejí prázdný objekt, ale appka pro floorInfo/cellar/ownership zkouší
+// Strukturovaně je dávají Sreality a Bezrealitky (JSON na detailu, viz
+// detail/sreality.js a detail/bezrealitky.js) a RealityMIX (blok "Podrobné
+// informace", viz detail/realitymix.js). iDNES/Bazoš vracejí prázdný objekt,
+// ale appka pro floorInfo/cellar/ownership zkouší
 // aspoň záchrannou síť z volného textu popisu (viz extract-params.js) —
 // funguje i tam, kde by strukturovaná data čekala marně, a doplní i
 // Sreality/Bezrealitky inzeráty, které mají dané pole nativně prázdné

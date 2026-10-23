@@ -3,9 +3,12 @@
 // text se zjevně dotahuje až přes JS hydrataci na klientovi, kterou
 // fetchText logicky nevidí) — description proto zůstává vždy null. Stejný
 // fail-soft přístup jako u zbytku projektu s RealityMIX: raději chybějící
-// pole než shozený běh (viz komentáře v sources/realitymix.js). Ze stejného
-// důvodu se nezískají ani strukturovaná pole `params` (viz ../params.js) —
-// vrací se prázdné.
+// pole než shozený běh (viz komentáře v sources/realitymix.js). Strukturovaná pole
+// `params` (viz ../params.js) ale na stránce JSOU, v bloku "Podrobné informace"
+// (`.detail-information__data-item`: Vlastnictví, Druh objektu, Stav objektu,
+// Balkon, Sklep…) — čtou se v extractRealitymixParams. Dřív se vracel prázdný
+// objekt, takže se o družstevním bytě (Vlastnictví: družstevní) nevědělo a appka
+// po rezervaci připomínala kontrolu v katastru, kde se družstevní byt ověřit nedá.
 //
 // Fotky mají konzistentní CDN cestu `st.realitymix.cz/i/...` (zjištěno
 // naostro) — `_nahled` varianta je duplicitní náhled první fotky, vyřazuje
@@ -27,6 +30,56 @@ function extractGeo(html, $) {
   const text = $(".advert-description__text-inner-inner").first().text().replace(/\s+/g, " ").trim().slice(0, 4000) || null;
   if (!lat || !lon) return text ? { lat: null, lon: null, precision: null, street: null, houseNumber: null, text } : null;
   return { lat: Number(lat[1]), lon: Number(lon[1]), precision: null, street: null, houseNumber: null, text };
+}
+
+// "družstevní" → "Družstevní" (tvar jako u Sreality/Bezrealitky, viz params.js).
+const capitalize = (text) => (text ? text.charAt(0).toLocaleUpperCase("cs") + text.slice(1).toLocaleLowerCase("cs") : null);
+
+// "ano" → "Ano", "ne" → "Ne", "5 m²" → "Ano (5 m²)"; cokoli jiného nic (raději nic než špatně).
+function yesNo(value) {
+  const text = String(value ?? "").trim();
+  if (/^ano\b/i.test(text)) return "Ano";
+  if (/^ne\b/i.test(text)) return "Ne";
+  const area = text.match(/^(\d+(?:[.,]\d+)?)\s*m/i);
+  return area ? `Ano (${area[1].replace(".", ",")} m²)` : null;
+}
+
+/**
+ * Strukturované parametry bytu z dvojic "popisek → hodnota" z bloku Podrobné informace (popisky bez dvojtečky, malými
+ * písmeny). Jen to, co je jednoznačné; podlaží se záměrně nečte — "Číslo podlaží v domě" nerozlišuje patro a nadzemní
+ * podlaží, takže by šlo o odhad. Vrací jen vyplněná pole (tvar jako detail/bezrealitky.js).
+ * @param pairs Map, nebo objekt typu { "vlastnictví": "družstevní", … }
+ */
+export function paramsFromPairs(pairs) {
+  const get = (label) => (pairs instanceof Map ? pairs.get(label) : pairs[label]);
+  const energy = String(get("energetická náročnost budovy") ?? "").match(/^([A-G])\b/);
+  const params = {
+    ownership: capitalize(get("vlastnictví")),
+    condition: capitalize(get("stav objektu")),
+    buildingType: capitalize(get("druh objektu")),
+    energyRating: energy ? energy[1] : null,
+    elevator: yesNo(get("výtah")),
+    balcony: yesNo(get("balkon")),
+    loggia: yesNo(get("lodžie")),
+    terrace: yesNo(get("terasa")),
+    cellar: yesNo(get("sklep")),
+    parking: yesNo(get("parkování")),
+    garage: yesNo(get("garáž")),
+  };
+  return Object.fromEntries(Object.entries(params).filter(([, value]) => value));
+}
+
+/** Blok "Podrobné informace" načteného detailu (cheerio) → parametry bytu. */
+export function extractRealitymixParams($) {
+  const pairs = new Map();
+  $(".detail-information__data-item").each((_, el) => {
+    const spans = $(el).children("span");
+    if (spans.length < 2) return;
+    const label = $(spans[0]).text().replace(/\s+/g, " ").trim().replace(/:$/, "").toLowerCase();
+    const value = $(spans[1]).text().replace(/\s+/g, " ").trim();
+    if (label && value && !pairs.has(label)) pairs.set(label, value);
+  });
+  return paramsFromPairs(pairs);
 }
 
 export async function fetchRealitymixDetail(url) {
@@ -52,7 +105,7 @@ export async function fetchRealitymixDetail(url) {
       photoUrls.push(src);
     });
 
-    return { description: null, photoUrls, reserved: false, params: {}, geo: extractGeo(html, $) };
+    return { description: null, photoUrls, reserved: false, params: extractRealitymixParams($), geo: extractGeo(html, $) };
   } catch (err) {
     console.warn(`[detail/realitymix] ${url}: ${err.message}`);
     return { description: null, photoUrls: [], reserved: false, params: {}, geo: null };

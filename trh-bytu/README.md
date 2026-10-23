@@ -28,8 +28,10 @@ většinou jen Sreality vs. iDNES vs. zbytek.
 **Strukturované parametry** (vlastnictví, stav, typ budovy, podlaží,
 energetická náročnost, výtah, balkón/lodžie/terasa/sklep/parkování/garáž)
 — podobně jako je Sreality/Bazoš ukazují u vlastní nabídky, viz
-[`params.js`](params.js). Strukturovaně je dávají jen Sreality a Bezrealitky
-(jediné dva portály se strukturovaným JSON na detailu); u ostatních je appka
+[`params.js`](params.js). Strukturovaně je dávají Sreality a Bezrealitky
+(strukturovaný JSON na detailu) a **RealityMIX** (blok „Podrobné informace“ na detailu: vlastnictví, druh objektu,
+stav, balkon, lodžie, terasa, sklep, výtah, parkování, garáž, třída PENB; patro se záměrně nečte — „číslo podlaží“
+nerozlišuje patro a nadzemní podlaží); u ostatních je appka
 **vytěží z textu inzerátu** ([`extract-params.js`](extract-params.js)):
 patro, výtah, sklep (i plochu), balkon/lodžii/terasu a vlastnictví — z
 formulací jako „bez výtahu", „Výtah: ne", „K bytu náleží sklep o výměře 9 m²",
@@ -1298,6 +1300,13 @@ inzerátu a u nových nabídek to dělá sama (`detect-own-fields.js`, `extract-
   částech domu (`1656/10000`) nebo na pozemku je u běžného bytu normální a patro (`2/5`) taky. Družstevní
   podíl (převod celého bytu) se nevylučuje. Už uložené odstraní `purge-outside-region.js`. Hlídací pes
   (Telegram) tohle pravidlo nemá, takže takový inzerát může dál přijít jako oznámení.
+- **RealityMIX: vlastnictví a další údaje z portálu** (`detail/realitymix.js`, testy `realitymix-params.test.js`).
+  Dřív se z RealityMIX žádné strukturované údaje nečetly, takže družstevní byt (Habrmanova, Česká Třebová:
+  „Vlastnictví: družstevní“) se vedl bez vlastnictví a po rezervaci k němu přišla kontrola katastru, kde se družstevní
+  byt ověřit nedá. Doplnění už uložených inzerátů: `node trh-bytu/backfill-realitymix-params.js` (bez `--apply` jen
+  vypíše; s ním zazálohuje databázi a zapíše; stáhne každý inzerát v nabídce jednou, s pauzou). Údaj z portálu má
+  přednost před textem (stejné pravidlo jako při sběru), **ruční přepsání se nikdy nemění** — když se liší od portálu,
+  skript to vypíše. Spuštěno 23. 10. 2026: Ústí 20 inzerátů (z toho 8 družstevních), Náchod 17.
 - **Doplnění už uložených:** `node trh-bytu/backfill-parse.js --offline` (sekce podle `TRH_REGION`, bez sítě) —
   bezpečně opakovatelné, doplňuje jen prázdná pole a nikdy nepřepíše uloženou hodnotu, ani ručně zadanou.
   Spuštěno pro Náchod 21. 10. 2026: stav +21, konstrukce +8, parametry z textů RealityMIX (patro +15, sklep +12,
