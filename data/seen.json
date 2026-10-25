@@ -88,7 +88,7 @@
     "board:vysoke-myto": {
       "failing": true,
       "lastAlertAt": "2026-10-24T21:47:04.799Z",
-      "consecutiveFailures": 35
+      "consecutiveFailures": 36
     },
     "board:lukova": {
       "failing": false,
@@ -2694,7 +2694,11 @@
     "d-75025",
     "e37112746",
     "e37112745",
-    "e37112744"
+    "e37112744",
+    "d-75065",
+    "f-75059",
+    "f-75064",
+    "f-75055"
   ],
   "board:zamberk": [
     "d-29682",
@@ -2885,7 +2889,22 @@
     "d-29843",
     "d-29845",
     "e37185915",
-    "e37185903"
+    "e37185903",
+    "d-29914",
+    "f-29903",
+    "f-29901",
+    "f-29899",
+    "f-29897",
+    "f-29907",
+    "f-29894",
+    "d-29868",
+    "f-29866",
+    "d-29891",
+    "f-29913",
+    "f-29858",
+    "f-29851",
+    "f-29849",
+    "d-29904"
   ],
   "board:ceska-trebova": [
     "f-48081",
@@ -2967,7 +2986,18 @@
     "f-48202",
     "d-48213",
     "f-48208",
-    "f-48245"
+    "f-48245",
+    "f-48337",
+    "d-48307",
+    "f-48304",
+    "f-48309",
+    "f-48306",
+    "d-48291",
+    "d-48279",
+    "f-48295",
+    "f-48285",
+    "f-48283",
+    "f-48273"
   ],
   "board:lanskroun": [
     "MULA1003JSA6-0",
@@ -3394,7 +3424,17 @@
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335371",
     "e37169062",
     "e37169058",
-    "e37169059"
+    "e37169059",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335530",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335644",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335747",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335822",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335736",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335808",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335812",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335824",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335564",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335706"
   ],
   "board:vysoke-myto": [
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-a-iii-tr-v-pusobnosti-orp-vysoke-myto-v-ramci-poradani-cyklistickeho-zavodu-letape-czech-republic-by-tour-de-france-pardubice/",
@@ -3778,16 +3818,16 @@
     "OBAS1000AA5H-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-25T05:31:11.946Z",
-    "board:letohrad": "2026-10-25T05:31:11.946Z",
-    "board:zamberk": "2026-10-25T05:31:11.946Z",
-    "board:ceska-trebova": "2026-10-25T05:31:11.946Z",
-    "board:lanskroun": "2026-10-25T05:31:11.946Z",
-    "board:kraliky": "2026-10-25T05:31:11.946Z",
+    "board:usti-nad-orlici": "2026-10-25T05:45:54.175Z",
+    "board:letohrad": "2026-10-25T05:45:54.175Z",
+    "board:zamberk": "2026-10-25T05:45:54.175Z",
+    "board:ceska-trebova": "2026-10-25T05:45:54.175Z",
+    "board:lanskroun": "2026-10-25T05:45:54.175Z",
+    "board:kraliky": "2026-10-25T05:45:54.175Z",
     "board:vysoke-myto": "2026-10-24T21:31:07.663Z",
-    "board:lukova": "2026-10-25T05:31:11.946Z",
-    "board:tatenice": "2026-10-25T05:31:11.946Z",
-    "board:anenska-studanka": "2026-10-25T05:31:11.946Z",
+    "board:lukova": "2026-10-25T05:45:54.175Z",
+    "board:tatenice": "2026-10-25T05:45:54.175Z",
+    "board:anenska-studanka": "2026-10-25T05:45:54.175Z",
     "board:okres-usti-nad-orlici": "2026-10-25T05:15:51.802Z"
   },
   "board:okres-usti-nad-orlici": [
