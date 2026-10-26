@@ -3656,7 +3656,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/elektronicka-drazba-c-j-118-ex-94-20-86/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-315-v-k-u-dobrikov-a-tynistko-a-iii-3152-v-k-u-dobrikov-a-zamrsk-z-duvodu-uzavirky-sill-iii-3152-v-miste-zp-p4893/",
     "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-prodlouzeni-platnosti-rozhodnuti-zadost-o-zmenu-povoleni-sudslava/",
-    "https://www.vysoke-myto.cz/uredni-deska/oznameni-vydani-zmeny-c-1-rp-lokality-z-33-vysoke-myto/"
+    "https://www.vysoke-myto.cz/uredni-deska/oznameni-vydani-zmeny-c-1-rp-lokality-z-33-vysoke-myto/",
+    "https://www.vysoke-myto.cz/uredni-deska/zamer-prenechani-autobusoveho-nadrazi-k-nevyhradnimu-uzivani-2/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -3833,17 +3834,17 @@
     "OBAS1000AA5H-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-26T14:01:34.373Z",
-    "board:letohrad": "2026-10-26T14:01:34.373Z",
-    "board:zamberk": "2026-10-26T14:01:34.373Z",
-    "board:ceska-trebova": "2026-10-26T14:01:34.373Z",
-    "board:lanskroun": "2026-10-26T14:01:34.373Z",
-    "board:kraliky": "2026-10-26T14:01:34.373Z",
-    "board:vysoke-myto": "2026-10-26T14:01:34.373Z",
-    "board:lukova": "2026-10-26T14:01:34.373Z",
-    "board:tatenice": "2026-10-26T14:01:34.373Z",
-    "board:anenska-studanka": "2026-10-26T14:01:34.373Z",
-    "board:okres-usti-nad-orlici": "2026-10-26T13:02:06.974Z"
+    "board:usti-nad-orlici": "2026-10-26T14:16:10.109Z",
+    "board:letohrad": "2026-10-26T14:16:10.109Z",
+    "board:zamberk": "2026-10-26T14:16:10.109Z",
+    "board:ceska-trebova": "2026-10-26T14:16:10.109Z",
+    "board:lanskroun": "2026-10-26T14:16:10.109Z",
+    "board:kraliky": "2026-10-26T14:16:10.109Z",
+    "board:vysoke-myto": "2026-10-26T14:16:10.109Z",
+    "board:lukova": "2026-10-26T14:16:10.109Z",
+    "board:tatenice": "2026-10-26T14:16:10.109Z",
+    "board:anenska-studanka": "2026-10-26T14:16:10.109Z",
+    "board:okres-usti-nad-orlici": "2026-10-26T14:16:10.109Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
