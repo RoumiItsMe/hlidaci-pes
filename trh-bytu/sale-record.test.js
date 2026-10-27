@@ -1,7 +1,7 @@
 // node --test trh-bytu/sale-record.test.js
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSaleRecordUpdates, currentSaleState, assumedSalePrice, statsSalePrice, isAlmostSold, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
+import { buildSaleRecordUpdates, currentSaleState, unitConfirmInput, assumedSalePrice, statsSalePrice, isAlmostSold, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
 
 const NOW = "2026-10-14T10:00:00.000Z";
 const none = { verdict: null, filedAt: null, autoUnit: null };
@@ -154,4 +154,36 @@ test("změna konce plomby zruší dřívější odložení; stejná hodnota při
   assert.equal("kn_checked_at" in build({ plombaEnd: "2026-10-13" }, same), false); // totéž pole z formuláře → "Zatím nic" platí dál
   assert.equal(build({ plombaEnd: "" }, same).kn_checked_at, null); // smazání je taky změna
   assert.equal("kn_checked_at" in build({ price: "3000000" }, same), false); // jiná pole to neovlivní
+});
+
+test("'To je ten byt': zapíše jednotku, vklad podán a LV; nečitelná jednotka nezapíše nic", () => {
+  const input = unitConfirmInput({ unit_number: "93/4", kn_filed_at: "2026-10-01", lv_number: "6797" }, none, "2026-10-27");
+  assert.deepEqual(input, { verdict: "sold", unit: "93/4", filedAt: "2026-10-01", lv: "6797", plombaEnd: undefined });
+  assert.equal(unitConfirmInput({ unit_number: "garáž" }, none, "2026-10-27"), null);
+  assert.equal(unitConfirmInput({}, none, "2026-10-27"), null);
+});
+
+test("'To je ten byt': den podání bez dne (nebo neplatný) je dnešek, už zapsaný den se nepřepíše, prázdné LV nic nemaže", () => {
+  assert.equal(unitConfirmInput({ unit_number: "93/4" }, none, "2026-10-27").filedAt, "2026-10-27");
+  assert.equal(unitConfirmInput({ unit_number: "93/4", kn_filed_at: "včera" }, none, "2026-10-27").filedAt, "2026-10-27");
+  assert.equal(unitConfirmInput({ unit_number: "93/4", kn_filed_at: "2026-10-01" }, { ...none, filedAt: "2026-09-20" }, "2026-10-27").filedAt, undefined);
+  assert.equal(unitConfirmInput({ unit_number: "93/4", lv_number: "  " }, none, "2026-10-27").lv, undefined);
+});
+
+test("'To je ten byt' u skončeného řízení: konec plomby se zapíše a cenu pak jde zjistit hned (zruší dřívější 'Zatím nic')", () => {
+  const checked = { verdict: null, filedAt: null, autoUnit: null, plombaEnd: null };
+  const input = unitConfirmInput({ unit_number: "93/4", kn_filed_at: "2026-10-01", kn_plomba_end: "2026-10-27" }, checked, "2026-10-27");
+  assert.equal(input.plombaEnd, "2026-10-27");
+  const updates = buildSaleRecordUpdates({ input, current: checked, now: "2026-10-27T10:00:00.000Z" });
+  assert.equal(updates.kn_plomba_end, "2026-10-27");
+  assert.equal(updates.unit_number, "93/4");
+  assert.equal(updates.sale_verdict, "sold");
+});
+
+test("'To je ten byt': konec plomby se nepřepíše, neplatný ani budoucí den se ignoruje, bez něj se nic nezapíše", () => {
+  const fields = { unit_number: "93/4", kn_plomba_end: "2026-10-27" };
+  assert.equal(unitConfirmInput(fields, { ...none, plombaEnd: "2026-10-20" }, "2026-10-27").plombaEnd, undefined);
+  assert.equal(unitConfirmInput({ ...fields, kn_plomba_end: "2026-11-30" }, none, "2026-10-27").plombaEnd, undefined);
+  assert.equal(unitConfirmInput({ ...fields, kn_plomba_end: "brzy" }, none, "2026-10-27").plombaEnd, undefined);
+  assert.equal(unitConfirmInput({ unit_number: "93/4" }, none, "2026-10-27").plombaEnd, undefined);
 });

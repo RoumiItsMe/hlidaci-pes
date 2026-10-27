@@ -1152,11 +1152,35 @@ Pět druhů upozornění:
 **Katastr ve zvonečku.** Sken domu (denní dávka, viz Kontrola v katastru) drží
 jen aktuální stav, proto appka každý nový sken porovná s předchozím a změny
 zapíše do tabulky `kn_events`. Událost, která patří k bytu (podaný vklad,
-plomba na jeho jednotce), vede na detail bytu; událost domu (plomba na jiné
-jednotce, než sledujeme) vede do fronty Katastr a ukáže adresu domu. První sken
-domu nic nehlásí (nemáme s čím porovnat) a plomba podaná dávno před minulým
-skenem se za novou nepočítá. Historie z doby před touhle funkcí se zpětně
-nedoplňuje — vklady, které jsi zapsal ručně, ve zvonečku nejsou (o těch víš).
+plomba na jeho jednotce), vede na část **Prodej a katastr** v detailu bytu.
+První sken domu nic nehlásí (nemáme s čím porovnat) a plomba podaná dávno před
+minulým skenem se za novou nepočítá. Historie z doby před touhle funkcí se
+zpětně nedoplňuje — vklady, které jsi zapsal ručně, ve zvonečku nejsou (o těch
+víš).
+
+**Událost domu — který byt to je?** Dokud u žádného bytu v domě není zapsaná
+jednotka, appka nepozná, kterého bytu se plomba nebo konec řízení týká
+(`kn_events.listing_id` zůstane prázdné). Upozornění proto dohledá byty domu,
+kterých by se mohla týkat (`kn-event-flats.js`): zmizelé nebo rezervované,
+neprodané, bez ověřené ceny a bez *jiné* jednotky, než jakou událost nese.
+Rezervovaný byt je první, pak zmizelé od nejnovějšího.
+
+- **Jediný kandidát:** karta ukáže ten byt, řekne „ověř, jestli je to tenhle
+  byt“ a vede rovnou na jeho **Prodej a katastr**.
+- **Víc kandidátů:** karta říká, kolik bytů v domě sledujeme, a vede na hledání
+  v Bytech podle ulice a čísla popisného (najde i zmizelé).
+- **Žádný kandidát:** vede do fronty Katastr jako dřív.
+
+V detailu kandidátního bytu je pak nad formulářem blok „V domě skončilo řízení o
+vkladu — č. 93/4 (LV 6797), stav …. Podáno 1. 10. 2026 — 20 dní před zmizením
+inzerátu. **Je to tenhle byt?**“ (u nové plomby „V domě je podaný vklad“).
+Odstup od zmizení inzerátu je jediná nápověda, jestli se vklad k bytu hodí —
+rozhodnutí je na tobě. **To je ten byt** zapíše jednotku, vklad podán a LV (a u
+skončeného řízení i konec plomby, takže byt hned ukáže „cenu už jde dohledat“);
+od té chvíle appka jednotku sleduje sama a upozornění patří tomu bytu. Blok se
+ukazuje 90 dní, jen u bytu bez jednotky, a jednotku, kterou už zapsal jiný byt
+v domě, nenabízí. Pokud ho už ukazuje blok plomb výš (plomba po rezervaci), vypíše
+se jen jednou.
 
 Pravidla, ať zvoneček nezahltí šumem:
 

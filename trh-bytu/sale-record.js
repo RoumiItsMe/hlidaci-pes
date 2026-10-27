@@ -105,6 +105,28 @@ export function buildSaleRecordUpdates({ input, current, now }) {
   return updates;
 }
 
+/**
+ * Vstup pro buildSaleRecordUpdates z tlačítka "To je ten byt" (nápověda z API katastru — plomba nebo skončené řízení
+ * v domě): zapíše jednotku a vklad podán, od teď appka jednotku sleduje sama. `fields` jsou pole formuláře
+ * (`unit_number`, `kn_filed_at`, `lv_number`, `kn_plomba_end`), `null` = jednotka se nedá přečíst (nic se nezapíše).
+ *  - už zapsaný den podání se nepřepíše; bez dne (nebo s neplatným) platí dnešek;
+ *  - konec plomby (jen u skončeného řízení) se zapíše, když ještě není a není v budoucnu — cenu pak jde zjistit hned.
+ */
+export function unitConfirmInput(fields, current, today) {
+  const unitNumber = parseUnitNumber(fields.unit_number);
+  if (unitNumber == null) return null;
+  const givenDay = (value) => (isDay(value) ? value : undefined);
+  const lv = fields.lv_number == null || String(fields.lv_number).trim() === "" ? undefined : fields.lv_number;
+  const plombaEnd = givenDay(fields.kn_plomba_end);
+  return {
+    verdict: "sold",
+    unit: formatUnitNumber(unitNumber),
+    filedAt: current.filedAt ? undefined : givenDay(fields.kn_filed_at) ?? today,
+    lv,
+    plombaEnd: !current.plombaEnd && plombaEnd && plombaEnd <= today ? plombaEnd : undefined,
+  };
+}
+
 /** Stav bytu před zápisem — z nabídek skupiny (viz group.js). */
 export function currentSaleState(members) {
   return {

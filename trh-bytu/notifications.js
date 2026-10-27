@@ -33,6 +33,8 @@
 import { groupListings, isHidden } from "./group.js";
 import { nowIso } from "./db.js";
 import { loadKnEvents } from "./kn-events.js";
+import { buildAddressContext } from "./auto-address.js";
+import { candidateGroups, claimingGroup, groupsByBuilding } from "./kn-event-flats.js";
 
 const CLUSTER_WINDOW_MS = 10 * 60 * 1000;
 const SEEN_KEY = "notifications_seen_at";
@@ -139,9 +141,12 @@ function newOfferNotification(group, events, newSince) {
 /**
  * Čistá funkce: ze skupin bytů a jejich událostí (`{ listing_id, event_type,
  * old_price_czk, new_price_czk, occurred_at }`) poskládá upozornění, nejnovější
- * první: `{ type, group, occurredAt, sources, detail? }`.
+ * první: `{ type, group, occurredAt, sources, detail?, candidates? }`.
+ *
+ * `groupsInBuilding(buildingId)` (nepovinné) vrací byty domu; podle něj dostane událost domu bez bytu `candidates` —
+ * byty, kterých by se mohla týkat, nejpravděpodobnější první (viz kn-event-flats.js). Bez něj je `candidates` prázdné.
  */
-export function buildNotifications(groups, events, { newSince, knEvents = [] }) {
+export function buildNotifications(groups, events, { newSince, knEvents = [], groupsInBuilding = null }) {
   const eventsByListing = new Map();
   for (const e of events) {
     if (!eventsByListing.has(e.listing_id)) eventsByListing.set(e.listing_id, []);
@@ -175,10 +180,20 @@ export function buildNotifications(groups, events, { newSince, knEvents = [] }) 
   const groupOfListing = new Map();
   for (const group of groups) for (const m of group.members) groupOfListing.set(m.id, group);
   for (const k of knEvents) {
+    let group = (k.listing_id && groupOfListing.get(k.listing_id)) || null;
+    let candidates = [];
+    if (!group && k.building_id != null && groupsInBuilding) {
+      // Událost domu: patří bytu, který si její jednotku mezitím zapsal; jinak jsou to byty, kterých se může týkat.
+      const inBuilding = groupsInBuilding(k.building_id);
+      group = claimingGroup(k, inBuilding);
+      if (!group) candidates = candidateGroups(k, inBuilding);
+    }
     notifications.push({
       type: "kn",
       kind: k.kind,
-      group: (k.listing_id && groupOfListing.get(k.listing_id)) || null,
+      group,
+      buildingId: k.building_id ?? null,
+      candidates,
       occurredAt: k.occurred_at,
       lastAt: k.occurred_at,
       sources: new Set(),
@@ -188,14 +203,21 @@ export function buildNotifications(groups, events, { newSince, knEvents = [] }) 
   return notifications.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : a.occurredAt > b.occurredAt ? -1 : 0));
 }
 
-/** Všechna upozornění z databáze (viz buildNotifications). */
-export function getNotifications(db) {
-  const groups = groupListings(db.prepare("SELECT * FROM listings").all());
+/**
+ * Všechna upozornění z databáze (viz buildNotifications). `withCandidates` doplní událostem domu byty, kterých se
+ * mohou týkat — potřebuje to jen stránka, která upozornění vypisuje; zvoneček na každé stránce je jen počítá, a
+ * adresní kontext (RÚIAN, geokódování) by zbytečně načítal pokaždé.
+ */
+export function getNotifications(db, { withCandidates = false } = {}) {
+  const listings = db.prepare("SELECT * FROM listings").all();
+  const groups = groupListings(listings);
   const placeholders = EVENT_TYPES.map(() => "?").join(",");
   const events = db
     .prepare(`SELECT listing_id, event_type, old_price_czk, new_price_czk, occurred_at FROM events WHERE event_type IN (${placeholders})`)
     .all(...EVENT_TYPES);
-  return buildNotifications(groups, events, { newSince: getStateTimestamp(db, NEW_SINCE_KEY), knEvents: loadKnEvents(db) });
+  let byBuilding = null;
+  const groupsInBuilding = withCandidates ? (id) => (byBuilding ??= groupsByBuilding(buildAddressContext(db, listings, groups))).get(id) ?? [] : null;
+  return buildNotifications(groups, events, { newSince: getStateTimestamp(db, NEW_SINCE_KEY), knEvents: loadKnEvents(db), groupsInBuilding });
 }
 
 // Časový údaj z app_state; když ještě není, uloží se "teď" — historie před

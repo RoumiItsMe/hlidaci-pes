@@ -21,7 +21,9 @@ import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
 import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
 import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
-import { buildSaleRecordUpdates, currentSaleState, statsSalePrice, assumedSalePrice, isAlmostSold, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
+import { loadKnEvents } from "./kn-events.js";
+import { groupsByBuilding, houseEventsForGroup, filedBeforeRemovalDays, describeFilingGap } from "./kn-event-flats.js";
+import { buildSaleRecordUpdates, currentSaleState, unitConfirmInput, statsSalePrice, assumedSalePrice, isAlmostSold, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
 import { extractCity, parsePriceNote } from "./parse.js";
 import { calculateFlip, DEFAULT_FLIP_INPUTS } from "./flip-calculator.js";
@@ -1105,6 +1107,16 @@ function renderDetail(db, id) {
         })
       : "";
   const mergeSectionHtml = renderMergeSection(group, actx.groups);
+  // Události domu z katastru, které appka nepřiřadila k žádnému bytu a které se mohou týkat tohohle (viz kn-event-flats.js).
+  const knBuildingId = kn?.building?.isknId ?? null;
+  const houseEvents =
+    knBuildingId != null && status !== "active"
+      ? houseEventsForGroup(
+          loadKnEvents(db).filter((e) => e.building_id === knBuildingId),
+          groupsByBuilding(actx).get(knBuildingId) ?? [],
+          agroup
+        )
+      : [];
   const saleSectionHtml = renderSaleSection({
     unverifiable: Boolean(saleTrack?.unverifiable || goneWatch?.unverifiable),
     rep,
@@ -1116,6 +1128,7 @@ function renderDetail(db, id) {
     scan: saleTrack && kn?.building?.isknId ? loadKnScans(db).get(kn.building.isknId) : null,
     discount,
     packet: saleSectionPacket,
+    houseEvents,
   });
 
   return `
@@ -1311,6 +1324,13 @@ function knUnitText(d) {
   return `jednotka ${d.unit}${d.lv ? ` (LV ${d.lv})` : ""}`;
 }
 
+// Co s událostí domu, kterou appka nepřiřadila k bytu: ověřit, jestli je to byt, který v domě sledujeme.
+function houseEventHint(n) {
+  const count = n.candidates?.length ?? 0;
+  if (n.group || !count) return "";
+  return count === 1 ? "; ověř, jestli je to tenhle byt" : `; v domě sledujeme ${count} bytů — ověř, který to je`;
+}
+
 // Věta o tom, co se stalo (druhá řádka upozornění).
 function notificationHeadline(n) {
   if (n.type === "price") {
@@ -1325,29 +1345,33 @@ function notificationHeadline(n) {
   if (n.type === "kn") {
     const d = n.detail;
     if (n.kind === "filing") return `Vklad podán v katastru — ${knUnitText(d)}, návrh přijat ${formatKnDay(d.filedAt)}${d.via === "building" ? " (odhad)" : ""}`;
-    if (n.kind === "plomba") return `Nová plomba v domě — ${knUnitText(d)}, podáno ${formatKnDay(d.filedAt)}`;
+    if (n.kind === "plomba") return `Nová plomba v domě — ${knUnitText(d)}, podáno ${formatKnDay(d.filedAt)}${houseEventHint(n)}`;
     if (n.kind === "ended")
       return n.group
         ? `Řízení o vkladu skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}; teď jde zjistit kupní cenu`
-        : `Řízení o vkladu v domě skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}`;
+        : `Řízení o vkladu v domě skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}${houseEventHint(n)}`;
   }
   return n.type === "reserved" ? "Rezervováno" : "Nová nabídka";
 }
 
-// Jedno upozornění jako odkaz — na zvoneček i na přehled. Událost domu v
-// katastru nemusí patřit k žádnému bytu, pak vede do fronty Katastr.
+// Jedno upozornění jako odkaz — na zvoneček i na přehled. Změna v katastru vede na část "Prodej a katastr" v detailu
+// bytu. Událost domu, kterou appka k bytu nepřiřadila, vede na jediný byt, kterého se může týkat (a v detailu se dá
+// potvrdit); je-li jich víc, na hledání bytů podle adresy domu; není-li žádný, do fronty Katastr.
 function notificationItemHtml(n, seenAt) {
   const sources = [...n.sources].map((s) => SOURCE_LABELS[s] || s).join(" + ");
   const isNew = n.occurredAt > seenAt ? " notif--new" : "";
   const meta = (extra = "") => [notificationHeadline(n), formatDate(n.occurredAt), sources].filter(Boolean).map(esc).join(" · ") + extra;
-  if (!n.group) {
+  const group = n.group ?? (n.candidates?.length === 1 ? n.candidates[0] : null);
+  if (!group) {
     const place = n.detail?.address || "Dům ve sledovaném okolí";
-    return `<a class="notif${isNew}" href="/kontrola">
+    const street = String(n.detail?.address ?? "").split(",")[0].trim();
+    const href = n.candidates?.length > 1 && street ? `/byty?q=${encodeURIComponent(street)}` : "/kontrola";
+    return `<a class="notif${isNew}" href="${href}">
         <span class="notif-title">${NOTIFICATION_TYPES[n.type].icon} ${esc(place)}</span>
         <span class="notif-meta">${meta()}</span>
       </a>`;
   }
-  const members = n.group.members;
+  const members = group.members;
   const rep = primaryListing(members);
   const title = cardTitle(rep, bestAddress(members), priceLabel(members));
   const status = mergedStatus(members);
@@ -1356,7 +1380,8 @@ function notificationItemHtml(n, seenAt) {
   const stale =
     (n.type === "reserved" && status !== "reserved") || (n.type === "gone" && status !== "removed" && status !== "sold");
   const now = stale ? ` · <em>nyní: ${esc((STATUS_LABELS[status] || { text: status }).text)}</em>` : "";
-  return `<a class="notif${isNew}" href="/byt/${encodeURIComponent(rep.id)}">
+  const anchor = n.type === "kn" ? "#prodej" : "";
+  return `<a class="notif${isNew}" href="/byt/${encodeURIComponent(rep.id)}${anchor}">
         <span class="notif-title">${NOTIFICATION_TYPES[n.type].icon} ${esc(title)}</span>
         <span class="notif-meta">${meta(now)}</span>
       </a>`;
@@ -1366,7 +1391,7 @@ function notificationItemHtml(n, seenAt) {
 // zvýrazněná. Zobrazení stránky je NEoznačí jako přečtená — to dělá až
 // tlačítko, ať upozornění nezmizí jen proto, že se stránka omylem otevřela.
 function renderNotifications(db, typeFilter) {
-  const all = getNotifications(db);
+  const all = getNotifications(db, { withCandidates: true });
   const seenAt = getNotificationsSeenAt(db);
   const unread = countUnread(all, seenAt);
   const notifications = typeFilter && NOTIFICATION_TYPES[typeFilter] ? all.filter((n) => n.type === typeFilter) : all;
@@ -1430,7 +1455,7 @@ function refreshPanelHtml(sub) {
 function renderDashboard(db) {
   const now = Date.now();
   const entries = computeEntries(db);
-  const notifications = getNotifications(db);
+  const notifications = getNotifications(db, { withCandidates: true });
   const seenAt = getNotificationsSeenAt(db);
   const byListing = indexEntriesByListing(entries);
 
@@ -1769,6 +1794,33 @@ function renderPlombaBlock(e, scan) {
   return `<div class="kn-plomba">${lines.map((l) => (l.startsWith("<div") ? l : `<div>${l}</div>`)).join("")}${stamp}</div>`;
 }
 
+// Události domu z katastru, které appka nepřiřadila k žádnému bytu, ale mohou být tenhle (kn-event-flats.js): "V domě
+// skončilo řízení o vkladu — je to tenhle byt?" s tlačítkem, které zapíše jednotku a vklad podán (totéž jako
+// "To je ten byt" u plomby). `shownUnits` = jednotky, které už ukazuje blok plomby výš — ať se neopakují.
+function renderHouseEvents(events, { rep, members, shownUnits }) {
+  const encId = encodeURIComponent(rep.id);
+  const removedAt = latestRemovedAt(members);
+  const rows = events
+    .map((event) => {
+      const d = event.detail ?? {};
+      const unit = parseUnitNumber(d.unit);
+      if (unit == null || shownUnits.has(unit)) return "";
+      const label = formatUnitNumber(unit);
+      const lead = event.kind === "ended" ? "V domě skončilo řízení o vkladu" : "V domě je podaný vklad";
+      const gap = describeFilingGap(filedBeforeRemovalDays(d.filedAt, removedAt));
+      const timing = d.filedAt ? ` Podáno ${esc(formatKnDay(d.filedAt))}${gap ? ` — ${esc(gap)}` : ""}${removedAt ? ` (zmizel ${esc(formatDateOnly(removedAt))})` : ""}.` : "";
+      // U skončeného řízení se zapíše i konec plomby (den, kdy to appka zjistila) — cenu pak jde zjistit hned.
+      const plombaEnd = event.kind === "ended" ? `<input type="hidden" name="kn_plomba_end" value="${esc(event.occurred_at.slice(0, 10))}">` : "";
+      const confirm = knActionForm(
+        encId,
+        `<input type="hidden" name="unit_number" value="${esc(label)}"><input type="hidden" name="kn_filed_at" value="${esc(d.filedAt ?? "")}"><input type="hidden" name="lv_number" value="${esc(d.lv ?? "")}">${plombaEnd}${knBtn("unit", "To je ten byt", "kn-btn--sold")}`
+      );
+      return `<div class="kn-plomba-row">🏛️ <strong>${lead}</strong> — č. <strong>${esc(label)}</strong>${d.lv ? ` (LV ${esc(d.lv)})` : ""}${d.state ? `, stav „${esc(d.state)}“` : ""}.${timing} <strong>Je to tenhle byt?</strong> ${confirm}<span class="muted">(zjištěno ${esc(formatKnDay(event.occurred_at))})</span></div>`;
+    })
+    .filter(Boolean);
+  return rows.length ? `<div class="kn-plomba kn-house-event">${rows.join("")}</div>` : "";
+}
+
 // Stav prodeje jednou větou — v detailu bytu. Čte stejné údaje jako fronta
 // Katastr a statistiky (sale-record.js), takže se nemůžou rozejít.
 function saleStageText({ verdict, track, price, saleDate, filed, portalSold = false, lastPrice = null, unverifiable = false, countsInStats = false, discount = ASSUMED_PRICE_DISCOUNT }) {
@@ -1793,7 +1845,7 @@ function saleStageText({ verdict, track, price, saleDate, filed, portalSold = fa
 // formulář se všemi údaji o prodeji. Zapisuje přes stejný endpoint jako fronta
 // Katastr (action "record"), takže cokoli se tu doplní, je hned vidět tam i ve
 // statistikách — a naopak.
-function renderSaleSection({ rep, members, status, verdict, track, addressInfo: ai, scan, unverifiable = false, discount = ASSUMED_PRICE_DISCOUNT, packet = "" }) {
+function renderSaleSection({ rep, members, status, verdict, track, addressInfo: ai, scan, unverifiable = false, discount = ASSUMED_PRICE_DISCOUNT, packet = "", houseEvents = [] }) {
   const price = pickOwnValue(members, "verified_sale_price_czk");
   const saleDate = pickOwnValue(members, "verified_sale_date");
   const filed = pickOwnValue(members, "kn_filed_at");
@@ -1810,6 +1862,10 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
     ? `Jednotka (odhad appky podle plomby): <strong>${esc(autoUnit)}</strong>. Zapsat ji napevno jde výš v „Přesná adresa“.`
     : "Jednotka: nezapsaná — zapíšeš ji výš v „Přesná adresa“, appka pak sama sleduje plombu na ní.";
   const plomba = track ? renderPlombaBlock({ rep, track, addressInfo: ai, knAutoUnit: autoUnit }, scan) : "";
+  // Jednotky, které blok plomby výš už ukazuje (jednotka bytu je neznámá, takže všechny s plombou po rezervaci).
+  const plombaView = track && scan && houseEvents.length ? analyzePlombas(scan, { reservedAt: track.reservedAt, unitNumber: null }) : null;
+  const shownUnits = new Set(plombaView ? [...plombaView.candidates, ...plombaView.closed].map((c) => c.number) : []);
+  const houseEventsHtml = renderHouseEvents(houseEvents, { rep, members, shownUnits });
   const form = knActionForm(
     encId,
     `<label class="kn-date">vklad podán <input type="date" name="kn_filed_at" value="${esc(filed ?? "")}" title="Den, kdy byl v katastru podán návrh na vklad (plomba)"></label>
@@ -1824,6 +1880,7 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
       <p class="muted">Cena, datum prodeje i podaný vklad znamenají, že je byt prodaný — appka ho tak označí všude (fronta Katastr, přehled, statistiky). Prázdné pole údaj smaže.</p>
       ${packet}
       ${plomba}
+      ${houseEventsHtml}
       <p class="muted">${unitLine}</p>
       ${form}
     </details>`;
@@ -2549,15 +2606,7 @@ const server = createServer(async (req, res) => {
       } else if (action === "unit") {
         // "To je ten byt" z nápovědy API katastru: zapíše jednotku (od teď ji
         // appka sleduje sama) a vklad podán. Už zapsaný den podání nepřepíše.
-        const unitNumber = parseUnitNumber(fields.unit_number);
-        if (unitNumber != null) {
-          input = {
-            verdict: "sold",
-            unit: formatUnitNumber(unitNumber),
-            filedAt: current.filedAt ? undefined : isDay(fields.kn_filed_at) ? fields.kn_filed_at : today,
-            lv: given(fields.lv_number),
-          };
-        }
+        input = unitConfirmInput(fields, current, today);
       } else if (action === "sold") {
         input = {
           verdict: "sold",
