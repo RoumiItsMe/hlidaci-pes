@@ -21,7 +21,7 @@ import { buildSaleTrack, filingLagDays, median } from "./kn-schedule.js";
 import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DAYS } from "./kn-scan.js";
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
 import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
-import { loadKnEvents } from "./kn-events.js";
+import { loadKnEvents, dismissKnEvent } from "./kn-events.js";
 import { groupsByBuilding, houseEventsForGroup, filedBeforeRemovalDays, describeFilingGap } from "./kn-event-flats.js";
 import { buildSaleRecordUpdates, currentSaleState, unitConfirmInput, statsSalePrice, assumedSalePrice, isAlmostSold, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
@@ -1815,7 +1815,9 @@ function renderHouseEvents(events, { rep, members, shownUnits }) {
         encId,
         `<input type="hidden" name="unit_number" value="${esc(label)}"><input type="hidden" name="kn_filed_at" value="${esc(d.filedAt ?? "")}"><input type="hidden" name="lv_number" value="${esc(d.lv ?? "")}">${plombaEnd}${knBtn("unit", "To je ten byt", "kn-btn--sold")}`
       );
-      return `<div class="kn-plomba-row">🏛️ <strong>${lead}</strong> — č. <strong>${esc(label)}</strong>${d.lv ? ` (LV ${esc(d.lv)})` : ""}${d.state ? `, stav „${esc(d.state)}“` : ""}.${timing} <strong>Je to tenhle byt?</strong> ${confirm}<span class="muted">(zjištěno ${esc(formatKnDay(event.occurred_at))})</span></div>`;
+      // "Není to ten byt" si appka zapamatuje — byt se k téhle události už nenabízí (kn-event-flats.js, candidateGroups).
+      const dismiss = knActionForm(encId, `<input type="hidden" name="event_ref" value="${esc(event.ref)}">${knBtn("not-unit", "Není to ten byt", "kn-btn--later")}`);
+      return `<div class="kn-plomba-row">🏛️ <strong>${lead}</strong> — č. <strong>${esc(label)}</strong>${d.lv ? ` (LV ${esc(d.lv)})` : ""}${d.state ? `, stav „${esc(d.state)}“` : ""}.${timing} <strong>Je to tenhle byt?</strong> ${confirm}${dismiss}<span class="muted">(zjištěno ${esc(formatKnDay(event.occurred_at))})</span></div>`;
     })
     .filter(Boolean);
   return rows.length ? `<div class="kn-plomba kn-house-event">${rows.join("")}</div>` : "";
@@ -2578,7 +2580,7 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(knMatch[1]);
     const fields = await parseBody(req);
     const action = fields.action;
-    const group = ["filed", "unit", "sold", "withdrawn", "check", "reset", "record", "plomba"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
+    const group = ["filed", "unit", "not-unit", "sold", "withdrawn", "check", "reset", "record", "plomba"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
     if (group) {
       const now = nowIso();
       const today = now.slice(0, 10);
@@ -2603,6 +2605,9 @@ const server = createServer(async (req, res) => {
         // až po rozhodnutí o vkladu (viz kn-schedule.js, fáze "price"). Den
         // podání nesmí být v budoucnu — výchozí je dnešek.
         input = { verdict: "sold", filedAt: isDay(fields.kn_filed_at) ? fields.kn_filed_at : today, lv: given(fields.lv_number), unit: given(fields.unit_number) };
+      } else if (action === "not-unit") {
+        // "Není to ten byt" u události domu: nic se u bytu nemění, appka si jen zapamatuje, že mu ji nemá nabízet.
+        dismissKnEvent(db, fields.event_ref, primaryListing(group.members).id);
       } else if (action === "unit") {
         // "To je ten byt" z nápovědy API katastru: zapíše jednotku (od teď ji
         // appka sleduje sama) a vklad podán. Už zapsaný den podání nepřepíše.

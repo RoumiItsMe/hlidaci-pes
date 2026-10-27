@@ -48,14 +48,16 @@ export function claimingGroup(event, groupsInBuilding) {
 
 /**
  * Které byty z domu může událost domu znamenat, nejpravděpodobnější první. Vyřadí se byt, který se pořád nabízí
- * (neprodal se), byt s potvrzeným "neprodáno", byt s už ověřenou cenou (je vyřízený) a byt s JINOU jednotkou, než
- * jakou událost nese. Rezervovaný byt (inzerát ještě běží) je před zmizelými, ty od nejnověji zmizelého.
+ * (neprodal se), byt s potvrzeným "neprodáno", byt s už ověřenou cenou (je vyřízený), byt s JINOU jednotkou, než
+ * jakou událost nese, a byt, u kterého uživatel událost odmítl (`event.dismissed`). Rezervovaný byt (inzerát ještě běží) je před zmizelými, ty od nejnověji zmizelého.
  */
 export function candidateGroups(event, groupsInBuilding) {
   const unit = parseUnitNumber(event.detail?.unit);
   const removedKey = (group) => latestRemovedAt(group.members) ?? "9999";
+  const dismissed = new Set(event.dismissed ?? []);
   return groupsInBuilding
     .filter((group) => {
+      if (group.members.some((member) => dismissed.has(member.id))) return false; // uživatel řekl "Není to ten byt"
       if (mergedStatus(group.members) === "active") return false;
       if (saleVerdict(group.members) === "withdrawn") return false;
       if (pickOwnValue(group.members, "verified_sale_price_czk") != null) return false;

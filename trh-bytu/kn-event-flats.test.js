@@ -119,3 +119,22 @@ test("upozornění: událost domu bez bytu dostane kandidáty, událost s bytem 
   const without = buildNotifications(groups, [], { newSince: daysAgo(100), knEvents });
   assert.ok(without.every((n) => n.candidates.length === 0));
 });
+
+test("'Není to ten byt': byt, u kterého uživatel událost odmítl, není kandidát (jiné byty ano) ani se mu událost nenabízí", () => {
+  const rejected = flat("a:rejected");
+  const other = flat("a:other");
+  const groups = [rejected, other];
+  const event = ended({ dismissed: ["a:rejected"] });
+  assert.deepEqual(ids(candidateGroups(event, groups)), ["a:other"]);
+  assert.deepEqual(houseEventsForGroup([event], groups, rejected, NOW), []);
+  assert.equal(houseEventsForGroup([event], groups, other, NOW).length, 1);
+});
+
+test("'Není to ten byt': odmítnutí platí pro kteroukoli nabídku bytu a upozornění pak nemá kandidáta", () => {
+  const merged = { members: [flat("a:1").members[0], flat("b:1").members[0]] };
+  const event = ended({ building_id: 7, dismissed: ["b:1"] });
+  assert.deepEqual(candidateGroups(event, [merged]), []);
+  const [n] = buildNotifications([merged], [], { newSince: daysAgo(100), knEvents: [event], groupsInBuilding: () => [merged] });
+  assert.equal(n.group, null);
+  assert.deepEqual(n.candidates, []);
+});

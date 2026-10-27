@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS kn_events (
   detail_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_kn_events_time ON kn_events(occurred_at);
+-- "Není to ten byt": událost domu (bez bytu), kterou uživatel u daného bytu odmítl — byt už se k ní nenabízí.
+CREATE TABLE IF NOT EXISTS kn_event_dismissals (
+  event_ref TEXT NOT NULL,
+  listing_id TEXT NOT NULL,
+  dismissed_at TEXT NOT NULL,
+  PRIMARY KEY (event_ref, listing_id)
+);
 `;
 
 /**
@@ -119,10 +126,32 @@ export function saveKnEvents(db, events) {
   return added;
 }
 
-/** Všechny události, nejnovější první: `{ kind, occurred_at, building_id, listing_id, detail }`. */
+/**
+ * Všechny události, nejnovější první: `{ ref, kind, occurred_at, building_id, listing_id, detail, dismissed }`.
+ * `dismissed` = inzeráty, u kterých uživatel událost domu odmítl ("Není to ten byt").
+ */
 export function loadKnEvents(db) {
+  const dismissed = new Map();
+  for (const { event_ref, listing_id } of db.prepare("SELECT event_ref, listing_id FROM kn_event_dismissals").all()) {
+    if (!dismissed.has(event_ref)) dismissed.set(event_ref, []);
+    dismissed.get(event_ref).push(listing_id);
+  }
   return db
-    .prepare("SELECT kind, occurred_at, building_id, listing_id, detail_json FROM kn_events ORDER BY occurred_at DESC, id DESC")
+    .prepare("SELECT ref, kind, occurred_at, building_id, listing_id, detail_json FROM kn_events ORDER BY occurred_at DESC, id DESC")
     .all()
-    .map(({ detail_json, ...row }) => ({ ...row, detail: JSON.parse(detail_json || "{}") }));
+    .map(({ detail_json, ...row }) => ({ ...row, detail: JSON.parse(detail_json || "{}"), dismissed: dismissed.get(row.ref) ?? [] }));
+}
+
+/**
+ * Uživatel říká, že událost domu `ref` není byt `listingId`. Zapíše se jen pro existující událost bez bytu (u
+ * události přiřazené k bytu není co odmítat). Vrací, jestli se odmítnutí zapsalo (poprvé).
+ */
+export function dismissKnEvent(db, ref, listingId, now = new Date().toISOString()) {
+  const result = db
+    .prepare(
+      `INSERT OR IGNORE INTO kn_event_dismissals (event_ref, listing_id, dismissed_at)
+       SELECT ref, ?, ? FROM kn_events WHERE ref = ? AND listing_id IS NULL`
+    )
+    .run(listingId, now, String(ref ?? ""));
+  return Number(result.changes) > 0;
 }

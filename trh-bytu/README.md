@@ -1177,9 +1177,14 @@ inzerátu. **Je to tenhle byt?**“ (u nové plomby „V domě je podaný vklad�
 Odstup od zmizení inzerátu je jediná nápověda, jestli se vklad k bytu hodí —
 rozhodnutí je na tobě. **To je ten byt** zapíše jednotku, vklad podán a LV (a u
 skončeného řízení i konec plomby, takže byt hned ukáže „cenu už jde dohledat“);
-od té chvíle appka jednotku sleduje sama a upozornění patří tomu bytu. Blok se
-ukazuje 90 dní, jen u bytu bez jednotky, a jednotku, kterou už zapsal jiný byt
-v domě, nenabízí. Pokud ho už ukazuje blok plomb výš (plomba po rezervaci), vypíše
+od té chvíle appka jednotku sleduje sama a upozornění patří tomu bytu. **Není to
+ten byt** si zapamatuje, že tomuhle bytu událost nemá nabízet (tabulka
+`kn_event_dismissals`, per událost a byt, nic se u bytu nemění); kartě v
+upozornění tím zmizí „ověř…“ a vrátí se k obecné události domu. Prodej, který
+patří bytu, jehož inzerát appka nikdy neviděla (eviduje nabídky jen od svého
+spuštění), se k žádnému bytu přiřadit nedá — takové události zůstávají v
+upozornění jako události domu. Blok se ukazuje 90 dní, jen u bytu bez
+jednotky, a jednotku, kterou už zapsal jiný byt v domě, nenabízí. Pokud ho už ukazuje blok plomb výš (plomba po rezervaci), vypíše
 se jen jednou.
 
 Pravidla, ať zvoneček nezahltí šumem:

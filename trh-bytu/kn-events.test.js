@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { diffKnScan, saveKnEvents, loadKnEvents, KN_EVENTS_DDL } from "./kn-events.js";
+import { diffKnScan, saveKnEvents, loadKnEvents, dismissKnEvent, KN_EVENTS_DDL } from "./kn-events.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const T0 = Date.parse("2026-10-10T06:00:00.000Z"); // předchozí sken
@@ -123,4 +123,22 @@ test("ukládání: stejná událost se nezapíše dvakrát a načte se zpět s d
   assert.equal(row.kind, "filing");
   assert.equal(row.listing_id, "sreality:1");
   assert.equal(row.detail.unit, "412/12");
+});
+
+test("'Není to ten byt': odmítnutí se zapíše jednou, načte se s událostí a týká se jen události bez bytu", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(KN_EVENTS_DDL);
+  const prev = scan({ at: T0 });
+  const next = scan({ at: T1, plomby: [plomba(OTHER_UNIT, proc(5, "2026-10-12"))] });
+  saveKnEvents(db, diffKnScan(prev, next, { entries: [entry] })); // plomba:5 — událost domu, bez bytu
+  saveKnEvents(db, diffKnScan(null, scan({ at: T1 }), { entries: [entry], matches: [{ listingId: "sreality:1", filedAt: "2026-10-08", unit: UNIT, lv: 6319, via: "unit", proceedingIds: [1] }] })); // filing — s bytem
+  assert.equal(dismissKnEvent(db, "plomba:5", "sreality:9", iso(T1)), true);
+  assert.equal(dismissKnEvent(db, "plomba:5", "sreality:9", iso(T1)), false); // podruhé nic nového
+  assert.equal(dismissKnEvent(db, "plomba:5", "sreality:10", iso(T1)), true); // jiný byt se odmítá zvlášť
+  assert.equal(dismissKnEvent(db, "filing:sreality:1:2026-10-08", "sreality:9", iso(T1)), false); // událost s bytem není co odmítat
+  assert.equal(dismissKnEvent(db, "neexistuje", "sreality:9", iso(T1)), false);
+  assert.equal(dismissKnEvent(db, undefined, "sreality:9", iso(T1)), false);
+  const events = loadKnEvents(db);
+  assert.deepEqual(events.find((e) => e.ref === "plomba:5").dismissed.sort(), ["sreality:10", "sreality:9"]);
+  assert.deepEqual(events.find((e) => e.kind === "filing").dismissed, []);
 });
