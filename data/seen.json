@@ -1119,7 +1119,7 @@
     },
     {
       "id": "2917581644",
-      "price": 99972
+      "price": 96339
     },
     {
       "id": "1209451340",
@@ -1131,7 +1131,7 @@
     },
     {
       "id": "605831756",
-      "price": 226695
+      "price": 204025
     },
     {
       "id": "3120198220",
@@ -1643,7 +1643,7 @@
     },
     {
       "id": "223567892",
-      "price": 226695
+      "price": 204025
     },
     {
       "id": "223679656",
@@ -1767,7 +1767,7 @@
     },
     {
       "id": "224966214",
-      "price": 99972
+      "price": 96339
     },
     {
       "id": "224974265",
@@ -2443,6 +2443,14 @@
     },
     {
       "fingerprint": "1252800_696",
+      "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "96339_3980",
+      "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "204025_1171",
       "source": "Sreality.cz"
     }
   ],
@@ -3902,16 +3910,16 @@
     "OBAS1000AB1U-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-28T03:31:21.212Z",
-    "board:letohrad": "2026-10-28T03:31:21.212Z",
-    "board:zamberk": "2026-10-28T03:31:21.212Z",
-    "board:ceska-trebova": "2026-10-28T03:31:21.212Z",
-    "board:lanskroun": "2026-10-28T03:31:21.212Z",
-    "board:kraliky": "2026-10-28T03:31:21.212Z",
-    "board:vysoke-myto": "2026-10-28T03:31:21.212Z",
-    "board:lukova": "2026-10-28T03:31:21.212Z",
-    "board:tatenice": "2026-10-28T03:31:21.212Z",
-    "board:anenska-studanka": "2026-10-28T03:31:21.212Z",
+    "board:usti-nad-orlici": "2026-10-28T03:45:58.581Z",
+    "board:letohrad": "2026-10-28T03:45:58.581Z",
+    "board:zamberk": "2026-10-28T03:45:58.581Z",
+    "board:ceska-trebova": "2026-10-28T03:45:58.581Z",
+    "board:lanskroun": "2026-10-28T03:45:58.581Z",
+    "board:kraliky": "2026-10-28T03:45:58.581Z",
+    "board:vysoke-myto": "2026-10-28T03:45:58.581Z",
+    "board:lukova": "2026-10-28T03:45:58.581Z",
+    "board:tatenice": "2026-10-28T03:45:58.581Z",
+    "board:anenska-studanka": "2026-10-28T03:45:58.581Z",
     "board:okres-usti-nad-orlici": "2026-10-28T02:46:04.069Z"
   },
   "board:okres-usti-nad-orlici": [
@@ -3949,5 +3957,18 @@
       "at": "2026-10-27T09:01:22.758Z"
     }
   ],
-  "pozemky-glamping:__changes": []
+  "pozemky-glamping:__changes": [
+    {
+      "key": "99972>96339",
+      "source": "sreality",
+      "sourceLabel": "Sreality.cz",
+      "at": "2026-10-28T03:45:48.615Z"
+    },
+    {
+      "key": "226695>204025",
+      "source": "sreality",
+      "sourceLabel": "Sreality.cz",
+      "at": "2026-10-28T03:45:50.039Z"
+    }
+  ]
 }
