@@ -285,7 +285,7 @@
     },
     {
       "id": "2691698764",
-      "price": 3490000
+      "price": 3390000
     },
     {
       "id": "1211695180",
@@ -319,7 +319,7 @@
     },
     {
       "id": "1082118",
-      "price": 3490000
+      "price": 3390000
     }
   ],
   "byty:idnes": [
@@ -2178,6 +2178,10 @@
     {
       "fingerprint": "2700000_70",
       "source": "RealityMIX.cz"
+    },
+    {
+      "fingerprint": "3390000_63",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -3918,16 +3922,16 @@
     "OBAS1000AB1U-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-28T04:45:56.048Z",
-    "board:letohrad": "2026-10-28T04:45:56.048Z",
-    "board:zamberk": "2026-10-28T04:45:56.048Z",
-    "board:ceska-trebova": "2026-10-28T04:45:56.048Z",
-    "board:lanskroun": "2026-10-28T04:45:56.048Z",
-    "board:kraliky": "2026-10-28T04:45:56.048Z",
-    "board:vysoke-myto": "2026-10-28T04:45:56.048Z",
-    "board:lukova": "2026-10-28T04:45:56.048Z",
-    "board:tatenice": "2026-10-28T04:45:56.048Z",
-    "board:anenska-studanka": "2026-10-28T04:45:56.048Z",
+    "board:usti-nad-orlici": "2026-10-28T05:01:24.832Z",
+    "board:letohrad": "2026-10-28T05:01:24.832Z",
+    "board:zamberk": "2026-10-28T05:01:24.832Z",
+    "board:ceska-trebova": "2026-10-28T05:01:24.832Z",
+    "board:lanskroun": "2026-10-28T05:01:24.832Z",
+    "board:kraliky": "2026-10-28T05:01:24.832Z",
+    "board:vysoke-myto": "2026-10-28T05:01:24.832Z",
+    "board:lukova": "2026-10-28T05:01:24.832Z",
+    "board:tatenice": "2026-10-28T05:01:24.832Z",
+    "board:anenska-studanka": "2026-10-28T05:01:24.832Z",
     "board:okres-usti-nad-orlici": "2026-10-28T04:01:29.020Z"
   },
   "board:okres-usti-nad-orlici": [
@@ -3963,6 +3967,12 @@
       "source": "idnes",
       "sourceLabel": "Reality.iDNES.cz",
       "at": "2026-10-27T09:01:22.758Z"
+    },
+    {
+      "key": "3490000>3390000",
+      "source": "sreality",
+      "sourceLabel": "Sreality.cz",
+      "at": "2026-10-28T05:01:01.530Z"
     }
   ],
   "pozemky-glamping:__changes": [
