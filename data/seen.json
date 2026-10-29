@@ -73,7 +73,7 @@
     "board:lanskroun": {
       "failing": true,
       "lastAlertAt": "2026-10-29T00:17:04.956Z",
-      "consecutiveFailures": 30
+      "consecutiveFailures": 31
     },
     "board:okres-usti-nad-orlici": {
       "failing": false,
@@ -3783,7 +3783,10 @@
     "https://www.vysoke-myto.cz/uredni-deska/rozhodnuti-prodlouzeni-platnosti-rozhodnuti-zadost-o-zmenu-povoleni-sudslava/",
     "https://www.vysoke-myto.cz/uredni-deska/oznameni-vydani-zmeny-c-1-rp-lokality-z-33-vysoke-myto/",
     "https://www.vysoke-myto.cz/uredni-deska/zamer-prenechani-autobusoveho-nadrazi-k-nevyhradnimu-uzivani-2/",
-    "https://www.vysoke-myto.cz/uredni-deska/vyzva-k-prevzeti-pisemnosti-glogiewizc/"
+    "https://www.vysoke-myto.cz/uredni-deska/vyzva-k-prevzeti-pisemnosti-glogiewizc/",
+    "https://www.vysoke-myto.cz/uredni-deska/informace-o-konani-ustavujiciho-zasedani-nove-zvoleneho-zastupitelstva-mesta-dne-5-11-2026/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-silnicich-iii-30526-iii-30527-iii-35713-a-iii-35711-v-k-u-pesice-repniky-domoradice-a-svaren-z-duvodu-uzavirky-silnice-iii-30526-v-k-u-pesice/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-sinicich-iii-30526-iii-30527-iii-35713-a-iii-35711-v-k-u-pesice-repniky-domoradice-a-svaren/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -3963,16 +3966,16 @@
     "OBAS1000AB1U-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-29T07:01:24.007Z",
-    "board:letohrad": "2026-10-29T07:01:24.007Z",
-    "board:zamberk": "2026-10-29T07:01:24.007Z",
-    "board:ceska-trebova": "2026-10-29T07:01:24.007Z",
+    "board:usti-nad-orlici": "2026-10-29T07:16:03.050Z",
+    "board:letohrad": "2026-10-29T07:16:03.050Z",
+    "board:zamberk": "2026-10-29T07:16:03.050Z",
+    "board:ceska-trebova": "2026-10-29T07:16:03.050Z",
     "board:lanskroun": "2026-10-28T23:58:49.463Z",
-    "board:kraliky": "2026-10-29T07:01:24.007Z",
-    "board:vysoke-myto": "2026-10-29T07:01:24.007Z",
-    "board:lukova": "2026-10-29T07:01:24.007Z",
-    "board:tatenice": "2026-10-29T07:01:24.007Z",
-    "board:anenska-studanka": "2026-10-29T07:01:24.007Z",
+    "board:kraliky": "2026-10-29T07:16:03.050Z",
+    "board:vysoke-myto": "2026-10-29T07:16:03.050Z",
+    "board:lukova": "2026-10-29T07:16:03.050Z",
+    "board:tatenice": "2026-10-29T07:16:03.050Z",
+    "board:anenska-studanka": "2026-10-29T07:16:03.050Z",
     "board:okres-usti-nad-orlici": "2026-10-29T06:16:03.825Z"
   },
   "board:okres-usti-nad-orlici": [
