@@ -173,7 +173,7 @@
     },
     {
       "id": "482730060",
-      "price": 3490000
+      "price": 2995000
     },
     {
       "id": "2632986700",
@@ -533,7 +533,7 @@
     },
     {
       "id": "6ae49dad500846b3a00373c5",
-      "price": null
+      "price": 2990000
     },
     {
       "id": "6ae4a4ca8b834f02dd0b5290",
@@ -1113,7 +1113,7 @@
     },
     {
       "id": "225775600",
-      "price": null
+      "price": 2990000
     },
     {
       "id": "225776624",
@@ -4103,16 +4103,16 @@
     "OBAS1000AB1U-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-30T15:31:22.735Z",
-    "board:letohrad": "2026-10-30T15:31:22.735Z",
-    "board:zamberk": "2026-10-30T15:31:22.735Z",
-    "board:ceska-trebova": "2026-10-30T15:31:22.735Z",
-    "board:lanskroun": "2026-10-30T15:31:22.735Z",
-    "board:kraliky": "2026-10-30T15:31:22.735Z",
-    "board:vysoke-myto": "2026-10-30T15:31:22.735Z",
-    "board:lukova": "2026-10-30T15:31:22.735Z",
-    "board:tatenice": "2026-10-30T15:31:22.735Z",
-    "board:anenska-studanka": "2026-10-30T15:31:22.735Z",
+    "board:usti-nad-orlici": "2026-10-30T15:46:00.937Z",
+    "board:letohrad": "2026-10-30T15:46:00.937Z",
+    "board:zamberk": "2026-10-30T15:46:00.937Z",
+    "board:ceska-trebova": "2026-10-30T15:46:00.937Z",
+    "board:lanskroun": "2026-10-30T15:46:00.937Z",
+    "board:kraliky": "2026-10-30T15:46:00.937Z",
+    "board:vysoke-myto": "2026-10-30T15:46:00.937Z",
+    "board:lukova": "2026-10-30T15:46:00.937Z",
+    "board:tatenice": "2026-10-30T15:46:00.937Z",
+    "board:anenska-studanka": "2026-10-30T15:46:00.937Z",
     "board:okres-usti-nad-orlici": "2026-10-30T15:01:51.617Z"
   },
   "board:okres-usti-nad-orlici": [
