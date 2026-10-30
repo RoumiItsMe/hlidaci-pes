@@ -9,7 +9,7 @@ import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb, DATA_DIR, updateListingFields, nowIso } from "./db.js";
-import { groupListings, planFlagToggle, primaryListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
+import { groupListings, planFlagToggle, primaryListing, liveListing, mergedStatus, earliestListedAt, latestRemovedAt, priceDropSummary, findGroupForListing, pickDescription, mergeParams, mergePortalParams, bestAddress, bestPrice, bestPriceListing, byPriority, latestChange, isStarred, isHidden, pickOwnValue, saleVerdict } from "./group.js";
 import { assessSale, isProbableSale, SALE_LEVEL_LABELS } from "./sale-triage.js";
 import { buildAddressContext, resolveForGroup, describeEvidence, applyAutoAddresses, knInfoForGroup, describeKn } from "./auto-address.js";
 import { ruianLookupAddress, parseExactAddress, addressKey, saveRuian } from "./ruian.js";
@@ -869,7 +869,7 @@ function renderComparisonTable(db, filters) {
     {
       head: "Odkaz",
       cell: (e, encId) =>
-        `<td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(e.rep.url)}" target="_blank" rel="noopener">Inzerát ↗</a> · <a href="/byt/${encId}/kalkulacka">Kalkulačka</a></td>`,
+        `<td class="compare-links"><a href="/byt/${encId}">Detail</a> · <a href="${esc(liveListing(e.g.members).url)}" target="_blank" rel="noopener">Inzerát ↗</a> · <a href="/byt/${encId}/kalkulacka">Kalkulačka</a></td>`,
     },
     { head: "Poznámka", ext: true, cell: (e, encId) => `<td>${noteInput(encId, "notes", e.notes, "poznámka…")}</td>` },
     { head: "Motivace prodávajícího", ext: true, cell: (e, encId) => `<td>${noteInput(encId, "seller_motivation", e.sellerMotivation, "motivace…")}</td>` },

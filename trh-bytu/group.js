@@ -352,6 +352,15 @@ export function primaryListing(members) {
 }
 
 /**
+ * Nabídka, na kterou vede odkaz "Inzerát" z přehledů: nejdůvěryhodnější z těch, které jsou teď v nabídce (aktivní,
+ * rezervovaná), jinak hlavní záznam. U bytu, který se po rezervaci vrátil, je hlavní záznam podle zdroje a ID často
+ * STARÁ, už smazaná nabídka (Sreality ji nezná) — odkaz na ni by nikam nevedl, i když byt na jiném inzerátu je.
+ */
+export function liveListing(members) {
+  return byPriority(members).find((m) => m.status === "active" || m.status === "reserved") ?? primaryListing(members);
+}
+
+/**
  * Prodáno, pokud je prodaný ALESPOŇ na jednom portálu; jinak rezervováno,
  * pokud je rezervovaný aspoň na jednom; jinak v nabídce, pokud je aktivní
  * aspoň na jednom; jinak zmizelo všude.
