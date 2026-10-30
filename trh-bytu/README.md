@@ -1087,9 +1087,18 @@ co appka už ví, a každý blok vede do pohledu, odkud pochází:
   stránka se sama obnovuje; po dokončení ukáže výsledek („Hotovo: 2 nových
   bytů zaevidováno, 1 změn ceny.“). Víc sběrů najednou appka nepustí
   (`data/track.lock`) — tlačítko, plánovaná úloha a dohánění po startu PC se
-  vzájemně nepřetlačí. Zmizení inzerátu se potvrdí až při dalším sběru **po
-  alespoň 6 hodinách** od prvního výpadku (`MIN_CONFIRM_GAP_MS` v `relist.js`),
-  takže dva sběry těsně po sobě nevyrobí falešné „zmizelo z nabídky“.
+  vzájemně nepřetlačí. Zmizení inzerátu, který se nenašel ve výpisu, appka
+  potvrdí dvěma způsoby:
+  - **Přímým důkazem ze stránky inzerátu** (`gone-probe.js`, testy `gone-probe.test.js`, `relist-probe.test.js`) —
+    hned při prvním výpadku, bez čekání. Portál u smazaného inzerátu říká jednoznačně: Sreality HTTP 404, Bazoš
+    přesměruje na výpis kategorie, iDNES píše „Nabídka již není aktivní“, RealityMIX „Požadovaný inzerát již není v naší
+    databázi“ (ostatní portály HTTP 404/410). Datum zmizení je okamžik, kdy ho appka poprvé nenašla. Chyba sítě,
+    403/429/5xx ani běžná stránka důkaz nejsou. Dotazů je nejvýš 10 na zdroj a běh (`MAX_GONE_PROBES_PER_RUN`) — když
+    „chybí“ desítky inzerátů, je to spíš výpadek výpisu než úklid portálu a ten se potvrzuje pomalu.
+  - **Pojistkou po odstupu**: když stránka nic neprokáže, potvrdí se zmizení až při dalším sběru **po alespoň 6
+    hodinách** od prvního výpadku (`MIN_CONFIRM_GAP_MS` v `relist.js`), takže dva sběry těsně po sobě nevyrobí falešné
+    „zmizelo z nabídky“. Dukelská 320 (10/2026) byla pryč ze všech čtyř portálů, ale appka ji několik hodin vedla jako
+    „v nabídce“ jen kvůli téhle pojistce.
 
 - **Pás čísel nahoře** (každé číslo je odkaz na odpovídající filtr): v nabídce
   (+ kolik jich přibylo za týden), rezervováno, **čeká na ověření**, **prodáno**

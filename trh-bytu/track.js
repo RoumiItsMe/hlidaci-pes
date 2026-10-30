@@ -377,7 +377,7 @@ async function processSource(db, source, watch) {
   // běhu se nenašlo → buď znovu vložený inzerát, přechodný výpadek, nebo
   // zmizelo z nabídky (pravděpodobně prodáno/rezervováno jinde/staženo z
   // jiného důvodu — appka to netvrdí jistě, viz README). Rozlišení viz relist.js.
-  const { removedCount, relistedCount } = handleDisappeared(db, source.name, currentIds, createdThisRun, log);
+  const { removedCount, relistedCount } = await handleDisappeared(db, source.name, currentIds, createdThisRun, log);
 
   return { newCount, priceChangeCount, removedCount, relistedCount, reservationCount, soldCount, error: false };
 }

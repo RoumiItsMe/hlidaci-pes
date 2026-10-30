@@ -19,6 +19,14 @@
 
 import { sameAdByDescription } from "./group.js";
 import { nowIso, getListing, updateListingFields, insertEvent, getActiveListingIdsForSource } from "./db.js";
+import { probeGone } from "./gone-probe.js";
+
+// Kolik inzerátů jednoho zdroje se za běh ověří přímo na jejich stránce (viz gone-probe.js). Strop je pojistka: když
+// najednou "chybí" desítky inzerátů, je to spíš výpadek výpisu než skutečný úklid portálu, a ten se potvrzuje
+// pomalu (odstupem), ne dotazy na portál.
+export const MAX_GONE_PROBES_PER_RUN = 10;
+const PROBE_PAUSE_MS = 300; // zdvořilost vůči portálu
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Nástupce (znovu vložený inzerát) pro inzerát, který zmizel — z kandidátů,
@@ -53,10 +61,11 @@ function priceText(price) {
  * se nenašly (`currentIds` = ID nalezená v tomhle běhu). `createdThisRun`
  * jsou nové inzeráty téhož zdroje z téhož běhu (kandidáti na nástupce).
  */
-export function handleDisappeared(db, sourceName, currentIds, createdThisRun, log) {
+export async function handleDisappeared(db, sourceName, currentIds, createdThisRun, log, { probe = probeGone, pause = sleep } = {}) {
   const unclaimed = [...createdThisRun];
   let removedCount = 0;
   let relistedCount = 0;
+  let probes = 0;
 
   for (const id of getActiveListingIdsForSource(db, sourceName)) {
     if (currentIds.has(id)) continue;
@@ -77,6 +86,22 @@ export function handleDisappeared(db, sourceName, currentIds, createdThisRun, lo
       relistedCount++;
       log(`[${sourceName}] inzerát znovu vložen pod novým ID: ${id} → ${successor.id} (cena ${priceText(gone.price_czk)} → ${priceText(successor.price_czk)})`);
       continue;
+    }
+
+    // Přímý důkaz ze stránky inzerátu (gone-probe.js): portál ho smazal, takže není co potvrzovat po odstupu. Jinak
+    // (chyba, nejasná odpověď, vyčerpaný strop) platí běžná pojistka níž.
+    if (!isMissConfirmed(gone.missed_since) && probes < MAX_GONE_PROBES_PER_RUN) {
+      probes++;
+      const proven = await probe(sourceName, gone.url);
+      await pause(PROBE_PAUSE_MS);
+      if (proven) {
+        const removedAt = gone.missed_since ?? now; // okamžik, kdy ho appka poprvé nenašla
+        updateListingFields(db, id, { status: "removed", removed_at: removedAt, missed_since: null });
+        insertEvent(db, { listing_id: id, event_type: "removed", occurred_at: removedAt });
+        removedCount++;
+        log(`[${sourceName}] zmizel z nabídky (stránka inzerátu už neexistuje): ${id}`);
+        continue;
+      }
     }
 
     if (!gone.missed_since) {
