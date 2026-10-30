@@ -357,7 +357,7 @@ function priceText(price) {
 // Doplňující údaj k události (kolik se změnilo) — sdílí ho časová osa v
 // detailu i odznak "Poslední změna" v přehledu, ať oba říkají totéž.
 function eventDetail(e) {
-  if (e.event_type === "price_change") return `${formatCzk(e.old_price_czk)} → ${formatCzk(e.new_price_czk)}`;
+  if (e.event_type === "price_change") return `${priceText(e.old_price_czk)} → ${priceText(e.new_price_czk)}`;
   if (e.event_type === "sold" && e.new_price_czk != null) return `prodejní cena ${formatCzk(e.new_price_czk)}`;
   if (e.event_type === "relisted" && e.old_price_czk !== e.new_price_czk) {
     return `cena ${priceText(e.old_price_czk)} → ${priceText(e.new_price_czk)}`;

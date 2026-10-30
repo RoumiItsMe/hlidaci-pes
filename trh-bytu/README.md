@@ -899,6 +899,21 @@ Kč (RK cenu snížila a text nechala). Bez zmínky ceny v textu (např. Bazoš
 "V textu" jen píše, že je inzerent ochotný se o ceně dohodnout) se nic
 nevymýšlí.
 
+**Jak se cena aktualizuje** ([`price-update.js`](price-update.js), testy `price-update.test.js`). Každý sběr projde
+všechny nabídky, porovná je s uloženým stavem a zapíše rozdíl jako událost „změna ceny“:
+
+- cena se změnila (zlevnění i zdražení) → nová cena;
+- z „Dohodou“ (bez ceny) se stala konkrétní cena → nová cena (původní je prázdná, časová osa napíše „na vyžádání →
+  2 990 000 Kč“). Dřív se zapsala jen změna u nabídky, která už nějakou cenu měla, takže nabídka založená bez ceny
+  zůstala bez ní navždy, i když ji portál mezitím uvedl (Dukelská, 10/2026);
+- cena z textu inzerátu přestane být „z textu“, jakmile ji portál uvádí sám;
+- **cena → „Dohodou“ se nezapisuje**: appka drží poslední známou cenu, stejně jako u nabídky, která zmizela.
+
+**Která cena se u bytu ukáže.** Ta z nabídky, která teď běží (v nabídce, rezervovaná); mezi běžícími rozhoduje
+důvěryhodnost zdroje (Sreality, iDNES, …). Cena smazané nabídky se ukazuje jen jako poslední známá, když žádná běžící
+nabídka cenu nemá (`bestPrice` v `group.js`). Totéž platí pro odkaz „Inzerát ↗“ ve Srovnání (`liveListing`) — vede
+na nabídku, která ještě existuje.
+
 **Byt na víc portálech se ukáže jednou** — data (adresa, popis, parametry)
 z nejdůvěryhodnějšího portálu, který je má, a fotky z kteréhokoli, který je
 má (Sreality fotky nedává, viz níž). V řádku je vidět, kde byt ještě je a kde

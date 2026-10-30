@@ -33,6 +33,7 @@ import { openDb, nowIso, getListing, insertListing, updateListingFields, insertE
 import { handleDisappeared } from "./relist.js";
 import { acquireTrackLock, releaseTrackLock } from "./track-lock.js";
 import { reservationChange } from "./reservation.js";
+import { planPriceUpdate } from "./price-update.js";
 import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
 import { proposeOwnFields } from "./detect-own-fields.js";
 import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
@@ -301,17 +302,15 @@ async function processSource(db, source, watch) {
     // Známý inzerát — update ceny + last_seen_at.
     const fields = { last_seen_at: now };
     if (existing.missed_since) fields.missed_since = null; // vrátil se, poslední výpadek byl jen přechodný
-    if (item.priceCzk != null && existing.price_czk != null && item.priceCzk !== existing.price_czk) {
-      insertEvent(db, {
-        listing_id: listingId,
-        event_type: "price_change",
-        old_price_czk: existing.price_czk,
-        new_price_czk: item.priceCzk,
-        occurred_at: now,
-      });
-      fields.price_czk = item.priceCzk;
-      priceChangeCount++;
-      log(`[${source.name}] změna ceny ${item.id}: ${existing.price_czk} → ${item.priceCzk} Kč`);
+    // Cena: změna, nebo z "Dohodou" na konkrétní cenu (viz price-update.js); cena → "Dohodou" se nezapisuje.
+    const priceUpdate = planPriceUpdate(existing, item.priceCzk);
+    if (priceUpdate) {
+      Object.assign(fields, priceUpdate.fields);
+      if (priceUpdate.event) {
+        insertEvent(db, { listing_id: listingId, event_type: "price_change", ...priceUpdate.event, occurred_at: now });
+        priceChangeCount++;
+        log(`[${source.name}] změna ceny ${item.id}: ${existing.price_czk ?? "bez ceny"} → ${item.priceCzk} Kč`);
+      }
     }
     if (existing.status === "removed") {
       // Znovu se objevil — vzácné, ale ať to appka umí (ne že by zůstal

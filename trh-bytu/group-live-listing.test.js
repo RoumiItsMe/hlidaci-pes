@@ -3,7 +3,7 @@
 // rezervaci vrátil, hlavní záznam podle zdroje a ID byla stará smazaná nabídka Sreality).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { liveListing, primaryListing } from "./group.js";
+import { liveListing, primaryListing, bestPrice, bestPriceListing } from "./group.js";
 
 const l = (id, status) => ({ id, source: id.split(":")[0], status, url: `https://example.test/${id}` });
 
@@ -26,4 +26,31 @@ test("žádná nabídka není živá: platí hlavní záznam", () => {
 
 test("byt s jedinou živou nabídkou na méně důvěryhodném portálu vede právě na ni", () => {
   assert.equal(liveListing([l("sreality:1", "removed"), l("bazos:7", "active")]).id, "bazos:7");
+});
+
+const p = (id, status, price, extra = {}) => ({ ...l(id, status), price_czk: price, ...extra });
+
+test("cena: byt, který se vrátil s novou cenou, ukáže cenu aktuální nabídky, ne staré smazané (Dukelská: 3,29 M → 2,99 M)", () => {
+  const members = [p("sreality:1615736908", "removed", 3_290_000), p("sreality:3583115340", "active", 2_990_000), p("idnes:6a9ad117", "removed", 3_290_000)];
+  assert.equal(bestPrice(members), 2_990_000);
+  assert.equal(bestPriceListing(members).id, "sreality:3583115340");
+});
+
+test("cena: běžící nabídky bez ceny (Dohodou) → platí poslední známá cena ze smazaných", () => {
+  const members = [p("sreality:1", "removed", 3_290_000), p("sreality:2", "active", null)];
+  assert.equal(bestPrice(members), 3_290_000);
+});
+
+test("cena: mezi běžícími nabídkami rozhoduje důvěryhodnost zdroje, mezi smazanými taky", () => {
+  assert.equal(bestPrice([p("bazos:1", "active", 3_000_000), p("idnes:2", "active", 3_100_000)]), 3_100_000);
+  assert.equal(bestPrice([p("idnes:2", "active", 3_100_000), p("bazos:1", "active", 3_000_000)]), 3_100_000); // na pořadí na vstupu nezáleží
+  assert.equal(bestPrice([p("bazos:1", "removed", 3_000_000), p("idnes:2", "removed", 3_100_000)]), 3_100_000);
+  assert.equal(bestPrice([p("bazos:1", "reserved", 3_000_000), p("sreality:2", "removed", 3_500_000)]), 3_000_000);
+});
+
+test("cena: nikdo cenu nemá → null; příznak ceny z textu patří nabídce, ze které se cena bere", () => {
+  assert.equal(bestPrice([p("sreality:1", "active", null)]), null);
+  assert.equal(bestPriceListing([p("sreality:1", "active", null)]), null);
+  const members = [p("sreality:1", "removed", 3_290_000), p("bazos:2", "active", 2_990_000, { price_from_text: 1 })];
+  assert.equal(bestPriceListing(members).price_from_text, 1);
 });

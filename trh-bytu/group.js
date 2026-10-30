@@ -516,7 +516,11 @@ export function bestAddress(members) {
  * Nejlepší známá cena skupiny — od nejdůvěryhodnějšího zdroje, který nějakou
  * cenu má. Jeden portál může cenu neuvádět ("Dohodou"), zatímco jiný ano;
  * primární (nejdůvěryhodnější) inzerát by pak ukázal "bez ceny", i když
- * appka cenu zná. `null`, když ji nemá žádný člen skupiny.
+ * appka cenu zná. Nabídka, která teď běží (v nabídce, rezervovaná), má přednost
+ * před smazanou: byt, který se vrátil s novou cenou, jinak ukazoval cenu staré
+ * smazané nabídky, protože její zdroj nebo ID vyšly v pořadí dřív (Dukelská,
+ * 10/2026: 3,29 M místo nové 2,99 M). Když žádná běžící nabídka cenu nemá,
+ * platí poslední známá cena ze smazaných. `null`, když ji nemá žádný člen skupiny.
  */
 export function bestPrice(members) {
   return bestPriceListing(members)?.price_czk ?? null;
@@ -524,7 +528,9 @@ export function bestPrice(members) {
 
 /** Inzerát, ze kterého `bestPrice` bere cenu (kvůli příznaku "cena z textu"), nebo null. */
 export function bestPriceListing(members) {
-  return byPriority(members).find((m) => m.price_czk != null) || null;
+  const ordered = byPriority(members);
+  const hasPrice = (m) => m.price_czk != null;
+  return ordered.find((m) => hasPrice(m) && (m.status === "active" || m.status === "reserved")) || ordered.find(hasPrice) || null;
 }
 
 // Skrytí (křížek) a TOP (hvězdička) jsou uživatelovy vlastní příznaky, ne
