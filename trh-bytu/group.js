@@ -17,6 +17,7 @@
 // nemovitost navíc, než jeden řádek omylem za dvě různé.
 
 import { descriptionForDetection } from "./listing-text.js";
+import { AREA_UNIT_SOURCE } from "./parse.js";
 
 // Max. rozdíl v ploše (m²), co appka ještě bere jako "tentýž byt" napříč
 // portály. 1 m² pokrývá pozorovaný reálný rozdíl (51 vs 52 m² pro
@@ -68,22 +69,39 @@ function clusterByArea(members) {
  * jako samostatná skupina o jednom členovi.
  */
 export function groupListings(listings) {
-  // Ruční zásah uživatele (sloupec `manual_group`) vždy vyhrává nad automatikou: nabídky se stejnou hodnotou
-  // jsou jeden byt a automatické spojování se jich netýká — ani ve prospěch, ani v neprospěch. Oddělená nabídka
-  // je ruční skupina o jednom členu. Jinak platí pravidla výš, beze změny.
-  const manual = new Map();
-  const automatic = [];
+  // Ruční zásah uživatele (sloupec `manual_group`) vždy vyhrává nad automatikou. Dva druhy:
+  //  - SLOUČENÝ byt (token má 2+ nabídek): nabídky se stejným tokenem jsou vždy jeden byt, ať by je automatika
+  //    spojila, nebo ne. Skupina ale zůstává OTEVŘENÁ — nová nabídka téhož bytu z jiného portálu se k ní připojí
+  //    podle běžných pravidel (shoda s kteroukoli její nabídkou), takže ruční sloučení nezakládá další duplicity.
+  //  - ODDĚLENÁ nabídka (token má jedinou nabídku): zůstane sama a automatika se jí netýká — ani ve prospěch, ani
+  //    v neprospěch. Tím uživatel říká "tohle k ostatním nepatří".
+  // Jinak platí pravidla výš, beze změny.
+  const byToken = new Map();
+  const pool = []; // k automatickému seskupení: nabídky bez zásahu + členové sloučených bytů
   for (const l of listings) {
-    if (!l.manual_group) automatic.push(l);
-    else if (manual.has(l.manual_group)) manual.get(l.manual_group).push(l);
-    else manual.set(l.manual_group, [l]);
+    if (!l.manual_group) pool.push(l);
+    else if (byToken.has(l.manual_group)) byToken.get(l.manual_group).push(l);
+    else byToken.set(l.manual_group, [l]);
   }
-  const groups = automaticGroups(automatic);
-  for (const [token, members] of manual) {
-    groups.push({ key: `manual_${token}`, members, merged: new Set(members.map((m) => m.source)).size > 1, manual: true });
+  const detached = [];
+  const forced = []; // dvojice nabídek, které uživatel spojil
+  for (const members of byToken.values()) {
+    if (members.length === 1) {
+      detached.push(members[0]);
+      continue;
+    }
+    pool.push(...members);
+    for (let i = 1; i < members.length; i++) forced.push([members[0].id, members[i].id]);
   }
-  // Znovu vložený inzerát (`replaced_by`) je týž byt i u ruční skupiny; párování podle textu jen mezi automatickými.
-  return mergeLinkedGroups(groups, listings, automatic);
+  const groups = automaticGroups(pool);
+  for (const l of detached) groups.push({ key: `manual_${l.manual_group}`, members: [l], merged: false, manual: true });
+  // Znovu vložený inzerát (`replaced_by`) je týž byt i u ruční skupiny; párování podle textu jen mezi nabídkami v `pool`.
+  const result = mergeLinkedGroups(groups, listings, pool, forced);
+  for (const group of result) {
+    const token = group.members.find((m) => m.manual_group)?.manual_group;
+    if (token && !group.manual) Object.assign(group, { key: `manual_${token}`, manual: true });
+  }
+  return result;
 }
 
 // Automatické seskupení (bez ručních zásahů): dispozice + cena přesně, plocha s tolerancí, viz výš.
@@ -179,7 +197,7 @@ function descriptionsMatch(a, b) {
 // plochy…"). Portály uvádějí u téhož bytu různou plochu — podlahová ×
 // užitná × celková: pole inzerátu říká 68 m², jeho popis 75 m² a druhý
 // portál má 75 m². Rozumný rozsah odfiltruje drobnosti (balkon 5 m², sklep).
-const AREA_MENTION_RE = /(\d{2,3}(?:[,.]\d{1,2})?)\s?m[²2]/gi;
+const AREA_MENTION_RE = new RegExp(`(\\d{2,3}(?:[,.]\\d{1,2})?)\\s?${AREA_UNIT_SOURCE}`, "gi");
 function mentionedAreas(description) {
   const areas = [];
   for (const m of (description || "").matchAll(AREA_MENTION_RE)) {
@@ -250,8 +268,8 @@ function sameFlatAcrossPortals(a, b) {
 // `merged` (= nalezeno na víc PORTÁLECH) se přepočítá — dvě ID téhož portálu
 // ho nezapínají.
 // `listings` = všechny nabídky (pro `replaced_by`), `pairwise` = jen ty, které se smí spojovat automaticky podle
-// textu/adresy (bez ručních skupin).
-function mergeLinkedGroups(groups, listings, pairwise = listings) {
+// textu/adresy (bez oddělených nabídek), `forced` = dvojice id, které uživatel spojil ručně.
+function mergeLinkedGroups(groups, listings, pairwise = listings, forced = []) {
   const groupIndexById = new Map();
   groups.forEach((g, i) => g.members.forEach((m) => groupIndexById.set(m.id, i)));
 
@@ -268,6 +286,7 @@ function mergeLinkedGroups(groups, listings, pairwise = listings) {
   for (const l of listings) {
     if (l.replaced_by) link(l.id, l.replaced_by);
   }
+  for (const [idA, idB] of forced) link(idA, idB);
 
   const byDisposition = new Map();
   for (const l of pairwise) {

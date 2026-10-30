@@ -69,11 +69,46 @@ test("oddělená nabídka se k ničemu automaticky nepřipojí, ani když by sed
   assert.deepEqual(idsOf(withBazos), ["bazos:c+sreality:a", "idnes:b"]);
 });
 
-test("ruční byt nevstřebává ani nové automatické nabídky (je uzavřený)", () => {
+test("sloučený byt zůstává otevřený: nová nabídka téhož bytu se k němu připojí sama", () => {
   const rows = [A(), B()];
   const locked = apply(rows, planLock(groupListings(rows)));
   const groups = groupListings([...locked, C()]);
-  assert.deepEqual(idsOf(groups), ["bazos:c", "idnes:b+sreality:a"]);
+  assert.deepEqual(idsOf(groups), ["bazos:c+idnes:b+sreality:a"]);
+  assert.equal(groups[0].manual, true);
+});
+
+test("ručně sloučený byt: nová nabídka se připojí podle shody s KTEROUKOLI jeho nabídkou, ne jen s první", () => {
+  const OTHER_TEXT = "Úplně jiný popis bytu, nic společného s prvním inzerátem, žádná shoda úseku textu. ".repeat(2);
+  const rows = [A(), B({ price_czk: 2_900_000, area_m2: 70, description: OTHER_TEXT })];
+  const merged = apply(rows, planLock(groupListings(rows)));
+  assert.deepEqual(idsOf(groupListings(merged)), ["idnes:b+sreality:a"]);
+  // C sedí jen na iDNES stranu (cena + výměra), na Sreality ne — přesto patří do téhož ručně sloučeného bytu
+  const groups = groupListings([...merged, C({ price_czk: 2_900_000, area_m2: 70, description: OTHER_TEXT })]);
+  assert.deepEqual(idsOf(groups), ["bazos:c+idnes:b+sreality:a"]);
+  assert.equal(groups[0].key, groupListings(merged)[0].key); // klíč ručního bytu se přidáním nabídky nemění
+});
+
+test("ručně sloučený byt nevstřebá nabídku, která nesedí na žádnou jeho nabídku", () => {
+  const rows = [A(), B({ price_czk: 2_900_000, area_m2: 70, description: "Jiný popis. ".repeat(20) })];
+  const merged = apply(rows, planLock(groupListings(rows)));
+  const stranger = C({ price_czk: 5_000_000, area_m2: 110, description: "Úplně cizí byt, jiná dispozice i výměra. ".repeat(5) });
+  assert.deepEqual(idsOf(groupListings([...merged, stranger])), ["bazos:c", "idnes:b+sreality:a"]);
+});
+
+test("ruční sloučení dvou nabídek téhož portálu (jiné ID, bez shody v ceně) drží pohromadě", () => {
+  const first = A({ id: "sreality:1", price_czk: 3_000_000 });
+  const second = A({ id: "sreality:2", price_czk: 3_300_000, area_m2: 80, description: "Jiný popis. ".repeat(20) });
+  assert.equal(groupListings([first, second]).length, 2);
+  const merged = apply([first, second], planLock(groupListings([first, second])));
+  assert.deepEqual(idsOf(groupListings(merged)), ["sreality:1+sreality:2"]);
+});
+
+test("oddělená nabídka ze sloučeného bytu: ostatní zůstanou sloučené a oddělená se nepřipojí zpět", () => {
+  const rows = [A(), B(), C()];
+  const locked = apply(rows, planLock(groupListings(rows)));
+  const detached = apply(locked, planDetach(groupListings(locked)[0], "bazos:c"));
+  // i když by C cenou, výměrou i textem sedělo, uživatel řekl, že tam nepatří
+  assert.deepEqual(idsOf(groupListings(detached)), ["bazos:c", "idnes:b+sreality:a"]);
 });
 
 test("z trojice se oddělí jedna nabídka, zbylé dvě zůstanou spolu", () => {

@@ -19,7 +19,10 @@
 // případ: "Byt 1kk 28m2"); "kk" samo o sobě je dost specifický řetězec, že
 // nehrozí omylem chycený jiný text.
 const DISPOSITION_RE = /(\d)\s*\+\s*(\d)|(\d)\s*\+?\s*(kk)\b/i;
-const AREA_M2_RE = /(\d+(?:[.,]\d+)?)\s*m[²2]/i;
+// "m²" tak, jak ho inzeráty píšou: "m²", "m2" — a Bazoš, který si znak v textu rozbije na "m and sup2;" (takhle
+// ho posílá přímo v HTML, takže bez téhle varianty u jeho inzerátů výměra chyběla a nešly spojit s ostatními portály).
+export const AREA_UNIT_SOURCE = "m(?:[²2]|\\s*(?:&amp;|&|and)\\s*sup2;?)";
+const AREA_M2_RE = new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${AREA_UNIT_SOURCE}`, "i");
 
 // "Garsonka"/"garsoniéra" (a jejich skloněné tvary — garsonku, garsonky,
 // garsoniéru...) je slovní název dispozice, ne číselný zápis — realitky ho
@@ -207,7 +210,7 @@ export function parseCzechDateToIso(text) {
 // se jen jako záchranná síť, když portál žádnou adresu nedal — ne každý
 // Bazoš titulek ten formát dodrží (řada nemá vůbec lokalitu v titulku), pak
 // zůstává null (fail-soft, žádná nabídka kvůli tomu nezmizí).
-const ADDRESS_AFTER_AREA_RE = /m[²2]\s*,\s*(.+)$/i;
+const ADDRESS_AFTER_AREA_RE = new RegExp(`${AREA_UNIT_SOURCE}\\s*,\\s*(.+)$`, "i");
 
 /** Vytáhne lokalitu/adresu z konce titulku (viz komentář výš), nebo null. */
 export function parseAddressFromTitle(title) {

@@ -1939,7 +1939,7 @@ function renderMergeSection(group, allGroups) {
     })
     .join("");
   const state = group.manual
-    ? `<p class="muted">✋ Byt je upravený ručně — automatika ho nemění. ${mergeForm(encId, "", `<button type="submit" name="action" value="release" class="kn-btn kn-btn--later" onclick="return confirm('Vrátit byt automatice? Nabídky se znovu seskupí podle cen, výměr a textu.')">Vrátit na automatiku</button>`)}</p>`
+    ? `<p class="muted">✋ ${group.members.length === 1 ? "Nabídka je oddělená ručně — k žádnému jinému bytu se sama nepřipojí." : "Byt je sloučený ručně — tyhle nabídky appka nerozdělí a nové nabídky téhož bytu se k nim připojí samy."} ${mergeForm(encId, "", `<button type="submit" name="action" value="release" class="kn-btn kn-btn--later" onclick="return confirm('Vrátit byt automatice? Nabídky se znovu seskupí jen podle cen, výměr a textu — ručně sloučené nabídky se mohou rozdělit.')">Vrátit na automatiku</button>`)}</p>`
     : review.level === "check"
     ? `<p class="merge-check">⚠ Nabídky se v něčem rozcházejí (zvýrazněno). Je to opravdu týž byt? ${mergeForm(encId, "", `<button type="submit" name="action" value="lock" class="kn-btn kn-btn--sold">Ano, týž byt</button>`)}</p>`
     : "";
@@ -1947,7 +1947,7 @@ function renderMergeSection(group, allGroups) {
     ? mergeForm(
         encId,
         `<select name="target" required><option value="">Sloučit s jiným bytem…</option>${options}</select>`,
-        `<button type="submit" name="action" value="merge" class="kn-btn kn-btn--later" onclick="return confirm('Sloučit s vybraným bytem? Obě nabídky budou jeden byt a automatika se jich přestane týkat.')">Sloučit</button>`
+        `<button type="submit" name="action" value="merge" class="kn-btn kn-btn--later" onclick="return confirm('Sloučit s vybraným bytem? Obě nabídky budou jeden byt. Další nabídky téhož bytu se k němu připojí samy a kteroukoli nabídku můžeš kdykoli oddělit.')">Sloučit</button>`
       )
     : "";
   return `<details class="merge-section"${review.level === "check" ? " open" : ""}>
@@ -1983,8 +1983,9 @@ function renderMergeReview(db) {
     <p class="muted">
       Stejný byt inzerovaný na víc portálech appka spojuje sama podle ceny, výměry a textu inzerátu. Tady jsou byty, kde se
       nabídky v něčem rozcházejí — obvykle jiná výměra (RealityMIX ji uvádí se sklepem) nebo cena. Většinou jde o tentýž byt:
-      potvrď ho, ať se už nepřipomíná. Když ne, oddělíš nabídku, která tam nepatří. Ruční zásah vždy vyhrává nad automatikou;
-      ručně upravený byt se dál automaticky nemění, dokud ho nevrátíš zpět. Nabídky sloučíš i ručně — v detailu bytu, sekce
+      potvrď ho, ať se už nepřipomíná. Když ne, oddělíš nabídku, která tam nepatří. Ruční zásah vždy vyhrává nad automatikou:
+      ručně sloučené nabídky zůstanou jedním bytem a další nabídky téhož bytu se k nim připojí samy, ručně oddělená nabídka
+      se k žádnému bytu sama nepřipojí, dokud ji nevrátíš zpět. Nabídky sloučíš i ručně — v detailu bytu, sekce
       „Sloučení nabídek“.
     </p>
     <h2>Ke kontrole (${flagged.length})</h2>

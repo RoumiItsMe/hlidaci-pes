@@ -858,10 +858,21 @@ heuristiku nejde doladit pro každý případ. Proto má uživatel **poslední s
 - **Vrátit na automatiku** — ruční zásah se zruší a nabídky se znovu seskupí podle cen, výměr a textu.
 
 Technicky je to sloupec `listings.manual_group` (token; `group.js`, `manual-groups.js`, testy `group-manual.test.js`).
-Nabídky se stejným tokenem jsou jeden byt a **automatika se jich netýká ani ve prospěch, ani v neprospěch** — ruční byt
-je uzavřený, nový inzerát téhož bytu na jiném portálu se k němu sám nepřipojí (spojíš ho ručně). Výjimka:
-znovu vložený inzerát (`replaced_by`) je týž byt vždy. Zásah se zapisuje na všechny dotčené nabídky v jedné transakci
+Ruční zásah vždy vyhrává nad automatikou, ale dvěma způsoby:
+
+- **Sloučený byt** (token mají 2+ nabídky): nabídky se stejným tokenem jsou vždy jeden byt, ať by je automatika spojila,
+  nebo ne. Byt zůstává **otevřený** — nová nabídka téhož bytu z jiného portálu se k němu připojí sama podle běžných
+  pravidel, stačí shoda s kteroukoli jeho nabídkou. (Původně byl uzavřený a každý další portál vyráběl novou duplicitu,
+  kterou bylo třeba spojit znovu; viz Kovářů 1412, 10/2026.)
+- **Oddělená nabídka** (token má jediná nabídka): zůstane sama a automatika se jí netýká ani ve prospěch, ani
+  v neprospěch — to je jediný „uzavřený“ případ.
+
+Znovu vložený inzerát (`replaced_by`) je týž byt vždy. Zásah se zapisuje na všechny dotčené nabídky v jedné transakci
 a bez ručních zásahů je seskupení bajt po bajtu stejné jako dřív (ověřeno porovnáním seskupení před/po na obou sekcích).
+
+Bazoš si v textu rozbije „m²“ na „m and sup2;“ (tak to posílá v HTML). Parser výměry to zná (`AREA_UNIT_SOURCE` v
+`parse.js`, testy `parse-area.test.js`); dřív u takových nabídek výměra chyběla a nešly spojit s ostatními portály.
+Plochu jde v detailu bytu opravit ručně — ruční hodnotu sběr nepřepisuje.
 
 **Co jde ke kontrole** (`group-review.js`, testy `group-review.test.js`): sloučené byty, kde si nabídky **protiřečí** —
 jiná výměra (mimo toleranci 1 m²) nebo jiná známá cena. Chybějící údaj (RK cenu nezveřejnila, portál plochu neuvádí)
