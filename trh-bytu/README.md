@@ -288,6 +288,14 @@ Ověření: `(Get-ScheduledTask -TaskName "Trh bytu - sber dat").Triggers` má
 mít 3 položky (`MSFT_TaskDailyTrigger`, `MSFT_TaskBootTrigger`,
 `MSFT_TaskEventTrigger`).
 
+### Když je PC vypnuté déle (cloudový sběrač)
+
+Naplánovaná úloha sbírá jen tehdy, když PC běží. Po týdnu dovolené je v datech týdenní mezera a změny z té doby se
+zapíšou, jako by se staly až při startu. Tu mezeru zmenší **cloudový sběrač** ([`cloud/README.md`](cloud/README.md)):
+jednou denně stáhne výpisy portálů na GitHub Actions do soukromého repozitáře a appka je při dalším sběru přehraje
+se skutečným časem (`scout.js`, `snapshot.js`, `snapshot-replay.js`). Vypnuté, dokud v `.env.local` není
+`TRH_SNAPSHOT_REPO` (cesta k lokálnímu klonu repa se snímky).
+
 ### Spuštění bez blikajícího okna
 
 Naplánovaná úloha s akcí `node <skript>` při každém běhu na vteřinu

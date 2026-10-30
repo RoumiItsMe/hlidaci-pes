@@ -1,0 +1,87 @@
+# Cloudový sběrač Trhu bytů. TOHLE JE ŠABLONA: zkopíruje se do SOUKROMÉHO repozitáře se snímky jako
+# `.github/workflows/scout.yml` (postup v trh-bytu/cloud/README.md). Samotný kód sběrače se při každém běhu stáhne
+# z veřejného repozitáře hlidaci-pes, takže se aktualizuje sám; do soukromého repa se ukládají jen snímky výpisů.
+#
+# Jednou denně stáhne výpisy portálů obou sekcí a uloží je jako snímky (snapshots/<region>/<čas>.json). Appka na PC je
+# při dalším startu přehraje se skutečným časem pozorování (trh-bytu/snapshot-replay.js).
+
+name: Sběrač (Trh bytů)
+
+on:
+  schedule:
+    # Denně v 03:17 UTC (04:17 / 05:17 místního času). Schválně ne na kulatou minutu — kulaté sloty jsou na GitHubu
+    # nejvytíženější a spouštění se tam nejvíc zpožďuje nebo přeskakuje.
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+# Dva běhy najednou by si šlapaly na zápis do repa.
+concurrency:
+  group: trh-bytu-scout
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kód sběrače (veřejné repo)
+        uses: actions/checkout@v4
+        with:
+          repository: RoumiItsMe/hlidaci-pes
+          path: code
+
+      - name: Snímky (toto soukromé repo)
+        uses: actions/checkout@v4
+        with:
+          path: data
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: code/package-lock.json
+
+      - name: Install dependencies
+        working-directory: code
+        run: npm ci
+
+      # Každá sekce zvlášť a s `continue-on-error`: výpadek jedné nesmí zahodit druhou. Selhání se na konci přizná
+      # (viz poslední krok), takže GitHub pošle e-mail o neúspěšném běhu.
+      - name: Sběr — Ústí nad Orlicí
+        id: usti
+        continue-on-error: true
+        working-directory: code
+        env:
+          TRH_REGION: default
+        run: node trh-bytu/scout.js --out ../data/snapshots
+
+      - name: Sběr — Náchod a Nové Město nad Metují
+        id: nachod
+        continue-on-error: true
+        working-directory: code
+        env:
+          TRH_REGION: nachod
+        run: node trh-bytu/scout.js --out ../data/snapshots
+
+      - name: Uložení snímků
+        working-directory: data
+        run: |
+          git config user.name "trh-bytu-scout"
+          git config user.email "actions@users.noreply.github.com"
+          git add snapshots
+          if git diff --cached --quiet; then
+            echo "Nic k uložení."
+            exit 0
+          fi
+          git commit -m "chore: snímky výpisů $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
+
+      - name: Přiznat selhání sběru
+        if: ${{ steps.usti.outcome == 'failure' || steps.nachod.outcome == 'failure' }}
+        run: |
+          echo "::error::Sběr některé sekce selhal (Ústí: ${{ steps.usti.outcome }}, Náchod: ${{ steps.nachod.outcome }}) — viz log kroků výš."
+          exit 1

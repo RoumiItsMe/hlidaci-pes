@@ -2,7 +2,9 @@
 // Windows, viz README.md v této složce), NE přes GitHub Actions — na rozdíl
 // od hlídacího psa (index.js) tahle appka potřebuje trvalé úložiště
 // (SQLite + fotky), které na efemérním Actions runneru nejde bez
-// commitování binárek do gitu.
+// commitování binárek do gitu. Databáze zůstává jen na PC; GitHub Actions pouští
+// jen cloudového sběrače (scout.js), který ukládá snímky výpisů, a ty se tady na
+// začátku běhu přehrají (snapshot-replay.js) — viz cloud/README.md.
 //
 // Znovupoužívá stávající sources/*.js (search-pass — "co je teď v
 // nabídce") a config.js (watch "byty" — stejná lokalita jako hlídací pes).
@@ -18,34 +20,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { REGION, REGION_WATCH, KN_OPTIONS } from "./region.js";
 import { runOtherRegions } from "./region-runner.js";
-import { regionSources } from "./region-sources.js";
 import { runBackup } from "./backup.js";
-import { splitByAddress, isOutsideByPoint, nearestCenterKm, notAnOfferReason } from "./region-guard.js";
-import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendKnCheckDigest, processTelegramActions, notifyPossibleSales } from "./reservation-reminders.js";
 import { refreshKnScans } from "./kn-scan.js";
-import { fetchSrealityAllPages } from "../sources/sreality.js";
-import { fetchBezrealitky } from "../sources/bezrealitky.js";
-import { fetchIdnes } from "../sources/idnes.js";
-import { fetchRealitymix } from "../sources/realitymix.js";
-import { fetchBazos } from "../sources/bazos.js";
-import { openDb, nowIso, getListing, insertListing, updateListingFields, insertEvent, insertPhoto, DATA_DIR } from "./db.js";
-import { handleDisappeared } from "./relist.js";
+import { openDb, nowIso, DATA_DIR } from "./db.js";
 import { acquireTrackLock, releaseTrackLock } from "./track-lock.js";
-import { reservationChange } from "./reservation.js";
-import { planPriceUpdate } from "./price-update.js";
-import { parseDisposition, parseAreaM2, parseAddressFromTitle, parsePriceFromDescription, findKnownPlace, zipToKnownPlace, parseStreetFromText } from "./parse.js";
-import { proposeOwnFields } from "./detect-own-fields.js";
-import { extractParamsFromText, mergeExtractedParams } from "./extract-params.js";
-import { downloadPhotos } from "./photos.js";
-import { geoFields, geocodePending } from "./geo.js";
+import { geocodePending } from "./geo.js";
 import { ruianPending } from "./ruian.js";
 import { applyAutoAddresses, ruianPendingTextAddresses } from "./auto-address.js";
-import { fetchSrealityDetail } from "./detail/sreality.js";
-import { fetchBezrealitkyDetail } from "./detail/bezrealitky.js";
-import { fetchIdnesDetail } from "./detail/idnes.js";
-import { fetchRealitymixDetail } from "./detail/realitymix.js";
-import { fetchBazosDetail } from "./detail/bazos.js";
+import { buildSources } from "./sources-config.js";
+import { processSource } from "./process-source.js";
+import { replaySnapshots, markLiveRun } from "./snapshot-replay.js";
 
 const LOG_PATH = path.join(DATA_DIR, "track.log");
 const LOCK_PATH = path.join(DATA_DIR, "track.lock");
@@ -63,44 +48,10 @@ try {
   // shodit celý sběrný běh.
 }
 
-// RealityMIX doplňuje výpis malého města (Letohrad) nabídkami odjinud — z okresu
-// i z jiného kraje (Pardubice); sdílený zdroj je nefiltruje. Nabídky s adresou
-// mimo sledované lokality se tu vyřadí (viz region-guard.js; zbytek chytí kontrola
-// polohy z detailu v processSource).
-async function fetchRealitymixInArea(watch) {
-  const { kept, dropped } = splitByAddress(await fetchRealitymix(watch), watch);
-  if (dropped.length) log(`[realitymix] mimo sledovanou oblast (přeskočeno): ${dropped.map((d) => `${d.id} (${d.address})`).join(", ")}`);
-  return kept;
-}
-
-const DEFAULT_SOURCES = [
-  // Sreality stahujeme přes VŠECHNY stránky výpisu — jen z 1. stránky by
-  // starší inzeráty vytlačené novějšími vypadaly jako zmizelé.
-  // Sreality nemá příznak rezervace ve výpisu, jen na detailu — proto se u
-  // něj detail čte i u známých inzerátů (`reservationFromDetail`); ostatní
-  // portály (iDNES, RealityMIX, Bezrealitky) ho mají už ve výpisu.
-  { name: "sreality", fetchList: fetchSrealityAllPages, fetchDetail: fetchSrealityDetail, reservationFromDetail: true },
-  { name: "bezrealitky", fetchList: fetchBezrealitky, fetchDetail: fetchBezrealitkyDetail },
-  // iDNES má štítek "prodáno" jen na detailu, ne ve výpisu — proto se detail
-  // čte i u známých inzerátů (`soldFromDetail`), dokud nejsou označené jako
-  // prodané.
-  { name: "idnes", fetchList: fetchIdnes, fetchDetail: fetchIdnesDetail, soldFromDetail: true },
-  { name: "realitymix", fetchList: fetchRealitymixInArea, fetchDetail: fetchRealitymixDetail },
-  { name: "bazos", fetchList: fetchBazos, fetchDetail: fetchBazosDetail },
-];
-
-// Další regiony (region.js) čtou portály přes vlastní zdroje s okresem a obcí
-// regionu (region-sources.js); výchozí region zůstává přesně jak byl.
-const SOURCES = REGION.watch ? regionSources(REGION) : DEFAULT_SOURCES;
-
 // Region bez Telegramu (např. Náchod) žádné zprávy neposílá — ani o rezervaci, ani
 // o možném prodeji, podaném vkladu či souhrnu kontrol; zbytek (sběr, adresy,
 // kontrola katastru) běží stejně. Denní strop volání API katastru je společný pro
 // všechny regiony, proto má region vlastní limit (KN_OPTIONS v region.js).
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function log(line) {
   const stamped = `[${nowIso()}] ${line}`;
@@ -112,275 +63,7 @@ function log(line) {
   }
 }
 
-// Telegram upozornění na rezervaci — uživatel chce vědět HNED, že nabídka
-// přešla do rezervace, aby stihl zkontrolovat převod v katastru nemovitostí.
-// Posílá se jak u nabídky, která se rovnou zaeviduje jako rezervovaná
-// (appka ji vidí poprvé), tak u známé nabídky, co se rezervovala mezi dvěma
-// běhy — v obou případech je to STEJNÁ informace ("tenhle byt je pravděpodobně
-// prodáno/rezervováno"), jen jinou cestou appka k ní došla. Fail-soft: appka
-// běží bez dohledu (naplánovaná úloha), chybějící token nebo výpadek
-// Telegramu nesmí shodit celý sběrný běh, jen se zaloguje.
-async function notifyReservation(listing) {
-  if (!REGION.telegram) return;
-  const specs = [listing.disposition, listing.area_m2 ? `${listing.area_m2} m²` : null].filter(Boolean).join(", ");
-  const price = listing.price_czk != null ? `${listing.price_czk.toLocaleString("cs-CZ")} Kč` : "cena na vyžádání";
-  const text = `🔒 Rezervováno: ${specs || "byt"}${listing.address ? `, ${listing.address}` : ""}\n${price}\n${listing.url}`;
-  try {
-    await sendTelegramMessage(text);
-  } catch (err) {
-    log(`Telegram upozornění na rezervaci selhalo: ${err.message}`);
-  }
-}
-
-// Zapíše do `fields` polohu z právě staženého detailu, pokud ji známý
-// inzerát ještě nemá (starší záznamy vznikly před sběrem polohy).
-function captureGeoIfMissing(existing, fields, detail) {
-  if (existing.lat != null || existing.geo_json != null) return;
-  Object.assign(fields, geoFields(detail.geo));
-}
-
-const NOT_AN_OFFER_LABELS = { demand: "poptávka", rental: "pronájem", share: "jen podíl na bytě" };
-
-async function processSource(db, source, watch) {
-  let items;
-  try {
-    items = await source.fetchList(watch);
-  } catch (err) {
-    log(`[${source.name}] CHYBA při stahování seznamu: ${err.message}`);
-    return { newCount: 0, priceChangeCount: 0, removedCount: 0, relistedCount: 0, reservationCount: 0, error: true };
-  }
-
-  let newCount = 0;
-  let priceChangeCount = 0;
-  let reservationCount = 0;
-  let soldCount = 0;
-  const currentIds = new Set();
-  const createdThisRun = []; // kandidáti na "znovu vložený inzerát", viz relist.js
-
-  for (const item of items) {
-    const listingId = `${source.name}:${item.id}`;
-    currentIds.add(listingId);
-    const now = nowIso();
-
-    const existing = getListing(db, listingId);
-    if (!existing) {
-      // Poptávka ("Poptávka bytu v …") ani pronájem není nabídka bytu k prodeji — nezaeviduje se (viz region-guard.js).
-      const notAnOffer = notAnOfferReason({ title: item.title, url: item.url, priceCzk: item.priceCzk });
-      if (notAnOffer) {
-        log(`[${source.name}] není nabídka k prodeji (${NOT_AN_OFFER_LABELS[notAnOffer]}), přeskočeno: ${item.id} — ${item.title}`);
-        continue;
-      }
-      // Nový inzerát — dotáhnout detail (popis, fotky, případně reserved).
-      const detail = await source.fetchDetail(item.url);
-      // Prodej jen podílu na bytě (id. 1/2) se pozná až z textu, který výpis nemá — RealityMIX ho
-      // nese v geo.text, ostatní v description (viz region-guard.js, listing-text.js).
-      const notAnOfferByText = notAnOfferReason({ title: item.title, description: detail.description, geo_json: detail.geo });
-      if (notAnOfferByText) {
-        log(`[${source.name}] není nabídka k prodeji (${NOT_AN_OFFER_LABELS[notAnOfferByText]}), přeskočeno: ${item.id} — ${item.title}`);
-        await sleep(250);
-        continue;
-      }
-      // Poloha z detailu leží daleko od všech sledovaných lokalit (portál doplnil
-      // výpis nabídkou odjinud) — nezaeviduje se (viz region-guard.js). Neznámá
-      // poloha se nevylučuje.
-      if (isOutsideByPoint(detail.geo?.lat, detail.geo?.lon, watch)) {
-        log(`[${source.name}] mimo sledovanou oblast (${Math.round(nearestCenterKm(detail.geo.lat, detail.geo.lon, watch))} km od nejbližší lokality), přeskočeno: ${item.id}${item.address ? ` — ${item.address}` : ""}`);
-        await sleep(250);
-        continue;
-      }
-      // Rezervace z výpisu (iDNES, RealityMIX, Bezrealitky) nebo z detailu
-      // (Sreality, Bezrealitky).
-      const status = item.reserved === true || detail.reserved === true ? "reserved" : "active";
-
-      // Titulek bývá stručný a někdy dispozici/plochu vůbec nemá (hlavně
-      // Bazoš/RealityMIX) — v tom případě appka zkusí totéž vytáhnout z
-      // popisu na detailu, ten je skoro vždy zmiňuje taky. Cena stejně:
-      // "Cena na vyžádání"/"Dohodou" u samotné nabídky, ale popis přesto
-      // často konkrétní číslo obsahuje. Adresa má PĚT úrovní: pole od
-      // portálu → konec titulku (jen Bazoš, formát "... m², Město, ulice")
-      // → PSČ z Bazošova vlastního detailu (viz zipToKnownPlace — jde o
-      // jeho geokódování, přesnější než hádání ze slov, ale on sám u
-      // "Lokalita:" ukazuje jen nejbližší okresní město, takže se řadí až
-      // za titulek) → název sledovaného města zmíněný přímo v titulku
-      // (např. "Moderní bydlení - Česká Třebová, byt 32m2" — město je v
-      // titulku, ale ne v pozici za plochou, na kterou cílí druhý krok) →
-      // totéž v popisu na detailu, vč. skloňovaných tvarů (findKnownPlace
-      // v parse.js).
-      const disposition = parseDisposition(item.title) ?? parseDisposition(detail.description);
-      const areaM2 = parseAreaM2(item.title) ?? parseAreaM2(detail.description);
-      // Cena z popisu jen tam, kde ji portál vůbec neuvedl — a značí se
-      // (price_from_text), protože text bývá zastaralý (RK sníží cenu u
-      // inzerátu a v textu nechá původní; viz README).
-      const textPrice = item.priceCzk == null ? parsePriceFromDescription(detail.description) : null;
-      const priceCzk = item.priceCzk ?? textPrice;
-      let address =
-        item.address ||
-        parseAddressFromTitle(item.title) ||
-        zipToKnownPlace(detail.zip, watch) ||
-        findKnownPlace(item.title, watch) ||
-        findKnownPlace(detail.description, watch) ||
-        null;
-      // Když všech pět úrovní skončilo jen na holém názvu sledovaného
-      // města, zkusí appka ještě najít ulici zmíněnou v textu ("… v ulici
-      // Velký Hájek.") a připojit ji — víc než jen město, i když to pořád
-      // není oficiální adresa. Fires jen na HOLÉ město (žádná jiná úroveň
-      // adresu už nezpřesnila), ať appka nepřepisuje konkrétnější adresu.
-      if (address && watch.locations.some((loc) => loc.label === address)) {
-        const street = parseStreetFromText(item.title) ?? parseStreetFromText(detail.description);
-        if (street) address = `${address}, ul. ${street}`;
-      }
-
-      // Text popisu jako záchranná síť pro patro/sklep/vlastnictví, když je
-      // portál buď vůbec nedává strukturovaně (Bazoš/iDNES/RealityMIX), nebo
-      // je má ve svém JSON prázdné (reálný případ: sreality:479404108má
-      // nativně `floorInfo: null`, popis přitom patro říká) — nativní
-      // hodnota od portálu má vždy přednost, viz mergeExtractedParams.
-      // RealityMIX má popis v `geo.text`, ne v `description` (viz listing-text.js) — text se čte z obou.
-      const params = mergeExtractedParams(extractParamsFromText(item.title, detail.description || detail.geo?.text), detail.params || {});
-
-      insertListing(db, {
-        id: listingId,
-        source: source.name,
-        source_id: item.id,
-        url: item.url,
-        title: item.title,
-        disposition,
-        area_m2: areaM2,
-        address,
-        description: detail.description,
-        price_czk: priceCzk,
-        status,
-        first_seen_at: now,
-        last_seen_at: now,
-        params_json: JSON.stringify(params),
-        price_from_text: textPrice != null,
-      });
-
-      // Odhad vlastního hodnocení (viz detect-own-fields.js) — VŽDY jen jako
-      // výchozí návrh pro čerstvě zaevidovaný inzerát (pole je teď jistě
-      // NULL, insertListing na ně vůbec nesahá). Appka je pak sama od sebe
-      // už nikdy nepřepíše, jedině uživatel ručně přes <select> — proto
-      // stačí zapsat jednou tady, žádná ochrana proti přepsání navíc není
-      // potřeba.
-      // Stav bere i z portálového "Stav" (jen jednoznačné hodnoty, viz detect-own-fields.js)
-      // a u RealityMIX z textu v `geo.text`.
-      const ownFields = proposeOwnFields({ text: `${item.title} ${detail.description || detail.geo?.text || ""}`, portalCondition: detail.params?.condition });
-      // Skutečné datum zveřejnění od portálu (jen Sreality/Bazoš to umí,
-      // viz db.js) — appka mu nevěří naslepo, jen když je v minulosti (ne v
-      // budoucnu, což by značilo špatně rozparsované datum) a ne řádově
-      // vzdálenější než pár let (fail-soft proti pádnému parsovacímu omylu).
-      if (detail.listedAt) {
-        const listedTime = new Date(detail.listedAt).getTime();
-        if (Number.isFinite(listedTime) && listedTime <= Date.now() && listedTime > Date.now() - 5 * 365 * 24 * 60 * 60 * 1000) {
-          ownFields.listed_at = detail.listedAt;
-        }
-      }
-      // Poloha od portálu (souřadnice, strukturovaná adresa) — musí se zachytit
-      // hned, ze stránky zmizelého inzerátu odejde, viz geo.js.
-      Object.assign(ownFields, geoFields(detail.geo));
-      if (Object.keys(ownFields).length > 0) updateListingFields(db, listingId, ownFields);
-      insertEvent(db, { listing_id: listingId, event_type: "created", new_price_czk: priceCzk, occurred_at: now });
-      createdThisRun.push({ id: listingId, disposition, area_m2: areaM2, description: detail.description, price_czk: priceCzk });
-      if (status === "reserved") {
-        insertEvent(db, { listing_id: listingId, event_type: "reserved", occurred_at: now });
-        await notifyReservation({ disposition, area_m2: areaM2, address, price_czk: priceCzk, url: item.url });
-      }
-
-      if (detail.photoUrls.length > 0) {
-        const downloaded = await downloadPhotos(listingId, detail.photoUrls, log);
-        for (const photo of downloaded) {
-          insertPhoto(db, { listing_id: listingId, local_path: photo.localPath, source_url: photo.sourceUrl, downloaded_at: now });
-        }
-      }
-
-      newCount++;
-      log(`[${source.name}] nový inzerát ${item.id} (${status}) — ${item.title}`);
-      await sleep(300); // zdvořilost vůči portálu — jeden detail fetch + fotky za sebou
-      continue;
-    }
-
-    // Známý inzerát — update ceny + last_seen_at.
-    const fields = { last_seen_at: now };
-    if (existing.missed_since) fields.missed_since = null; // vrátil se, poslední výpadek byl jen přechodný
-    // Cena: změna, nebo z "Dohodou" na konkrétní cenu (viz price-update.js); cena → "Dohodou" se nezapisuje.
-    const priceUpdate = planPriceUpdate(existing, item.priceCzk);
-    if (priceUpdate) {
-      Object.assign(fields, priceUpdate.fields);
-      if (priceUpdate.event) {
-        insertEvent(db, { listing_id: listingId, event_type: "price_change", ...priceUpdate.event, occurred_at: now });
-        priceChangeCount++;
-        log(`[${source.name}] změna ceny ${item.id}: ${existing.price_czk ?? "bez ceny"} → ${item.priceCzk} Kč`);
-      }
-    }
-    if (existing.status === "removed") {
-      // Znovu se objevil — vzácné, ale ať to appka umí (ne že by zůstal
-      // navždy "removed", i když je zase v nabídce).
-      fields.status = "active";
-      fields.removed_at = null;
-      insertEvent(db, { listing_id: listingId, event_type: "reactivated", occurred_at: now });
-    }
-
-    // Prodáno (iDNES, jen z detailu). Prodaný byt je KONEČNÝ stav — kontroluje
-    // se dřív než rezervace, protože štítek "Rezervováno" z karty při
-    // prodeji zmizí a appka by to jinak zapsala jako zrušenou rezervaci.
-    // Poslední cena inzerátu je prodejní cena (viz detail/idnes.js).
-    // Detail se u známých inzerátů čte (iDNES kvůli "prodáno", Sreality kvůli
-    // rezervaci) tak jako tak — když u nich ještě chybí poloha, doplní se z
-    // téhož stažení (viz captureGeoIfMissing).
-    let soldNow = false;
-    if (source.soldFromDetail && existing.status !== "sold") {
-      const detail = await source.fetchDetail(item.url);
-      soldNow = detail.sold === true;
-      captureGeoIfMissing(existing, fields, detail);
-      await sleep(250); // zdvořilost vůči portálu
-    }
-    if (soldNow) {
-      const salePrice = fields.price_czk ?? existing.price_czk;
-      fields.status = "sold";
-      fields.removed_at = now; // okamžik, kdy appka zjistila prodej (konec doby v nabídce)
-      insertEvent(db, { listing_id: listingId, event_type: "sold", new_price_czk: salePrice, occurred_at: now });
-      soldCount++;
-      log(`[${source.name}] prodáno: ${listingId} (cena ${salePrice ?? "neuvedena"} Kč)`);
-      updateListingFields(db, listingId, fields);
-      continue;
-    }
-
-    // Rezervace: z výpisu, nebo (Sreality) z detailu. `null`/`undefined` =
-    // portál to v tomhle běhu nesdělil → stav se nemění (viz reservation.js).
-    let observedReserved = item.reserved;
-    if (source.reservationFromDetail) {
-      const detail = await source.fetchDetail(item.url);
-      observedReserved = detail.reserved;
-      captureGeoIfMissing(existing, fields, detail);
-      await sleep(250); // zdvořilost vůči portálu
-    }
-    const reservation = reservationChange(fields.status ?? existing.status, observedReserved);
-    if (reservation) {
-      fields.status = reservation.status;
-      insertEvent(db, { listing_id: listingId, event_type: reservation.eventType, occurred_at: now });
-      reservationCount++;
-      log(`[${source.name}] ${reservation.eventType === "reserved" ? "rezervováno" : "rezervace zrušena"}: ${listingId}`);
-      if (reservation.eventType === "reserved") {
-        await notifyReservation({
-          disposition: existing.disposition,
-          area_m2: existing.area_m2,
-          address: existing.address,
-          price_czk: fields.price_czk ?? existing.price_czk,
-          url: item.url,
-        });
-      }
-    }
-    updateListingFields(db, listingId, fields);
-  }
-
-  // Cokoli, co bylo dřív active/reserved u TOHOTO zdroje, ale v aktuálním
-  // běhu se nenašlo → buď znovu vložený inzerát, přechodný výpadek, nebo
-  // zmizelo z nabídky (pravděpodobně prodáno/rezervováno jinde/staženo z
-  // jiného důvodu — appka to netvrdí jistě, viz README). Rozlišení viz relist.js.
-  const { removedCount, relistedCount } = await handleDisappeared(db, source.name, currentIds, createdThisRun, log);
-
-  return { newCount, priceChangeCount, removedCount, relistedCount, reservationCount, soldCount, error: false };
-}
+const SOURCES = buildSources(log);
 
 // Jen jeden sběr naráz (plánovaná úloha + tlačítko "Aktualizovat teď" na
 // přehledu + dohánění po startu PC), viz track-lock.js. Běh, který zámek nezíská,
@@ -403,6 +86,14 @@ async function runLocked() {
   const watch = REGION_WATCH;
 
   log("=== Start běhu ===");
+  // Cloudový sběrač (scout.js): změny z doby, kdy PC nebylo zapnuté, se zapíšou se skutečným časem pozorování. Bez
+  // TRH_SNAPSHOT_REPO se nedělá nic (viz snapshot-replay.js); selhání sběr neshodí.
+  const runStartedAt = nowIso();
+  try {
+    await replaySnapshots({ db, sources: SOURCES, watch, regionKey: REGION.key, repoDir: process.env.TRH_SNAPSHOT_REPO, log });
+  } catch (err) {
+    log(`Přehrání snímků z cloudu selhalo: ${err.message}`);
+  }
   let totalNew = 0;
   let totalPriceChanges = 0;
   let totalRemoved = 0;
@@ -412,7 +103,7 @@ async function runLocked() {
   let hadError = false;
 
   for (const source of SOURCES) {
-    const result = await processSource(db, source, watch);
+    const result = await processSource(db, source, watch, { log });
     totalNew += result.newCount;
     totalPriceChanges += result.priceChangeCount;
     totalRemoved += result.removedCount;
@@ -421,6 +112,7 @@ async function runLocked() {
     totalSold += result.soldCount ?? 0;
     if (result.error) hadError = true;
   }
+  markLiveRun(db, runStartedAt); // snímky starší než tenhle sběr už nejsou potřeba
 
   log(
     `Hotovo. ${totalNew} nových bytů zaevidováno, ${totalPriceChanges} změn ceny, ${totalRemoved} zmizelo z nabídky, ${totalRelisted} znovu vloženo, ${totalReservations} změn rezervace, ${totalSold} prodáno.` +

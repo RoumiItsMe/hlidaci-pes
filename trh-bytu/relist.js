@@ -61,7 +61,7 @@ function priceText(price) {
  * se nenašly (`currentIds` = ID nalezená v tomhle běhu). `createdThisRun`
  * jsou nové inzeráty téhož zdroje z téhož běhu (kandidáti na nástupce).
  */
-export async function handleDisappeared(db, sourceName, currentIds, createdThisRun, log, { probe = probeGone, pause = sleep } = {}) {
+export async function handleDisappeared(db, sourceName, currentIds, createdThisRun, log, { probe = probeGone, pause = sleep, at = null } = {}) {
   const unclaimed = [...createdThisRun];
   let removedCount = 0;
   let relistedCount = 0;
@@ -69,7 +69,8 @@ export async function handleDisappeared(db, sourceName, currentIds, createdThisR
 
   for (const id of getActiveListingIdsForSource(db, sourceName)) {
     if (currentIds.has(id)) continue;
-    const now = nowIso();
+    const now = at ?? nowIso(); // `at`: čas pozorování u přehrávaného snímku (snapshot-replay.js)
+    const nowMs = Date.parse(now);
     const gone = getListing(db, id);
 
     const successor = findRelistSuccessor(gone, unclaimed);
@@ -90,7 +91,7 @@ export async function handleDisappeared(db, sourceName, currentIds, createdThisR
 
     // Přímý důkaz ze stránky inzerátu (gone-probe.js): portál ho smazal, takže není co potvrzovat po odstupu. Jinak
     // (chyba, nejasná odpověď, vyčerpaný strop) platí běžná pojistka níž.
-    if (!isMissConfirmed(gone.missed_since) && probes < MAX_GONE_PROBES_PER_RUN) {
+    if (!isMissConfirmed(gone.missed_since, nowMs) && probes < MAX_GONE_PROBES_PER_RUN) {
       probes++;
       const proven = await probe(sourceName, gone.url);
       await pause(PROBE_PAUSE_MS);
@@ -110,7 +111,7 @@ export async function handleDisappeared(db, sourceName, currentIds, createdThisR
       continue;
     }
 
-    if (!isMissConfirmed(gone.missed_since)) {
+    if (!isMissConfirmed(gone.missed_since, nowMs)) {
       log(`[${sourceName}] pořád nenalezen, ale první výpadek je čerstvý — potvrdí až další běh po odstupu: ${id}`);
       continue;
     }
