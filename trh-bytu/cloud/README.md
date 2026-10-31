@@ -16,8 +16,8 @@ GitHub Actions (denně)                     tvoje PC (při sběru)
 
 ## Co to stojí
 
-Jeden běh trvá zhruba 2–3 minuty (obě sekce). Při jednom běhu denně je to **asi 60–90 minut měsíčně**, tedy kolem
-4 % z 2 000 bezplatných minut soukromých repozitářů (GitHub Free). Snímky mají kolem 35 kB na sekci, ročně jde o desítky MB.
+Jeden běh trvá zhruba 3,5 minuty (obě sekce; GitHub účtuje 4). Při jednom běhu denně je to **asi 120 minut
+měsíčně**, tedy kolem 6 % z 2 000 bezplatných minut soukromých repozitářů (GitHub Free). Snímky mají kolem 35 kB na sekci, ročně jde o desítky MB.
 Kdyby sběr selhal, GitHub pošle e-mail o neúspěšném běhu.
 
 ## Nastavení (jednorázově, 5 minut)
@@ -68,5 +68,5 @@ běžný sběr. V `track.log` je to vidět jako `=== Přehrávám snímek z clou
 
 - Nesbírá fotky, nepočítá adresy a nehlídá katastr — to dělá běžný sběr na PC (nic z toho se neztrácí).
 - Nesbírá častěji než jednou denně. Chceš-li to změnit, uprav `cron` v `scout.yml`. Při častějším sběru dávej pozor na
-  limit minut (2–3 minuty na běh v soukromém repu).
+  limit minut (4 účtované minuty na běh v soukromém repu).
 - Nezapisuje do databáze nic sám — když PC zůstane vypnuté, snímky jen čekají v repu.
