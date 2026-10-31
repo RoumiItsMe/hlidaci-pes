@@ -315,7 +315,7 @@
     },
     {
       "id": "1074688",
-      "price": 5350000
+      "price": 5000000
     },
     {
       "id": "1075510",
@@ -497,7 +497,7 @@
     },
     {
       "id": "6ac6a7317228a22ed8093f69",
-      "price": 5350000
+      "price": 5000000
     },
     {
       "id": "6ac92e144079bebefc018f5d",
@@ -2306,6 +2306,10 @@
     {
       "fingerprint": "3590000_73",
       "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "5000000_94",
+      "source": "Bezrealitky.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -4107,17 +4111,17 @@
     "OBAS1000AB1U-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-10-31T15:17:55.282Z",
-    "board:letohrad": "2026-10-31T15:17:55.282Z",
-    "board:zamberk": "2026-10-31T15:17:55.282Z",
-    "board:ceska-trebova": "2026-10-31T15:17:55.282Z",
-    "board:lanskroun": "2026-10-31T15:17:55.282Z",
-    "board:kraliky": "2026-10-31T15:17:55.282Z",
-    "board:vysoke-myto": "2026-10-31T15:17:55.282Z",
-    "board:lukova": "2026-10-31T15:17:55.282Z",
-    "board:tatenice": "2026-10-31T15:17:55.282Z",
-    "board:anenska-studanka": "2026-10-31T15:17:55.282Z",
-    "board:okres-usti-nad-orlici": "2026-10-31T14:31:18.437Z"
+    "board:usti-nad-orlici": "2026-10-31T15:31:22.312Z",
+    "board:letohrad": "2026-10-31T15:31:22.312Z",
+    "board:zamberk": "2026-10-31T15:31:22.312Z",
+    "board:ceska-trebova": "2026-10-31T15:31:22.312Z",
+    "board:lanskroun": "2026-10-31T15:31:22.312Z",
+    "board:kraliky": "2026-10-31T15:31:22.312Z",
+    "board:vysoke-myto": "2026-10-31T15:31:22.312Z",
+    "board:lukova": "2026-10-31T15:31:22.312Z",
+    "board:tatenice": "2026-10-31T15:31:22.312Z",
+    "board:anenska-studanka": "2026-10-31T15:31:22.312Z",
+    "board:okres-usti-nad-orlici": "2026-10-31T15:31:22.312Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
@@ -4152,6 +4156,12 @@
       "source": "idnes",
       "sourceLabel": "Reality.iDNES.cz",
       "at": "2026-10-30T10:15:48.290Z"
+    },
+    {
+      "key": "5350000>5000000",
+      "source": "bezrealitky",
+      "sourceLabel": "Bezrealitky.cz",
+      "at": "2026-10-31T15:31:00.940Z"
     }
   ],
   "pozemky-glamping:__changes": [
