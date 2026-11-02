@@ -9,7 +9,7 @@ import path from "node:path";
 import { initDb, getListing } from "./db.js";
 import { REGION_WATCH } from "./region.js";
 import { snapshotRelPath, SNAPSHOT_VERSION } from "./snapshot.js";
-import { EMPTY_LIST_GUARD_MIN_ACTIVE, getAppliedUntil, markLiveRun, pendingSnapshots, pullSnapshotRepo, replaySnapshots, setAppliedUntil } from "./snapshot-replay.js";
+import { EMPTY_LIST_GUARD_MIN_ACTIVE, STALE_SNAPSHOT_HOURS, getAppliedUntil, latestSnapshotAt, markLiveRun, pendingSnapshots, pullSnapshotRepo, replaySnapshots, setAppliedUntil, staleSnapshotNote } from "./snapshot-replay.js";
 
 const D1 = "2026-10-28T04:10:00.000Z";
 const D2 = "2026-10-29T04:10:00.000Z";
@@ -204,6 +204,54 @@ test("pendingSnapshots řadí od nejstaršího a bere jen novější než zadan�
     assert.equal(getAppliedUntil(t.db), D2);
     setAppliedUntil(t.db, D3);
     assert.equal(getAppliedUntil(t.db), D3);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("nejnovější snímek regionu se pozná i u už přehraných; bez složky nebo bez snímků je null", () => {
+  const t = setup();
+  try {
+    assert.equal(latestSnapshotAt(t.repo, "default"), null);
+    t.writeSnapshot(D1, ok());
+    t.writeSnapshot(D3, ok());
+    t.writeSnapshot(D2, ok());
+    assert.equal(latestSnapshotAt(t.repo, "default"), D3);
+    assert.equal(latestSnapshotAt(t.repo, "nachod"), null);
+    assert.equal(latestSnapshotAt(null, "default"), null);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("upozornění na neběžící sběrač: čerstvý snímek nic, od 36 h ano (v hodinách, pak ve dnech), žádný snímek taky", () => {
+  const now = Date.parse("2026-11-02T08:00:00.000Z");
+  const hoursAgo = (h) => new Date(now - h * 3_600_000).toISOString();
+  assert.equal(staleSnapshotNote(hoursAgo(1), now), null);
+  assert.equal(staleSnapshotNote(hoursAgo(STALE_SNAPSHOT_HOURS - 1), now), null);
+  assert.equal(staleSnapshotNote(hoursAgo(STALE_SNAPSHOT_HOURS), now), "Cloudový sběrač nejspíš neběží: poslední snímek je starý 36 h");
+  assert.equal(staleSnapshotNote(hoursAgo(47), now), "Cloudový sběrač nejspíš neběží: poslední snímek je starý 47 h");
+  assert.equal(staleSnapshotNote(hoursAgo(72), now), "Cloudový sběrač nejspíš neběží: poslední snímek je starý 3 dny");
+  assert.equal(staleSnapshotNote(hoursAgo(24 * 6), now), "Cloudový sběrač nejspíš neběží: poslední snímek je starý 6 dní");
+  assert.equal(staleSnapshotNote(null, now), "Z cloudu zatím nepřišel žádný snímek");
+});
+
+test("přehrávání zaloguje varování, když je poslední snímek starý; čerstvý nic", async () => {
+  const t = setup();
+  try {
+    t.writeSnapshot("2026-10-20T04:10:00.000Z", ok(itemOf("1")));
+    logs.length = 0;
+    await t.replay();
+    assert.ok(logs.some((l) => /Cloudový sběrač nejspíš neběží/.test(l)));
+    const fresh = setup();
+    try {
+      fresh.writeSnapshot(new Date(Date.now() - 3_600_000).toISOString(), ok(itemOf("1")));
+      logs.length = 0;
+      await fresh.replay();
+      assert.equal(logs.some((l) => /Cloudový sběrač nejspíš neběží/.test(l)), false);
+    } finally {
+      fresh.cleanup();
+    }
   } finally {
     t.cleanup();
   }

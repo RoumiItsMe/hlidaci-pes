@@ -22,6 +22,7 @@ import { loadKnScans, createWatchResolver, refreshKnScans, UNRESERVED_HORIZON_DA
 import { analyzePlombas, formatDay as formatKnDay } from "./kn-plomba.js";
 import { parseUnitNumber, formatUnitNumber } from "./kn-api.js";
 import { loadKnEvents, dismissKnEvent } from "./kn-events.js";
+import { latestSnapshotAt, staleSnapshotNote } from "./snapshot-replay.js";
 import { groupsByBuilding, houseEventsForGroup, filedBeforeRemovalDays, describeFilingGap } from "./kn-event-flats.js";
 import { buildSaleRecordUpdates, currentSaleState, unitConfirmInput, statsSalePrice, assumedSalePrice, isAlmostSold, saleEvidence, ASSUMED_PRICE_DISCOUNT } from "./sale-record.js";
 import { PARAM_FIELDS, OWN_FIELDS, PARAM_OVERRIDE_FIELDS } from "./params.js";
@@ -1469,7 +1470,9 @@ function renderDashboard(db) {
 
   const lastRun = relativeTime(db.prepare("SELECT MAX(last_seen_at) AS t FROM listings").get()?.t, now);
   const lastScan = relativeTime(db.prepare("SELECT MAX(scanned_at) AS t FROM kn_scans").get()?.t, now);
-  const sub = [lastRun ? `Poslední sběr nabídek: ${lastRun}` : null, lastScan ? `poslední kontrola katastru: ${lastScan}` : null].filter(Boolean).join(" · ");
+  // Cloudový sběrač (cloud/README.md): když je zapnutý a poslední snímek je starý, ať je to vidět hned.
+  const cloudNote = process.env.TRH_SNAPSHOT_REPO ? staleSnapshotNote(latestSnapshotAt(process.env.TRH_SNAPSHOT_REPO, REGION.key)) : null;
+  const sub = [lastRun ? `Poslední sběr nabídek: ${lastRun}` : null, lastScan ? `poslední kontrola katastru: ${lastScan}` : null, cloudNote ? `⚠ ${cloudNote}` : null].filter(Boolean).join(" · ");
 
   const kpi = (href, num, label, note = "") =>
     `<a class="kpi" href="${href}"><span class="kpi-num">${esc(num)}</span><span class="kpi-label">${esc(label)}</span>${note ? `<span class="kpi-note">${esc(note)}</span>` : ""}</a>`;

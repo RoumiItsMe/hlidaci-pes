@@ -62,6 +62,26 @@ export function pendingSnapshots(repoDir, regionKey, after) {
     .sort((a, b) => a.collectedAt.localeCompare(b.collectedAt));
 }
 
+/** Čas nejnovějšího snímku regionu v lokálním klonu (i už přehraného), nebo null. */
+export function latestSnapshotAt(repoDir, regionKey) {
+  const dir = repoDir ? path.join(repoDir, "snapshots", regionKey) : null;
+  if (!dir || !existsSync(dir)) return null;
+  return readdirSync(dir).map(collectedAtFromFile).filter(Boolean).sort().at(-1) ?? null;
+}
+
+// Cloudový sběrač běží jednou denně; starší snímek než tohle znamená, že přestal chodit (spouštěč, token, výpadek).
+export const STALE_SNAPSHOT_HOURS = 36;
+
+/** Věta o tom, že cloudový sběrač nejspíš neběží, nebo null, když je poslední snímek čerstvý. */
+export function staleSnapshotNote(latestAt, now = Date.now()) {
+  if (!latestAt) return "Z cloudu zatím nepřišel žádný snímek";
+  const hours = Math.floor((now - Date.parse(latestAt)) / 3_600_000);
+  if (hours < STALE_SNAPSHOT_HOURS) return null;
+  const days = Math.floor(hours / 24);
+  const age = hours < 48 ? `${hours} h` : days <= 4 ? `${days} dny` : `${days} dní`;
+  return `Cloudový sběrač nejspíš neběží: poslední snímek je starý ${age}`;
+}
+
 const activeCount = (db, source) => db.prepare("SELECT COUNT(*) AS c FROM listings WHERE source = ? AND status IN ('active','reserved')").get(source).c;
 
 /**
@@ -77,6 +97,8 @@ export async function replaySnapshots({ db, sources, watch, regionKey, repoDir, 
     return { enabled: false, applied: 0, skipped: 0 };
   }
   pull(repoDir, log);
+  const staleNote = staleSnapshotNote(latestSnapshotAt(repoDir, regionKey));
+  if (staleNote) log(`⚠ ${staleNote} — zkontroluj spouštěč (trh-bytu/cloud/README.md).`);
   const pending = pendingSnapshots(repoDir, regionKey, baseline(db));
   let applied = 0;
   let skipped = 0;

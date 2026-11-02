@@ -4,13 +4,17 @@
 #
 # Jednou denně stáhne výpisy portálů obou sekcí a uloží je jako snímky (snapshots/<region>/<čas>.json). Appka na PC je
 # při dalším startu přehraje se skutečným časem pozorování (trh-bytu/snapshot-replay.js).
+#
+# SPOUŠTĚČ: primárně EXTERNÍ cron (cron-job.org → GitHub API `workflow_dispatch`), stejně jako u Hlídacího psa. GitHubův
+# vlastní `schedule` je u tohoto účtu nespolehlivý (běhy chodí o hodiny později nebo vůbec — naměřeno 10/2026: místo
+# každých 15 minut jen ~5 plánovaných běhů denně), proto je tady jen jako ZÁLOHA. Aby záloha nevyrobila druhý běh ve
+# stejný den, plánovaný běh na začátku zkontroluje stáří posledního snímku a když je čerstvý, skončí.
 
 name: Sběrač (Trh bytů)
 
 on:
   schedule:
-    # Denně v 03:17 UTC (04:17 / 05:17 místního času). Schválně ne na kulatou minutu — kulaté sloty jsou na GitHubu
-    # nejvytíženější a spouštění se tam nejvíc zpožďuje nebo přeskakuje.
+    # Záloha pro případ, že selže externí cron. Schválně ne na kulatou minutu (kulaté sloty jsou na GitHubu nejvytíženější).
     - cron: "17 3 * * *"
   workflow_dispatch: {}
 
@@ -22,23 +26,45 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # Plánovaný (záložní) běh se přeskočí, když poslední snímek není starší než tolik hodin.
+  FRESH_SNAPSHOT_HOURS: "12"
+
 jobs:
   scout:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Snímky (toto soukromé repo)
+        uses: actions/checkout@v4
+        with:
+          path: data
+          fetch-depth: 0 # stáří posledního snímku se čte z historie
+
+      # Ruční a externí spuštění (workflow_dispatch) běží vždy; jen záloha přes `schedule` se při čerstvém snímku vzdá.
+      - name: Je snímek čerstvý? (jen záložní plánovaný běh)
+        id: fresh
+        if: ${{ github.event_name == 'schedule' }}
+        working-directory: data
+        run: |
+          last=$(git log -1 --format=%ct -- snapshots 2>/dev/null || true)
+          last=${last:-0}
+          age_h=$(( ( $(date -u +%s) - last ) / 3600 ))
+          echo "Poslední snímek je starý ${age_h} h (limit ${FRESH_SNAPSHOT_HOURS} h)."
+          if [ "$age_h" -lt "$FRESH_SNAPSHOT_HOURS" ]; then
+            echo "Snímek je čerstvý — záložní běh se přeskakuje."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Kód sběrače (veřejné repo)
+        if: ${{ steps.fresh.outputs.skip != 'true' }}
         uses: actions/checkout@v4
         with:
           repository: RoumiItsMe/hlidaci-pes
           path: code
 
-      - name: Snímky (toto soukromé repo)
-        uses: actions/checkout@v4
-        with:
-          path: data
-
       - name: Setup Node.js
+        if: ${{ steps.fresh.outputs.skip != 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -46,6 +72,7 @@ jobs:
           cache-dependency-path: code/package-lock.json
 
       - name: Install dependencies
+        if: ${{ steps.fresh.outputs.skip != 'true' }}
         working-directory: code
         run: npm ci
 
@@ -53,6 +80,7 @@ jobs:
       # (viz poslední krok), takže GitHub pošle e-mail o neúspěšném běhu.
       - name: Sběr — Ústí nad Orlicí
         id: usti
+        if: ${{ steps.fresh.outputs.skip != 'true' }}
         continue-on-error: true
         working-directory: code
         env:
@@ -61,6 +89,7 @@ jobs:
 
       - name: Sběr — Náchod a Nové Město nad Metují
         id: nachod
+        if: ${{ steps.fresh.outputs.skip != 'true' }}
         continue-on-error: true
         working-directory: code
         env:
@@ -68,6 +97,7 @@ jobs:
         run: node trh-bytu/scout.js --out ../data/snapshots
 
       - name: Uložení snímků
+        if: ${{ steps.fresh.outputs.skip != 'true' }}
         working-directory: data
         run: |
           git config user.name "trh-bytu-scout"
