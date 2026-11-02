@@ -251,3 +251,67 @@ document.addEventListener("click", async (event) => {
     button.textContent = original;
   }, 1500);
 });
+
+// Grafy na stránce Vývoj cen (trend-chart.js): najetí myší nebo fokus klávesnicí (Tab) na období ukáže svislou
+// čáru a bublinu se všemi hodnotami období. Obsah bubliny nese `data-tips` grafu a vkládá se přes textContent.
+// Delegovaně na dokumentu, stejně jako zbytek souboru.
+(() => {
+  function show(hit) {
+    const chart = hit.closest(".chart");
+    const box = chart?.querySelector(".chart-tip");
+    const tip = chart && JSON.parse(chart.dataset.tips || "[]")[Number(hit.dataset.i)];
+    if (!box || !tip) return;
+    const cross = chart.querySelector(".chart-cross");
+    cross.setAttribute("x1", hit.dataset.x);
+    cross.setAttribute("x2", hit.dataset.x);
+    chart.classList.add("is-active");
+
+    const title = document.createElement("div");
+    title.className = "chart-tip-title";
+    title.textContent = tip.title;
+    const rows = tip.rows.map((row) => {
+      const line = document.createElement("div");
+      line.className = "chart-tip-row";
+      const key = document.createElement("i");
+      key.className = `chart-tip-key chart-tip-key--${row.color ? row.kind : "none"}`;
+      if (row.color) key.style.setProperty("--key", row.color);
+      const value = document.createElement("strong");
+      value.textContent = row.value;
+      const label = document.createElement("span");
+      label.textContent = row.label;
+      line.append(key, value, label);
+      return line;
+    });
+    box.replaceChildren(title, ...rows);
+    box.hidden = false;
+
+    // Bublina vedle čáry, na straně, kde je místo.
+    const svg = chart.querySelector("svg");
+    const svgBox = svg.getBoundingClientRect();
+    const x = svgBox.left - chart.getBoundingClientRect().left + (Number(hit.dataset.x) * svgBox.width) / svg.viewBox.baseVal.width;
+    const width = box.offsetWidth;
+    box.style.left = `${x + 14 + width > chart.clientWidth ? Math.max(0, x - 14 - width) : x + 14}px`;
+  }
+  function hide(chart) {
+    chart.classList.remove("is-active");
+    const box = chart.querySelector(".chart-tip");
+    if (box) box.hidden = true;
+  }
+  const hitOf = (event) => (event.target instanceof Element ? event.target.closest(".chart-hit") : null);
+  document.addEventListener("pointerover", (event) => {
+    const hit = hitOf(event);
+    if (hit) show(hit);
+  });
+  document.addEventListener("focusin", (event) => {
+    const hit = hitOf(event);
+    if (hit) show(hit);
+  });
+  document.addEventListener("pointerout", (event) => {
+    const chart = event.target instanceof Element ? event.target.closest(".chart") : null;
+    if (chart && !(event.relatedTarget instanceof Node && chart.contains(event.relatedTarget))) hide(chart);
+  });
+  document.addEventListener("focusout", (event) => {
+    const hit = hitOf(event);
+    if (hit) hide(hit.closest(".chart"));
+  });
+})();

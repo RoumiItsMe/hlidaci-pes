@@ -42,6 +42,8 @@ import { applyCompareFilters, compareFilterOptions, describeCompareFilters, COMP
 import { planDetach, planLock, planRelease } from "./manual-groups.js";
 import { traceVanished, CATEGORY_LABELS as TRACE_LABELS } from "./vanish-trace.js";
 import { readTrackLock } from "./track-lock.js";
+import { priceTrend, autoPeriod, filterTrendEntries, trendFilterOptions, trendCsv, percentChange, CONDITION_FILTERS, PERIODS, toMs } from "./price-trend.js";
+import { lineChartHtml } from "./trend-chart.js";
 import { REGION, REGION_WATCH, OTHER_REGIONS, KN_OPTIONS } from "./region.js";
 
 // KN_API_KEY (a Telegram kvůli zprávě o nalezeném vkladu) z `.env.local` v
@@ -420,7 +422,7 @@ ${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ""}
 <script src="/app.js" defer></script>
 </head>
 <body data-region="${REGION.key}">
-<header><a href="/" class="brand">🏠 Trh bytů</a> <span class="region-tag" title="${esc(REGION.label)}">${esc(REGION.short)}</span> <a href="/byty">🏘️ Byty</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/kontrola">🏛️ Katastr</a> <a href="/slouceni">🔗 Sloučení</a>${regionSwitch}${bell}</header>
+<header><a href="/" class="brand">🏠 Trh bytů</a> <span class="region-tag" title="${esc(REGION.label)}">${esc(REGION.short)}</span> <a href="/byty">🏘️ Byty</a> <a href="/tabulka">🗂️ Srovnání</a> <a href="/stats">Statistiky</a> <a href="/vyvoj">📈 Vývoj cen</a> <a href="/kontrola">🏛️ Katastr</a> <a href="/slouceni">🔗 Sloučení</a>${regionSwitch}${bell}</header>
 <main${wide ? ' class="wide"' : ""}>${body}</main>
 </body>
 </html>`;
@@ -1603,7 +1605,7 @@ function renderStatsItemsList(items, discount) {
       return `<li><a href="/byt/${encodeURIComponent(it.id)}">${esc(it.address)}${areaLabel}</a> — ${formatCzk(Math.round(it.pricePerM2))}/m²${verifiedBadge}${evidenceLabel ? ` <span class="muted">· ${evidenceLabel}</span>` : ""}</li>`;
     })
     .join("");
-  return `<details class="stats-items"><summary>${items.length} bytů</summary><ul>${rows}</ul></details>`;
+  return `<details class="stats-items"><summary>${flatsCount(items.length)}</summary><ul>${rows}</ul></details>`;
 }
 
 // Průměr s rozpětím: odhady (poslední cena −X %) jsou nejistější než ověřené ceny, proto se vedle průměru
@@ -1735,6 +1737,183 @@ function renderStats(db) {
       u družstevních bytů a domů bez jednotek. Celkem ${renoStats.totalEligible} bytů se známou cenou/m².
     </p>
     ${renoStats.cities.length ? renoStats.cities.map((c) => renderCityStatsTable(c, renoStats.discount)).join("") : `<p class="muted">Zatím žádná data.</p>`}`;
+}
+
+// Vývoj cen (/vyvoj, price-trend.js): parametry stránky česky v URL, ať se dá odkaz poslat nebo uložit.
+const TREND_PERIOD_PARAMS = { tydny: "week", mesice: "month", ctvrtleti: "quarter" };
+
+function trendRequest(searchParams) {
+  const pick = (key) => (searchParams.get(key) || "").slice(0, 100) || null;
+  const obdobi = pick("obdobi");
+  const stav = pick("stav");
+  return {
+    obdobi: obdobi && Object.hasOwn(TREND_PERIOD_PARAMS, obdobi) ? obdobi : null,
+    mesto: pick("mesto"),
+    dispozice: pick("dispozice"),
+    stav: CONDITION_FILTERS.some(([v]) => v === stav) ? stav : null,
+  };
+}
+
+// Skryté byty se nepočítají (stejně jako ve Statistikách), začátek sledování se ale bere ze všech bytů — filtr
+// ani skrytí ho nesmí posunout.
+function computeTrend(db, req) {
+  const all = computeEntries(db);
+  const trackingStart = Math.min(...all.map((e) => toMs(e.discoveredAt)).filter((v) => v != null));
+  const shown = all.filter((e) => !e.hidden);
+  const entries = filterTrendEntries(shown, { city: req.mesto, disposition: req.dispozice, condition: req.stav });
+  const period = req.obdobi ? TREND_PERIOD_PARAMS[req.obdobi] : autoPeriod(trackingStart);
+  return { trend: priceTrend(entries, { period, trackingStart }), shown, entries, period, trackingStart };
+}
+
+const flatsCount = (n) => `${n} ${n === 1 ? "byt" : n >= 2 && n <= 4 ? "byty" : "bytů"}`;
+const perM2Text = (v) => (v == null ? "—" : `${formatCzk(v)}/m²`);
+const signedPercent = (v) => `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} %`;
+const shortDay = (ms) => `${new Date(ms).getDate()}. ${new Date(ms).getMonth() + 1}.`;
+
+function renderTrend(db, req) {
+  const { trend, shown, entries, period, trackingStart } = computeTrend(db, req);
+  const rows = trend.rows;
+  const current = { obdobi: req.obdobi, mesto: req.mesto, dispozice: req.dispozice, stav: req.stav };
+
+  // Filtry v jednom řádku nad vším, co ovlivňují: délka období, pak město / dispozice / stav.
+  const periodLinks = Object.entries(TREND_PERIOD_PARAMS)
+    .map(([param, p]) => `<a class="filter${p === period ? " active" : ""}" href="${buildQuery(current, { obdobi: param }, "/vyvoj")}">${PERIODS[p]}</a>`)
+    .join("");
+  const options = trendFilterOptions(shown);
+  const opt = (value, label, selected) => `<option value="${esc(value)}"${selected ? " selected" : ""}>${esc(label)}</option>`;
+  const select = (name, label, allLabel, list, value) =>
+    `<select name="${name}" onchange="this.form.submit()" aria-label="${label}">${opt("", allLabel, !value)}${list.map(([v, l]) => opt(v, l, value === v)).join("")}</select>`;
+  const filtersHtml = `<div class="toolbar">
+      <div class="filters">${periodLinks}</div>
+      <form method="get" action="/vyvoj" class="select-filters trend-filters">
+        ${req.obdobi ? `<input type="hidden" name="obdobi" value="${esc(req.obdobi)}">` : ""}
+        ${select("mesto", "Město", "Všechna města", options.cities.map((c) => [c.value, `${c.value} (${c.count})`]), req.mesto)}
+        ${select("dispozice", "Dispozice", "Všechny dispozice", options.dispositions.map((d) => [d.value, `${d.value} (${d.count})`]), req.dispozice)}
+        ${select("stav", "Stav bytu", "Všechny stavy", CONDITION_FILTERS, req.stav)}
+        <a class="filter" href="${buildQuery(current, {}, "/vyvoj.csv")}" title="Tabulka níž jako soubor pro Excel">⬇ CSV</a>
+      </form>
+    </div>`;
+
+  const head = `<p><a href="/stats">← Statistiky</a></p><h1>Vývoj cen</h1>`;
+  if (!rows.length) return `${head}${filtersHtml}<p class="empty">Zatím žádná data.</p>`;
+  const weeks = Math.max(1, Math.round((Date.now() - trackingStart) / (7 * 24 * 60 * 60 * 1000)));
+  const intro = `<p class="muted">Appka sleduje tuhle sekci od ${esc(formatDateOnly(new Date(trackingStart).toISOString()))} (${weeks} ${weeks === 1 ? "týden" : weeks <= 4 ? "týdny" : "týdnů"}) — dřív o trhu nic neví.
+    Čím déle běží, tím víc graf řekne: za pár týdnů se průměr pohne i jen tím, které byty zrovna přibyly nebo zmizely, proto je u každého
+    čísla vidět, z kolika bytů vzniklo.</p>`;
+  if (!entries.length) return `${head}${filtersHtml}${intro}<p class="empty">Pro zvolené filtry tu nic není.</p>`;
+
+  const first = rows[0];
+  const last = rows.at(-1);
+  const change = (key) => {
+    const pct = rows.length > 1 ? percentChange(first.stock[key], last.stock[key]) : null;
+    return pct == null ? "" : `${signedPercent(pct)} od ${shortDay(first.at)}`;
+  };
+  const allSales = rows.flatMap((r) => r.sales.items);
+  const salesAvg = allSales.length ? Math.round(allSales.reduce((s, it) => s + it.pricePerM2, 0) / allSales.length) : null;
+  const salesVerified = allSales.filter((it) => it.basis === "verified").length;
+  const tile = (num, label, note) => `<div class="kpi kpi--static"><span class="kpi-num">${esc(num)}</span><span class="kpi-label">${esc(label)}</span>${note ? `<span class="kpi-note">${esc(note)}</span>` : ""}</div>`;
+  const tiles = `<div class="kpis">
+      ${tile(String(last.stock.count), "v nabídce teď", `s cenou a plochou ${last.stock.priced}`)}
+      ${tile(last.stock.avgPerM2 != null ? formatCzk(last.stock.avgPerM2) : "—", "průměr za m² v nabídce", change("avgPerM2"))}
+      ${tile(last.stock.medianPerM2 != null ? formatCzk(last.stock.medianPerM2) : "—", "medián za m² v nabídce", change("medianPerM2"))}
+      ${tile(salesAvg != null ? formatCzk(salesAvg) : "—", "průměr za m² u prodejů", allSales.length ? `${flatsCount(allSales.length)}, ověřeno ${salesVerified}` : "zatím žádný prodej")}
+    </div>`;
+
+  const priceTicks = (v) => (v >= 1000 ? `${(v / 1000).toLocaleString("cs-CZ")} tis.` : String(v));
+  const priceChart =
+    rows.length > 1
+      ? lineChartHtml({
+          labels: rows.map((r) => r.short),
+          series: [
+            { label: "Průměr v nabídce", color: "var(--series-1)", kind: "line", values: rows.map((r) => r.stock.avgPerM2) },
+            { label: "Medián v nabídce", color: "var(--series-2)", kind: "line", values: rows.map((r) => r.stock.medianPerM2) },
+            { label: "Prodeje (průměr)", color: "var(--series-3)", kind: "dots", values: rows.map((r) => r.sales.avgPerM2) },
+          ],
+          tips: rows.map((r) => ({
+            title: `${r.label}${r.partial ? " (probíhá)" : ""}`,
+            rows: [
+              { label: "průměr v nabídce", value: perM2Text(r.stock.avgPerM2), color: "var(--series-1)", kind: "line" },
+              { label: "medián v nabídce", value: perM2Text(r.stock.medianPerM2), color: "var(--series-2)", kind: "line" },
+              { label: r.sales.priced ? `prodeje (${flatsCount(r.sales.priced)})` : "prodeje", value: r.sales.priced ? perM2Text(r.sales.avgPerM2) : "žádný", color: "var(--series-3)", kind: "dots" },
+              { label: "v nabídce s cenou a plochou", value: flatsCount(r.stock.priced) },
+            ],
+          })),
+          formatTick: priceTicks,
+          formatValue: perM2Text,
+          ariaLabel: "Cena za m² po obdobích: průměr a medián v nabídce, průměr u prodejů",
+        })
+      : "";
+  const countChart =
+    rows.length > 1
+      ? lineChartHtml({
+          labels: rows.map((r) => r.short),
+          series: [{ label: "V nabídce", color: "var(--series-1)", kind: "line", values: rows.map((r) => r.stock.count) }],
+          tips: rows.map((r) => ({
+            title: `${r.label}${r.partial ? " (probíhá)" : ""}`,
+            rows: [
+              { label: "v nabídce", value: flatsCount(r.stock.count), color: "var(--series-1)", kind: "line" },
+              { label: "přibylo", value: r.initial ? `${r.added} (+ ${r.initial} z prvního sběru)` : String(r.added) },
+              { label: "zmizelo", value: String(r.removed) },
+            ],
+          })),
+          formatTick: (v) => String(v),
+          formatValue: (v) => flatsCount(v),
+          height: 180,
+          zero: true,
+          ariaLabel: "Počet bytů v nabídce po obdobích",
+        })
+      : "";
+  const charts =
+    rows.length > 1
+      ? `<h2>Cena za m²</h2>${priceChart}<h2>Počet bytů v nabídce</h2>${countChart}`
+      : `<p class="muted">Zatím je jen jedno období — graf se vykreslí, až přibude druhé${period === "week" ? "" : " (nebo přepni na Týdny)"}.</p>`;
+
+  // Tabulka = totéž co grafy, v číslech (a jediné místo, kde je vidět, ze kterých prodaných bytů průměr vznikl).
+  const discount = { base: entryDiscount(entries[0]) };
+  const SMALL_SAMPLE = 5;
+  const tableRows = [...rows]
+    .reverse()
+    .map((r) => {
+      const small = r.stock.priced > 0 && r.stock.priced < SMALL_SAMPLE ? ` <span class="muted" title="Málo bytů — průměr je hodně náhodný">(jen ${r.stock.priced})</span>` : "";
+      const added = r.initial ? `${r.added} <span class="muted">+ ${r.initial} z prvního sběru</span>` : String(r.added);
+      const sales = r.sales.priced
+        ? `${renderStatsItemsList(r.sales.items, discount)}${r.sales.verified ? ` <span class="muted">(${r.sales.verified}× ověřeno)</span>` : ""}${r.sales.estimated ? ` <span class="muted">(${r.sales.estimated}× odhad)</span>` : ""}`
+        : r.sales.count
+        ? `${r.sales.count} <span class="muted">bez ceny/plochy</span>`
+        : "0";
+      return `<tr>
+        <td>${esc(r.label)}${r.partial ? ` <span class="muted">(probíhá)</span>` : ""}</td>
+        <td class="num">${r.stock.count}</td>
+        <td class="num">${perM2Text(r.stock.avgPerM2)}${small}</td>
+        <td class="num">${perM2Text(r.stock.medianPerM2)}</td>
+        <td class="num">${r.stock.medianPrice != null ? formatCzk(r.stock.medianPrice) : "—"}</td>
+        <td class="num">${added}</td>
+        <td class="num">${r.removed}</td>
+        <td>${sales}</td>
+        <td class="num">${perM2Text(r.sales.avgPerM2)}</td>
+      </tr>`;
+    })
+    .join("");
+  const table = `<h2>Po obdobích <span class="muted">(nejnovější nahoře)</span></h2>
+    <div class="table-scroll"><table class="stats-table trend-table">
+      <thead><tr><th>Období</th><th>V nabídce</th><th>Průměr za m²</th><th>Medián za m²</th><th>Medián ceny</th><th>Přibylo</th><th>Zmizelo</th><th>Prodáno</th><th>Prodej za m²</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table></div>`;
+
+  const how = `<h2>Jak se to počítá</h2>
+    <ul class="muted">
+      <li><strong>Nabídka</strong> = volné byty v nabídce ke konci období (u probíhajícího k dnešku) — bez rezervovaných, ty už mají kupce —
+        s inzerovanou cenou platnou v tu chvíli; appka si pamatuje každou změnu ceny. Průměr a medián jen z bytů se známou cenou i plochou. Medián je
+        odolnější: jeden drahý byt průměr vytáhne nahoru, medián skoro nepohne.</li>
+      <li><strong>Inzerovaná cena není prodejní</strong> — kupní cena bývá nižší, proto jsou prodeje zvlášť.</li>
+      <li><strong>Prodeje</strong> = prodané a téměř jistě prodané byty (jako ve <a href="/stats">Statistikách</a>), zařazené podle data prodeje
+        z katastru, jinak podle podání vkladu, zmizení inzerátu nebo začátku rezervace. Cena je ověřená z katastru, jinak odhad: poslední
+        inzerovaná cena −${percent(discount.base)} %.</li>
+      <li><strong>Přibylo</strong> = byty, které appka v období nově našla. Co našel úplně první sběr, na trhu už bylo, proto je to zvlášť.</li>
+      <li>Skryté byty (✕) se nepočítají.</li>
+    </ul>`;
+
+  return `${head}${filtersHtml}${intro}${tiles}${charts}${table}${how}`;
 }
 
 // Formulář a tlačítko fronty Katastr — sdílí je karty ve frontě i sekce
@@ -2675,6 +2854,19 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/stats" && req.method === "GET") {
     return sendHtml(res, 200, layout("Statistiky — Trh bytů", renderStats(db)));
+  }
+
+  if (url.pathname === "/vyvoj" && req.method === "GET") {
+    return sendHtml(res, 200, layout("Vývoj cen — Trh bytů", renderTrend(db, trendRequest(url.searchParams))));
+  }
+
+  // Tabulka vývoje cen jako soubor pro Excel — stejné filtry jako stránka.
+  if (url.pathname === "/vyvoj.csv" && req.method === "GET") {
+    const { trend, period } = computeTrend(db, trendRequest(url.searchParams));
+    const periodName = Object.keys(TREND_PERIOD_PARAMS).find((k) => TREND_PERIOD_PARAMS[k] === period);
+    const name = `vyvoj-cen-${REGION.key === "default" ? "" : `${REGION.key}-`}${periodName}-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" });
+    return res.end(trendCsv(trend));
   }
 
   const detailMatch = url.pathname.match(/^\/byt\/([^/]+)$/);

@@ -1428,6 +1428,24 @@ appka ho z textu inzerátu nehádá.
 - **V chatu (MCP):** filtr `stav_bytu=v_topu` u `prodane_byty`, `statistiky_cen` a `nabidky`,
   a členění `clenit_podle=stav_bytu` ve `statistiky_cen`; byty v seznamech mají `stavBytu`.
 
+## Vývoj cen (`/vyvoj`) — průměry po obdobích a graf
+
+Stránka **📈 Vývoj cen** skládá všechna data sekce do období (**Týdny / Měsíce / Čtvrtletí**;
+výchozí podle délky sledování — do ~4 měsíců týdny, pak měsíce) a ukáže je jako graf a tabulku.
+Filtry nad grafem: město, dispozice, stav bytu (i „Bez novostaveb“). **⬇ CSV** stáhne tabulku
+pro Excel (středníky, stejné filtry). Výpočet je v `price-trend.js`, graf v `trend-chart.js`
+(SVG bez knihovny, bublina s hodnotami po najetí myší nebo Tabem).
+
+- **Nabídka ke konci období** (u probíhajícího k dnešku): volné byty bez rezervovaných, s cenou
+  platnou v tu chvíli — appka ji skládá zpětně z historie změn cen. Průměr a medián za m² jen
+  z bytů s cenou i plochou; dnešní hodnoty sedí s Přehledem.
+- **Prodeje** = prodané a téměř jistě prodané jako ve Statistikách, podle data prodeje (katastr →
+  podání vkladu → zmizení → začátek rezervace); cena ověřená, jinak odhad −10 %. Tabulka u každého
+  období ukáže, ze kterých bytů průměr vznikl.
+- **Přibylo** nepočítá byty z úplně prvního sběru (na trhu už byly) — jsou zvlášť.
+- **Před začátkem sledování** nic není: o bytech prodaných dřív appka neví, průměr by byl zkreslený.
+  U každého čísla je vidět, z kolika bytů vzniklo — za pár týdnů ho pohne i jeden byt.
+
 ## Chat přes MCP — ptát se na data v Claude Desktop
 
 Appka má MCP server (`mcp-server.js`), přes který se dá v Claude Desktop (nebo jiném

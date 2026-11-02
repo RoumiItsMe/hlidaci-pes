@@ -624,3 +624,38 @@ table.compare .col-floor input { width: 12rem; }
 .suggest-label { font-weight: 600; }
 .suggest-detail { color: var(--muted); font-size: 0.85em; text-align: right; }
 .suggest-list li.suggest-more { cursor: default; color: var(--muted); font-size: 0.85em; justify-content: center; }
+
+/* Vývoj cen (/vyvoj): spojnicové grafy (trend-chart.js). Barvy řad = ověřená trojice (modrá, oranžová, tyrkysová),
+   bezpečná i pro barvoslepé; text grafu má vždy barvu textu, ne barvu řady. */
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --chart-grid: #e8e8ec; --chart-axis: #c9c9cf; }
+.kpi--static:hover { box-shadow: none; }
+/* Přebíjí obecné `form { ... }` (sloupec, rámeček, pozadí, max-width) — filtry v jedné řadě. */
+.trend-filters { flex-direction: row; align-items: center; max-width: none; padding: 0; background: none; border: none; }
+.chart { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.5rem 0.4rem 0.2rem; margin-bottom: 0.4rem; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-grid { stroke: var(--chart-grid); stroke-width: 1; }
+.chart-axis { stroke: var(--chart-axis); stroke-width: 1; }
+.chart-tick { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart-end { fill: var(--text); font-size: 12px; font-weight: 600; }
+.chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart-dot { stroke: var(--card); stroke-width: 2; }
+.chart-cross { stroke: var(--chart-axis); stroke-width: 1; visibility: hidden; }
+.chart.is-active .chart-cross { visibility: visible; }
+.chart-hit { fill: transparent; cursor: crosshair; outline: none; }
+.chart-hit:focus-visible { fill: color-mix(in srgb, var(--accent) 8%, transparent); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; margin: 0 0 0.4rem; font-size: 0.85rem; color: var(--muted); }
+.chart-key { display: inline-flex; align-items: center; gap: 0.4rem; }
+.chart-key-mark { display: inline-block; background: var(--key); }
+.chart-key-mark--line { width: 16px; height: 2px; border-radius: 1px; }
+.chart-key-mark--dots { width: 9px; height: 9px; border-radius: 50%; }
+.chart-tip { position: absolute; top: 0.4rem; z-index: 5; min-width: 13rem; max-width: 18rem; padding: 0.5rem 0.65rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1); font-size: 0.82rem; pointer-events: none; }
+.chart-tip-title { font-weight: 600; margin-bottom: 0.3rem; }
+.chart-tip-row { display: flex; align-items: baseline; gap: 0.45rem; line-height: 1.5; }
+.chart-tip-row strong { font-variant-numeric: tabular-nums; }
+.chart-tip-row span { color: var(--muted); }
+.chart-tip-key { flex: none; width: 12px; height: 2px; align-self: center; background: var(--key); }
+.chart-tip-key--dots { width: 7px; height: 7px; border-radius: 50%; }
+.chart-tip-key--none { background: transparent; }
+.table-scroll { overflow-x: auto; }
+table.trend-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.trend-table td { vertical-align: top; }

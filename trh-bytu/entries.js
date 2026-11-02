@@ -161,6 +161,8 @@ export function computeEntries(db) {
       totalDiscountCzk: originalPrice != null && price != null ? originalPrice - price : null,
       change,
       changeWhere: changeSources(g.members, events, change),
+      // Všechny události bytu (všech jeho inzerátů) — z nich vývoj cen (price-trend.js) skládá cenu v minulosti.
+      events,
       discoveredAt,
       // Výsledek ruční kontroly v katastru (viz saleVerdict v group.js) a
       // odhad, jak pravděpodobně se zmizelý byt prodal (jen pro řazení
