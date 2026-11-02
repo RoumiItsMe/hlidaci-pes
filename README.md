@@ -355,26 +355,31 @@ se nahlásilo, ukáže `node scripts/check-boards.js`.
 
 Zdravotní stav každé dvojice (sledování, zdroj) se sleduje v
 `data/seen.json` (`__health`).
-- **⚠️ Přestal fungovat** — alert až při DRUHÉM selhání PO SOBĚ (napříč
-  běhy, tedy zdroj nefunguje i v běhu následujícím po prvním selhání), pak
-  nejvýš 1× za 12 hodin, dokud je pořád rozbitý (ať to při dlouhém výpadku
-  nespamuje každých 15 minut). Jeden ojedinělý "fetch failed", co se sám
-  spraví do příštího běhu o 15 minut později, tak zůstane jen tiše v logu
-  Action — žádný Telegram alert, žádný červený běh (viz [Známá
-  omezení](#známá-omezení--možná-vylepšení)). `fetchText` už předtím sama
+- **⚠️ Nefunguje už …** — alert až když výpadek TRVÁ dost dlouho: **portál
+  2 hodiny, úřední deska 6 hodin** (`ALERT_POLICY` v `lib/health.js`), a zdroj
+  musí selhat aspoň dvakrát po sobě. Zpráva říká, jak dlouho výpadek trvá.
+  Pak se připomíná nejvýš 1× za 12 hodin (portál) / 24 hodin (deska), dokud je
+  pořád rozbitý. Krátký výpadek, co se sám spraví, zůstane jen tiše v logu
+  Action — žádný Telegram alert, žádný červený běh ani e-mail. Nic se tím
+  neztratí: oznámení visí na úřední desce nejméně 15 dní a inzerát dny, takže
+  je najde první úspěšný běh. (Dřív stačilo druhé selhání po sobě, tedy
+  ~půlhodinový výpadek: za 13 dní 10/2026 to bylo 15 ⚠️/✅ párů a e-mailů kvůli
+  obecním deskám s mediánem výpadku 12 minut; s novými prahy by zůstala 2
+  skutečná — Lanškroun 37 h a Vysoké Mýto 9 h. Viz [Známá
+  omezení](#známá-omezení--možná-vylepšení).) `fetchText` už předtím sama
   zkouší network-level chyby 2× znovu uvnitř jednoho běhu (viz
   `lib/http.js`) — tenhle druhý stupeň řeší zádrhely, co přežijí i to.
 - **✅ Zase funguje** — jakmile se zdroj, u kterého se PŘEDTÍM opravdu
-  poslal ⚠️ alert, zase rozchodí, přijde zpráva o zotavení. Tichý,
-  jednorázový blip (bez alertu) se vrátí do klidu beze zprávy.
+  poslal ⚠️ alert, zase rozchodí, přijde zpráva o zotavení (i s tím, jak dlouho
+  výpadek trval). Krátký výpadek bez alertu se vrátí do klidu beze zprávy.
 - **🔴 Neočekávaný pád celého běhu** — best-effort alert i tady, bez
   debounce (jde o celý běh, ne o jeden zdroj).
 - Běh skončí nenulovým exit kódem (→ GitHub Actions ho označí jako
   neúspěšný/červený, + výchozí e-mailové upozornění GitHubu vlastníkovi
-  repa) jen když šlo o vážnou chybu — tedy zdroj selhal 2× po sobě, nebo
-  selhalo samotné odeslání Telegram zprávy (tam se nedebounceuje, protože
-  notifikace by se jinak ztratila tiše). Ojedinělá, tiše přečkaná chyba
-  stahování zůstane zelená.
+  repa) jen když šlo o vážnou chybu — tedy se právě poslal ⚠️ alert (výpadek
+  přes 2 h / 6 h, viz výš), nebo selhalo samotné odeslání Telegram zprávy
+  (tam se nedebounceuje, protože notifikace by se jinak ztratila tiše).
+  Krátký, tiše přečkaný výpadek zůstane zelený.
 
 **🛎️ Kontrola, jestli hlídací pes vůbec běží** ([`heartbeat.yml`](.github/workflows/heartbeat.yml)):
 výše popsané alerty pokrývají "zdroj/portál nefunguje", ale ne scénář, kdy

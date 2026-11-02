@@ -18,16 +18,12 @@
 // "Cena na vyžádání") — hlásí se jen známá cena → jiná známá cena.
 //
 // Zdravotní stav (state.__health) sleduje, jestli daná dvojice (sledování,
-// zdroj) právě selhává — když ano, pošle se Telegram alert (a znovu až po
-// 12 hodinách, ať to při dlouhodobém výpadku nespamuje každých 15 minut).
-// Jakmile se zdroj zase rozchodí, pošle se zpráva o zotavení.
-//
-// Alert i neúspěšný exit kód běhu čekají na DRUHÉ selhání po sobě (viz
-// consecutiveFailures u alertFailure) — jeden ojedinělý "fetch failed", co
-// se sám spraví do příštího běhu o 15 minut později, tak zůstane jen tiše
-// v logu, ne jako ⚠️/✅ pár na Telegramu a červený běh v GitHub Actions
-// (viděno naostro: iDNES, září 2026 — 5× stejný jednorázový síťový zádrhel
-// za 5 dní, pokaždé samo zotavené v dalším běhu).
+// zdroj) právě selhává a od kdy — když výpadek trvá dost dlouho (portál 2 h,
+// úřední deska 6 h, viz ALERT_POLICY v lib/health.js), pošle se Telegram
+// alert (a znovu až po cooldownu, ať to při dlouhodobém výpadku nespamuje
+// každých 15 minut). Jakmile se zdroj zase rozchodí, pošle se zpráva o
+// zotavení. Krátký výpadek, co se sám spraví, zůstane jen tiše v logu — ne
+// jako ⚠️/✅ pár na Telegramu a červený běh s e-mailem v GitHub Actions.
 //
 // Stejná nemovitost se často inzeruje na víc portálech najednou (realitka
 // nahodí tu samou nabídku na Sreality i Bezrealitky i jinam) — bez zásahu
