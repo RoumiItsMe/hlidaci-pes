@@ -131,9 +131,18 @@ export async function ruianLookupAddress(street, number, city) {
   const cityText = String(city || "").replace(/\b\d{3}\s?\d{2}\b/g, "").replace(/\s+/g, " ").trim();
   const cityKey = stripDiacritics(cityText);
   // Obec bez ulic i částí obce ("Dolní Dobrouč 181" v obci Dolní Dobrouč): RÚIAN
-  // takové adresy píše "č.p. 181, 56102 Dolní Dobrouč".
-  if (rows.length === 0 && cityKey && stripDiacritics(street) === cityKey) {
-    rows = await query(LAYER.adresniMisto, { where: `adresa LIKE 'č.p. ${esc(cp)}, % ${esc(cityText)}'`, ...addressFields });
+  // takové adresy píše "č.p. 181, 56102 Dolní Dobrouč". Obec za čárkou se u
+  // vesnice běžně nepíše ("Výprachtice 301") — pak se název před číslem bere jako
+  // obec, ale jen přesně stejného jména a jen jednoznačná shoda: Lhot a Lhotek je
+  // v republice desítky a cizí dům by byl horší než žádný.
+  if (rows.length === 0 && (!cityKey || stripDiacritics(street) === cityKey)) {
+    const village = cityText || street;
+    rows = await query(LAYER.adresniMisto, { where: `adresa LIKE 'č.p. ${esc(cp)}, % ${esc(village)}'`, ...addressFields });
+    if (!cityKey) {
+      const villageKey = stripDiacritics(village);
+      const sameVillage = rows.filter((r) => stripDiacritics(String(r.attributes.adresa).replace(/^č\.p\.\s*\d+,\s*\d{3}\s?\d{2}\s+/, "")) === villageKey);
+      rows = sameVillage.length === 1 ? sameVillage : [];
+    }
   }
   const matching = rows.filter((r) => !cityKey || stripDiacritics(r.attributes.adresa).includes(cityKey));
   const pick = matching.length > 0 ? matching : rows.length === 1 ? rows : [];

@@ -2736,7 +2736,10 @@ const server = createServer(async (req, res) => {
         const parsed = parseExactAddress(updates.exact_address);
         if (parsed) {
           const key = addressKey(parsed.street, parsed.number, parsed.city);
-          if (!db.prepare("SELECT 1 FROM ruian_cache WHERE key = ?").get(key)) {
+          // Adresa, kterou RÚIAN dřív neznal, se při ručním uložení zkusí znovu — jinak by opravené hledání
+          // (nebo dům, který mezitím dostal číslo) čekalo na čtvrtletní opakování (RECHECK_UNKNOWN_DAYS).
+          const cached = db.prepare("SELECT result_json FROM ruian_cache WHERE key = ?").get(key);
+          if (!cached || cached.result_json == null) {
             try {
               saveRuian(db, key, await ruianLookupAddress(parsed.street, parsed.number, parsed.city));
             } catch {

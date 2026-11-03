@@ -145,6 +145,35 @@ test("obec bez ulic: RÚIAN píše 'č.p. 181, 56102 Dolní Dobrouč', ne 'Doln�
   }
 });
 
+test("obec bez ulic napsaná bez obce za čárkou ('Výprachtice 301') se najde stejně", async () => {
+  const cpRow = { attributes: { adresa: "č.p. 301, 56134 Výprachtice", stavebniobjekt: 777 }, geometry: { x: 16.6, y: 49.98 } };
+  const stub = stubRuian({ addressRows: (where) => (where.includes("č.p.") ? [cpRow] : []) });
+  try {
+    const r = await ruianLookupAddress("Výprachtice", "301", null);
+    assert.equal(r.addressPoint, "č.p. 301, 56134 Výprachtice");
+    assert.ok(stub.seen.some((q) => q.layer === "1" && q.where.includes("'č.p. 301, % Výprachtice'")));
+  } finally {
+    stub.restore();
+  }
+});
+
+test("bez obce za čárkou: stejné č.p. ve dvou obcích téhož jména se nehádá; obec jiného jména ani část obce se nebere", async () => {
+  const row = (adresa) => ({ attributes: { adresa, stavebniobjekt: 777 }, geometry: { x: 16.5, y: 49.9 } });
+  const cases = [
+    [row("č.p. 12, 56201 Lhota"), row("č.p. 12, 53701 Lhota")], // dvě Lhoty
+    [row("č.p. 12, 56201 Horní Lhota")], // jiná obec, jen končí stejně
+    [row("č.p. 12, Koburk, 56134 Lhota")], // část obce Koburk má vlastní řadu čísel
+  ];
+  for (const rows of cases) {
+    const stub = stubRuian({ addressRows: (where) => (where.includes("č.p.") ? rows : []) });
+    try {
+      assert.equal(await ruianLookupAddress("Lhota", "12", null), null, rows.map((r) => r.attributes.adresa).join(" | "));
+    } finally {
+      stub.restore();
+    }
+  }
+});
+
 test("zápis 'č.p.' se zkouší jen tam, kde se název 'ulice' rovná obci — jinak by se trefilo cizí č.p. ve městě", async () => {
   const stub = stubRuian({ addressRows: (where) => (where.includes("č.p.") ? [{ attributes: { adresa: "č.p. 6, 56201 Ústí nad Orlicí", stavebniobjekt: 5 }, geometry: { x: 16.4, y: 49.9 } }] : []) });
   try {
