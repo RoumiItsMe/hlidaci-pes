@@ -239,7 +239,7 @@ export function createWatchResolver(db, listings, groups, now = Date.now(), exis
     const buildingId = knInfoForGroup(actx, group, resolveForGroup(actx, group))?.building?.isknId;
     const scan = buildingId ? scans.get(buildingId) : null;
     const unitNumber = parseUnitNumber(pickOwnValue(group.members, "unit_number")) ?? parseUnitNumber(pickOwnValue(group.members, "kn_auto_unit"));
-    return apiWatch(scan, { reservedAt, unitNumber, now });
+    return apiWatch(scan, { reservedAt, unitNumber, waitSince: pickOwnValue(group.members, "kn_confirm_wait"), now });
   };
 }
 

@@ -48,7 +48,8 @@ function field(value, normalize) {
  *   - `plombaEnd` konec plomby / řízení o vkladu (YYYY-MM-DD, i budoucí) — po něm
  *                 jde zjistit kupní cenu
  *   - `checked`   jen zapsat, že se kontrolovalo ("Zatím nic")
- *   - `reset`     vrátit byt mezi nerozhodnuté (smaže verdikt, vklad, kontrolu, cenu a datum prodeje)
+ *   - `waitVklad` potvrzení plomby odložit, dokud v domě neskončí řízení o vkladu ("Rozhodnu až po vkladu")
+ *   - `reset`     vrátit byt mezi nerozhodnuté (smaže verdikt, vklad, kontrolu, cenu, datum prodeje i odložení)
  * @param current  stav bytu před zápisem: `{ verdict, filedAt, autoUnit }`
  * @param now      ISO čas zápisu
  * @returns objekt sloupců ke zápisu (prázdný, když není co měnit)
@@ -60,12 +61,16 @@ export function buildSaleRecordUpdates({ input, current, now }) {
     // Smaže i cenu a datum prodeje: cena znamená prodáno, takže byt, který se
     // vrací mezi nerozhodnuté, ji mít nesmí (jinak by ho příští start appky
     // zase označil jako prodaný). LV a jednotka zůstávají — patří bytu.
-    const updates = { sale_verdict: null, kn_checked_at: null, kn_filed_at: null, kn_digest_cp: null, verified_sale_price_czk: null, verified_sale_date: null, kn_plomba_end: null };
+    const updates = { sale_verdict: null, kn_checked_at: null, kn_filed_at: null, kn_digest_cp: null, verified_sale_price_czk: null, verified_sale_date: null, kn_plomba_end: null, kn_confirm_wait: null };
     // Vrací-li uživatel odhad appky ("není to ten byt"), appka mu už automaticky
     // nic nepřiřadí (kn-scan.js, matchFilings).
     if (current.autoUnit) Object.assign(updates, { kn_auto_unit: null, kn_auto_off: 1 });
     return updates;
   }
+
+  // Odložení je samostatný úkon — nic jiného se jím nemění (ani čas kontroly:
+  // úkol se vrací podle konce řízení v domě, ne podle "Zatím nic").
+  if (input.waitVklad) return { kn_confirm_wait: now };
 
   const updates = {};
   const price = field(input.price, (t) => {

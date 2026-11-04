@@ -211,6 +211,11 @@ const COLUMN_MIGRATIONS = [
   // Konec plomby (řízení o vkladu), YYYY-MM-DD, jak ho uživatel zná z katastru —
   // i budoucí. Kupní cenu jde zjistit až po něm (viz kn-schedule.js, fáze ceny).
   { table: "listings", column: "kn_plomba_end", ddl: "TEXT" },
+  // Potvrzení plomby odložené "až po vkladu" (ISO čas odložení): v domě je víc
+  // plomb a který byt je ten náš, jde poznat až z kupní ceny po rozhodnutí o
+  // vkladu. Úkol se vrátí, až některé řízení v domě po tomhle čase skončí
+  // (kn-plomba.js, apiWatch `waitSince`). NULL = neodloženo.
+  { table: "listings", column: "kn_confirm_wait", ddl: "TEXT" },
   // Základní údaje, které uživatel označil jako nezjistitelné (JSON pole klíčů,
   // viz unknown-fields.js) — úkol "Doplnit chybějící údaje" je u bytu pak nehlídá.
   { table: "listings", column: "unknown_fields", ddl: "TEXT" },

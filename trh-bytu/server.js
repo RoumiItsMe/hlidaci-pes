@@ -1946,6 +1946,13 @@ function renderPlombaBlock(e, scan) {
   const stavy = (c) => c.proceedings.map((r) => `${esc(formatKnDay(r.datumPrijeti))}${r.stav ? ` — ${esc(r.stav)}` : ""}`).join("; ");
   const closedText = (c) =>
     `řízení V-${esc(c.proceeding.cislo)}/${esc(c.proceeding.rok)} u č. ${esc(c.label)} skončilo${c.proceeding.stav ? ` (${esc(c.proceeding.stav)})` : ""} — zjisti cenu`;
+  // "To je ten byt" zapíše jednotku a vklad podán; u skončeného řízení i konec plomby (den, kdy ho sken uviděl) —
+  // cenu pak jde zjistit hned. Stejná pole jako u událostí domu (renderHouseEvents).
+  const unitButton = (c, { filedAt, plombaEnd = null }) =>
+    knActionForm(
+      encId,
+      `<input type="hidden" name="unit_number" value="${esc(c.label)}"><input type="hidden" name="kn_filed_at" value="${esc(filedAt ?? "")}"><input type="hidden" name="lv_number" value="${esc(c.lv ?? "")}">${plombaEnd ? `<input type="hidden" name="kn_plomba_end" value="${esc(plombaEnd)}">` : ""}${knBtn("unit", "To je ten byt", "kn-btn--sold")}`
+    );
   const lines = [];
   if (a.mode === "unit") {
     if (a.unit.missing) lines.push(`⚠ Jednotka ${esc(a.unit.label)} v domě neexistuje — zkontroluj číslo v detailu bytu.`);
@@ -1960,19 +1967,33 @@ function renderPlombaBlock(e, scan) {
     lines.push("Dům nemá v katastru vymezené jednotky (typicky družstevní byty) — vklad tu nevznikne, prodej v katastru nepůjde sledovat.");
   } else if (a.incomplete) {
     return "";
-  } else if (a.candidates.length) {
-    lines.push(`🔎 V domě je podaný vklad — je to tenhle byt?`);
+  } else if (a.candidates.length || a.closed.length) {
+    lines.push(a.candidates.length ? `🔎 V domě je podaný vklad — je to tenhle byt?` : `🔎 V domě skončilo řízení o vkladu — je to tenhle byt?`);
     for (const c of a.candidates) {
-      const confirm = knActionForm(
-        encId,
-        `<input type="hidden" name="unit_number" value="${esc(c.label)}"><input type="hidden" name="kn_filed_at" value="${esc(c.filedAt)}"><input type="hidden" name="lv_number" value="${esc(c.lv ?? "")}">${knBtn("unit", "To je ten byt", "kn-btn--sold")}`
+      lines.push(`<div class="kn-plomba-row">č. <strong>${esc(c.label)}</strong>${c.lv ? ` (LV ${esc(c.lv)})` : ""}${c.share ? ` · podíl ${esc(c.share)}` : ""} — podáno ${stavy(c)} ${unitButton(c, { filedAt: c.filedAt })}</div>`);
+    }
+    for (const c of a.closed) {
+      const filedAt = c.proceeding.datumPrijeti?.slice(0, 10) ?? null;
+      const ended = c.seenAt ? c.seenAt.slice(0, 10) : null;
+      lines.push(
+        `<div class="kn-plomba-row"><span>č. <strong>${esc(c.label)}</strong>${c.lv ? ` (LV ${esc(c.lv)})` : ""} — řízení V-${esc(c.proceeding.cislo)}/${esc(c.proceeding.rok)}${filedAt ? ` podané ${esc(formatKnDay(filedAt))}` : ""} skončilo${c.proceeding.stav ? ` (${esc(c.proceeding.stav)})` : ""}${ended ? ` — zjištěno ${esc(formatKnDay(c.seenAt))}` : ""}; kupní cena je na LV</span> ${unitButton(c, { filedAt, plombaEnd: ended })}</div>`
       );
-      lines.push(`<div class="kn-plomba-row">č. <strong>${esc(c.label)}</strong>${c.lv ? ` (LV ${esc(c.lv)})` : ""}${c.share ? ` · podíl ${esc(c.share)}` : ""} — podáno ${stavy(c)} ${confirm}</div>`);
+    }
+    // V domě se prodává víc bytů a který je ten náš, často jde poznat až z kupní ceny po rozhodnutí o vkladu —
+    // potvrzení jde odložit, dokud některé řízení v domě neskončí (kn-plomba.js, apiWatch `waitSince`).
+    if (a.candidates.length) {
+      const waitMs = e.knConfirmWait ? Date.parse(e.knConfirmWait) : NaN;
+      const endedSinceWait = Number.isFinite(waitMs) && a.closed.some((c) => c.seenAt && Date.parse(c.seenAt) > waitMs);
+      lines.push(
+        Number.isFinite(waitMs) && !endedSinceWait
+          ? `<div>⏳ <strong>Rozhodneš až po vkladu</strong> (odloženo ${esc(formatDateOnly(e.knConfirmWait))}) — připomenu se, až některé řízení v domě skončí; pak podle kupní ceny na LV poznáš, která jednotka je tenhle byt.</div>`
+          : `<div class="kn-plomba-row">${knActionForm(encId, knBtn("wait-vklad", "Rozhodnu až po vkladu", "kn-btn--later"))} <span class="muted">nejde-li to teď poznat — připomenu se, až některé řízení v domě skončí a na LV bude kupní cena</span></div>`
+      );
     }
   } else {
     lines.push(`V domě (${a.unitCount} jednotek) ${since} nikdo nepodal vklad. Zapíšeš-li jednotku bytu v detailu, appka ji pak sleduje sama.`);
   }
-  for (const c of a.closed) lines.push(closedText(c));
+  if (a.mode === "unit") for (const c of a.closed) lines.push(closedText(c));
   return `<div class="kn-plomba">${lines.map((l) => (l.startsWith("<div") ? l : `<div>${l}</div>`)).join("")}${stamp}</div>`;
 }
 
@@ -2019,6 +2040,7 @@ function saleStageText({ verdict, track, price, saleDate, filed, portalSold = fa
   if (verdict === "sold" || portalSold) return filed ? `Prodáno — vklad podán ${formatDateOnly(filed)}, cena se dohledá po rozhodnutí o vkladu` : "Prodáno — cena zatím neznámá";
   if (track) {
     if (track.expired) return "Vklad se nenašel — nezjištěno";
+    if (track.watched && track.awaitingVklad) return "V domě je podaný vklad — který byt to je, potvrdíš po skončení řízení (appka se připomene)";
     if (track.watched) return track.unverifiable ? "Čeká na vklad — v katastru ho nejde ověřit" : "Čeká na vklad — plomby hlídá appka přes API katastru";
     return track.due ? `K vyřízení — ${track.reason}` : "Čeká na vklad";
   }
@@ -2045,7 +2067,7 @@ function renderSaleSection({ rep, members, status, verdict, track, addressInfo: 
     : autoUnit
     ? `Jednotka (odhad appky podle plomby): <strong>${esc(autoUnit)}</strong>. Zapsat ji napevno jde výš v „Přesná adresa“.`
     : "Jednotka: nezapsaná — zapíšeš ji výš v „Přesná adresa“, appka pak sama sleduje plombu na ní.";
-  const plomba = track ? renderPlombaBlock({ rep, track, addressInfo: ai, knAutoUnit: autoUnit }, scan) : "";
+  const plomba = track ? renderPlombaBlock({ rep, track, addressInfo: ai, knAutoUnit: autoUnit, knConfirmWait: pickOwnValue(members, "kn_confirm_wait") }, scan) : "";
   // Jednotky, které blok plomby výš už ukazuje (jednotka bytu je neznámá, takže všechny s plombou po rezervaci).
   const plombaView = track && scan && houseEvents.length ? analyzePlombas(scan, { reservedAt: track.reservedAt, unitNumber: null }) : null;
   const shownUnits = new Set(plombaView ? [...plombaView.candidates, ...plombaView.closed].map((c) => c.number) : []);
@@ -2406,7 +2428,7 @@ function renderKnQueue(db) {
     const scan = lookupFor(e).buildingId ? knScans.get(lookupFor(e).buildingId) : null;
     const note = e.track.unverifiable
       ? "dům nemá v katastru jednotky (družstevní?) nebo je to novostavba před dokončením — nejde ověřit"
-      : `${e.removedAt ? `inzerát zmizel ${formatDateOnly(e.removedAt)}; ` : ""}čeká na plombu; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}`;
+      : `${e.removedAt ? `inzerát zmizel ${formatDateOnly(e.removedAt)}; ` : ""}${e.track.awaitingVklad ? "potvrzení plomby odloženo do konce vkladu v domě" : "čeká na plombu"}; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}`;
     return `<details class="kn-wait">
         <summary><a href="/byt/${encId}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— ${esc(note)}</span></summary>
         <div class="kn-item kn-item--wait">${cardBody(e)}</div>
@@ -2457,7 +2479,7 @@ function renderKnQueue(db) {
     .map((e) => {
       const scan = lookupFor(e).buildingId ? knScans.get(lookupFor(e).buildingId) : null;
       return `<details class="kn-wait">
-        <summary><a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— zmizel ${esc(formatDateOnly(e.removedAt))}; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}, plomba zatím není</span></summary>
+        <summary><a href="/byt/${encodeURIComponent(e.rep.id)}">${esc(cardTitle(e.rep, e.address, e.priceLabel))}</a> <span class="muted">— zmizel ${esc(formatDateOnly(e.removedAt))}; API katastru naposledy ${scan ? formatKnDay(scan.scannedAt) : "—"}, ${e.unreservedWatch.awaitingVklad ? "potvrzení plomby odloženo do konce vkladu v domě" : "plomba zatím není"}</span></summary>
         ${otherCard(e)}
       </details>`;
     })
@@ -2766,7 +2788,7 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(knMatch[1]);
     const fields = await parseBody(req);
     const action = fields.action;
-    const group = ["filed", "unit", "not-unit", "sold", "withdrawn", "check", "reset", "record", "plomba"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
+    const group = ["filed", "unit", "not-unit", "sold", "withdrawn", "check", "wait-vklad", "reset", "record", "plomba"].includes(action) ? findGroupForListing(db.prepare("SELECT * FROM listings").all(), id) : null;
     if (group) {
       const now = nowIso();
       const today = now.slice(0, 10);
@@ -2782,6 +2804,9 @@ const server = createServer(async (req, res) => {
       } else if (action === "plomba") {
         // Jen konec plomby (řízení o vkladu): prázdné pole ho smaže.
         input = { plombaEnd: fields.kn_plomba_end ?? "" };
+      } else if (action === "wait-vklad") {
+        // "Rozhodnu až po vkladu": potvrzení plomby se odloží, dokud v domě neskončí řízení o vkladu (kn-plomba.js).
+        input = { waitVklad: true };
       } else if (action === "check") {
         input = { checked: true, lv: given(fields.lv_number), unit: given(fields.unit_number) };
       } else if (action === "withdrawn") {

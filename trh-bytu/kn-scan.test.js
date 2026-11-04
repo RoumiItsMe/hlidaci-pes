@@ -342,6 +342,35 @@ test("novostavba před dokončením se neskenuje ani tehdy, když bod z inzerát
   assert.equal(collectTrackedGroups(db, NOW).length, 1);
 });
 
+// --- Potvrzení plomby odložené "až po vkladu": sloupec kn_confirm_wait se čte při hlídání ---
+import { saveKnScan } from "./kn-scan.js";
+
+test("odložené potvrzení (kn_confirm_wait) hlídání přečte: dvě plomby v domě se nepřipomínají, dokud řízení neskončí", () => {
+  const db = newBuildDb();
+  updateListingFields(db, "sreality:1", { own_condition: "maintained" });
+  saveRuian(db, LHOTKA(), { ku: { kod: 621757, nazev: "Česká Třebová" }, building: { cp: ["51"], flats: 12, isknId: 4242 }, addressPoint: "Lhotka 51, 56002 Česká Třebová" });
+  const proc = (id, filed) => ({ id, typ: "V", cislo: id, rok: 2026, datumPrijeti: filed, stav: "Probíhá zpracování", operace: [], fetchedAt: null });
+  saveKnScan(db, {
+    buildingId: 4242,
+    scannedAt: iso(NOW - 1 * DAY),
+    full: true,
+    units: [{ id: 1, number: 510009, lv: 5443 }, { id: 2, number: 510014, lv: 4679 }],
+    plomby: [{ unit: 510009, lv: 5443, rizeni: [proc(1, iso(NOW - 2 * DAY))] }, { unit: 510014, lv: 4679, rizeni: [proc(2, iso(NOW - 1 * DAY))] }],
+    closed: [],
+  });
+  // reservedAt jako ISO, jak ho předává buildSaleTrack (watchOf výš dává číslo — tam na plombách nezáleží)
+  const watchNow = () => {
+    const listings = db.prepare("SELECT * FROM listings").all();
+    const groups = groupListings(listings);
+    return createWatchResolver(db, listings, groups, NOW)(groups[0])(iso(NOW - 3 * DAY));
+  };
+  assert.equal(watchNow().needsConfirm, true);
+  updateListingFields(db, "sreality:1", { kn_confirm_wait: iso(NOW - 1 * DAY / 2) });
+  const w = watchNow();
+  assert.equal(w.needsConfirm, false);
+  assert.equal(w.awaitingVklad, true);
+});
+
 // --- Přednost Ústí nad Orlicí při čerpání společného limitu API katastru (kn-priority.js) ---
 import { KnApiError } from "./kn-api.js";
 import { primaryDoneToday } from "./kn-priority.js";

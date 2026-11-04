@@ -76,6 +76,11 @@ test("'Zatím nic' jen zapíše čas kontroly", () => {
   assert.deepEqual(build({ checked: true, lv: "4138" }), { lv_number: "4138", kn_checked_at: NOW });
 });
 
+test("\"Rozhodnu až po vkladu\" zapíše jen čas odložení — verdikt, vklad ani čas kontroly se nemění", () => {
+  assert.deepEqual(build({ waitVklad: true }), { kn_confirm_wait: NOW });
+  assert.deepEqual(build({ waitVklad: true }, sold), { kn_confirm_wait: NOW });
+});
+
 test("vrácení mezi nerozhodnuté smaže verdikt, vklad, cenu i datum prodeje; zrušený odhad appky ho vypne natrvalo", () => {
   assert.deepEqual(build({ reset: true }, sold), {
     sale_verdict: null,
@@ -85,6 +90,7 @@ test("vrácení mezi nerozhodnuté smaže verdikt, vklad, cenu i datum prodeje; 
     verified_sale_price_czk: null,
     verified_sale_date: null,
     kn_plomba_end: null,
+    kn_confirm_wait: null,
   });
   const guessed = build({ reset: true }, { verdict: "sold", filedAt: "2026-10-09", autoUnit: "412/5" });
   assert.equal(guessed.kn_auto_unit, null);

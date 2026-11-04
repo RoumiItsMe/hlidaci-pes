@@ -110,8 +110,16 @@ export const WATCH_MAX_AGE_DAYS = 8;
  *  - `{ needsConfirm, confirmAt }`: dům hlídáme; `needsConfirm`, když API našlo
  *    plombu po rezervaci, kterou appka sama k bytu nepřiřadila (kn-scan.js,
  *    matchFilings) — tu musí potvrdit uživatel. `confirmAt` = den podání (ms).
+ *
+ * `waitSince` (ISO) = uživatel potvrzení odložil "až po vkladu" (sloupec
+ * `kn_confirm_wait`): v domě je víc plomb a který byt je jeho, pozná až po
+ * rozhodnutí o vkladu — podle kupní ceny na LV. Do té doby se nepřipomíná, ani
+ * když v domě přibude další plomba (`awaitingVklad`). Ozve se, až sken uvidí, že
+ * některé řízení v domě po odložení skončilo (`vkladEnded`, `confirmAt` = kdy to
+ * sken uviděl naposledy, ať "Zatím nic" u prvního skončeného nespolkne další).
+ * Platí jen, dokud jednotka bytu není známá.
  */
-export function apiWatch(scan, { reservedAt, unitNumber = null, now = Date.now() }) {
+export function apiWatch(scan, { reservedAt, unitNumber = null, waitSince = null, now = Date.now() }) {
   if (!scan) return null;
   if (now - Date.parse(scan.scannedAt) > WATCH_MAX_AGE_DAYS * DAY_MS) return null;
   if (!scan.units.length) return { needsConfirm: false, confirmAt: null, unverifiable: true };
@@ -122,12 +130,23 @@ export function apiWatch(scan, { reservedAt, unitNumber = null, now = Date.now()
   // (plomba je na jednotce), nebo skončilo (plomba zmizela) — teprve potom jde
   // v katastru zjistit kupní cenu.
   const unitKnown = analysis.mode === "unit";
-  const endedAt = unitKnown ? analysis.closed.map((c) => (c.seenAt ? Date.parse(c.seenAt) : NaN)).filter(Number.isFinite) : [];
-  return {
+  const seenAt = (c) => (c.seenAt ? Date.parse(c.seenAt) : NaN);
+  const endedAt = unitKnown ? analysis.closed.map(seenAt).filter(Number.isFinite) : [];
+  const result = {
     needsConfirm: Boolean(first),
     confirmAt: first ? Date.parse(first.filedAt) : null,
     unverifiable: false,
     plombaActive: unitKnown && Boolean(first),
     priceReadyAt: endedAt.length ? Math.max(...endedAt) : null,
+    awaitingVklad: false,
+    vkladEnded: false,
   };
+  const waitMs = unitKnown || !waitSince ? NaN : Date.parse(waitSince);
+  if (Number.isFinite(waitMs)) {
+    const endedSince = analysis.closed.map(seenAt).filter((t) => t > waitMs);
+    if (endedSince.length) return { ...result, needsConfirm: true, confirmAt: Math.max(...endedSince), vkladEnded: true };
+    // Čeká se, jen dokud je na co: plomba v domě pořád běží.
+    return { ...result, needsConfirm: false, confirmAt: null, awaitingVklad: Boolean(first) };
+  }
+  return result;
 }

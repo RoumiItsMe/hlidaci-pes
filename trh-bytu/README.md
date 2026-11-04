@@ -713,6 +713,17 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     skupině **Hlídá appka přes API katastru**. Ozve se jen když najde plombu,
     kterou nedokázala jednoznačně přiřadit („V domě je podaný vklad — potvrď,
     jestli je to tenhle byt“; „Zatím nic“ to odloží do příchodu novější plomby).
+  - **„Rozhodnu až po vkladu“** — když jsou v domě dvě plomby (nebo víc) a který
+    byt je ten tvůj, poznáš až z kupní ceny na LV po rozhodnutí o vkladu. Tlačítko
+    úkol odloží (`kn_confirm_wait`, čas odložení): byt leží mezi hlídanými („potvrzení
+    plomby odloženo do konce vkladu v domě“) a nepřipomíná se, ani když v domě
+    přibude další plomba. Jakmile sken uvidí, že některé řízení v domě **po
+    odložení** skončilo, úkol se vrátí („Řízení o vkladu v domě skončilo — podle
+    kupní ceny na LV potvrď, která jednotka je tenhle byt“). Skončené řízení má
+    v bloku plomb vlastní řádek s **To je ten byt** (zapíše jednotku, vklad podán,
+    LV i konec plomby — cenu pak jde zadat hned). Když to pořád nejde poznat, odlož
+    znovu: počká se na konec dalšího řízení. Se zapsanou jednotkou odložení
+    neplatí (plombu na ní appka sleduje sama); „Vrátit mezi nerozhodnuté“ ho smaže.
     Rozvrh dnů od rezervace platí dál jen tam, kam API nedosáhne: dům bez skenu
     (bez klíče, nový, rozpočet nestačil), starší sken, byt bez přesné adresy.
     Po půl roce bez plomby byt skončí jako „nezjištěno“ jako dřív. Fáze ceny se
@@ -721,7 +732,8 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     bytu už se nic automaticky nepřiřadí (`kn_auto_off`). Vklad podán před
     rezervací (s rezervou 14 dní) se nepočítá.
   - Když plomba z minula zmizela, řízení skončilo (vklad proveden, nebo
-    zamítnut) — karta to napíše i se stavem řízení („zjisti cenu“).
+    zamítnut) — karta to napíše i se stavem řízení („zjisti cenu“); u bytu bez
+    zapsané jednotky s tlačítkem „To je ten byt“.
   - **Družstevní byty** v katastru žádný vklad nemají (převádí se členský
     podíl), API u nich nic nenajde: dům Křib 1807 je družstevní a API u něj nevrací
     žádné jednotky. Karta to napíše („Dům nemá v katastru vymezené jednotky“);

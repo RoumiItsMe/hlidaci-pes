@@ -111,7 +111,7 @@ test("apiWatch: bez skenu, se starým skenem nebo s neúplným skenem se nehlíd
 
 test("apiWatch: čerstvý sken bez plomby po rezervaci = hlídá appka, nic k potvrzení", () => {
   const w = apiWatch(scanOf({ plomby: [] }), { reservedAt: RESERVED, now: NOW });
-  assert.deepEqual(w, { needsConfirm: false, confirmAt: null, unverifiable: false, plombaActive: false, priceReadyAt: null });
+  assert.deepEqual(w, { needsConfirm: false, confirmAt: null, unverifiable: false, plombaActive: false, priceReadyAt: null, awaitingVklad: false, vkladEnded: false });
   // Plomba z doby před rezervací se nepočítá.
   const old = scanOf({ plomby: [{ unit: 930004, lv: 6319, rizeni: [proc(5000, "2026-06-01T10:00:00")] }] });
   assert.equal(apiWatch(old, { reservedAt: RESERVED, now: NOW }).needsConfirm, false);
@@ -156,4 +156,51 @@ test("apiWatch se známou jednotkou: plomba zmizela a appka to zaznamenala = cen
   // A kdyby na jednotce byla ještě jiná plomba, cena čeká dál.
   const stillRunning = scanOf({ closed: scan.closed });
   assert.equal(apiWatch(stillRunning, { reservedAt: RESERVED, unitNumber: 930004, now: NOW }).plombaActive, true);
+});
+
+// --- potvrzení odložené "až po vkladu" (dvě plomby v domě, který byt je náš, pozná uživatel až z kupní ceny) ---
+
+const WAIT = "2026-10-05T10:00:00.000Z";
+const endedAt = (unit, id, filed, seen) => ({ unit, lv: null, proceeding: proc(id, filed, { stav: "Řízení ukončeno" }), closedSeenAt: seen });
+
+test("apiWatch: odložené potvrzení se nepřipomíná, dokud v domě běží plomby — ani když přibude další", () => {
+  const w = apiWatch(scanOf(), { reservedAt: RESERVED, waitSince: WAIT, now: NOW });
+  assert.equal(w.needsConfirm, false);
+  assert.equal(w.confirmAt, null);
+  assert.equal(w.awaitingVklad, true);
+  assert.equal(w.vkladEnded, false);
+  const another = scanOf({ plomby: [...scanOf().plomby, { unit: 930001, lv: 6316, rizeni: [proc(8200, "2026-10-10T09:00:00")] }] });
+  assert.equal(apiWatch(another, { reservedAt: RESERVED, waitSince: WAIT, now: NOW }).needsConfirm, false);
+  // Bez odložení je táž plomba k potvrzení (kontrola, že test měří odložení).
+  assert.equal(apiWatch(scanOf(), { reservedAt: RESERVED, now: NOW }).needsConfirm, true);
+});
+
+test("apiWatch: odložené potvrzení se vrátí, až sken uvidí skončené řízení v domě — k poslednímu takovému dni", () => {
+  const first = "2026-10-12T06:00:00.000Z";
+  const second = "2026-10-13T06:00:00.000Z";
+  const oneEnded = scanOf({ closed: [endedAt(930001, 7950, "2026-09-25T10:00:00", first)] });
+  const w = apiWatch(oneEnded, { reservedAt: RESERVED, waitSince: WAIT, now: NOW });
+  assert.equal(w.needsConfirm, true);
+  assert.equal(w.vkladEnded, true);
+  assert.equal(w.awaitingVklad, false);
+  assert.equal(w.confirmAt, Date.parse(first));
+  // Druhé skončené řízení posune bod dál, ať "Zatím nic" u prvního nespolkne to druhé.
+  const twoEnded = scanOf({ plomby: [], closed: [endedAt(930001, 7950, "2026-09-25T10:00:00", first), endedAt(930004, 7900, "2026-09-24T16:08:46", second)] });
+  assert.equal(apiWatch(twoEnded, { reservedAt: RESERVED, waitSince: WAIT, now: NOW }).confirmAt, Date.parse(second));
+});
+
+test("apiWatch: řízení skončené už před odložením ho nevrací; a když už v domě nic neběží, nečeká se na nic", () => {
+  const before = scanOf({ closed: [endedAt(930001, 7950, "2026-09-25T10:00:00", "2026-10-04T06:00:00.000Z")] });
+  const w = apiWatch(before, { reservedAt: RESERVED, waitSince: WAIT, now: NOW });
+  assert.equal(w.needsConfirm, false);
+  assert.equal(w.awaitingVklad, true);
+  const nothingRunning = scanOf({ plomby: [], closed: before.closed });
+  assert.equal(apiWatch(nothingRunning, { reservedAt: RESERVED, waitSince: WAIT, now: NOW }).awaitingVklad, false);
+});
+
+test("apiWatch: se známou jednotkou se odložení neuplatní — plombu na ní appka sleduje sama", () => {
+  const w = apiWatch(scanOf(), { reservedAt: RESERVED, unitNumber: 930004, waitSince: WAIT, now: NOW });
+  assert.equal(w.plombaActive, true);
+  assert.equal(w.awaitingVklad, false);
+  assert.equal(w.needsConfirm, true);
 });

@@ -182,6 +182,21 @@ test('"Zatím nic" u plomby k potvrzení ji odloží, dokud nepřijde novější
   assert.equal(filing(20, { watch: newer, lastCheckedAt: iso(at(15)) }).due, true);
 });
 
+test("potvrzení odložené až po vkladu: byt je hlídaný, ne k vyřízení; po skončení řízení se vrátí s výzvou podle ceny na LV", () => {
+  const waiting = filing(20, { watch: { ...WATCHED, awaitingVklad: true } });
+  assert.equal(waiting.due, false);
+  assert.equal(waiting.watched, true);
+  assert.equal(waiting.awaitingVklad, true);
+  assert.equal(filing(20, { watch: WATCHED }).awaitingVklad, false);
+  const back = filing(30, { watch: { ...WATCHED, needsConfirm: true, confirmAt: at(29), vkladEnded: true } });
+  assert.equal(back.due, true);
+  assert.equal(back.kind, "confirm");
+  assert.equal(back.dueAt, at(29));
+  assert.match(back.reason, /skončilo/);
+  assert.match(back.reason, /LV/);
+  assert.doesNotMatch(filing(30, { watch: { ...WATCHED, needsConfirm: true, confirmAt: at(29) } }).reason, /skončilo/);
+});
+
 test("dům bez jednotek v katastru se označí jako neověřitelný a nepřipomíná se", () => {
   const t = filing(15, { watch: { needsConfirm: false, confirmAt: null, unverifiable: true } });
   assert.equal(t.due, false);

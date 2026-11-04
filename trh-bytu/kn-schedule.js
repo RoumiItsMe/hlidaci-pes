@@ -50,6 +50,7 @@ const KIND_LABELS = {
   vanish: (day) => `${day} dní po zmizení inzerátu — kontrola`,
   price: (day) => `${day} dní po podání vkladu — zjisti kupní cenu`,
   confirm: () => "V domě je podaný vklad — potvrď, jestli je to tenhle byt",
+  "confirm-ended": () => "Řízení o vkladu v domě skončilo — podle kupní ceny na LV potvrď, která jednotka je tenhle byt",
   "price-ready": (plombaEnd) => (plombaEnd ? `Plomba skončila ${new Date(plombaEnd).toLocaleDateString("cs-CZ")} — zjisti kupní cenu` : "Řízení o vkladu skončilo — zjisti kupní cenu"),
 };
 
@@ -91,12 +92,13 @@ function checkpoint(base, day, kind) {
  *                       `needsConfirm` = API našlo plombu, kterou appka nedokázala
  *                       jednoznačně přiřadit — to je k vyřízení hned (`kind: "confirm"`),
  *                       dokud uživatel po jejím podání neklikl na "Zatím nic".
- * @returns `{ stage, ageDays, due, dueAt, kind, reason, nextAt, expired, watched, unverifiable }`
+ * @returns `{ stage, ageDays, due, dueAt, kind, reason, nextAt, expired, watched, awaitingVklad, unverifiable }`
+ *          (`awaitingVklad`: potvrzení plomby je odložené, dokud v domě neskončí řízení o vkladu)
  */
 export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, verdict = null, priceKnown = false, portalPrice = false, priceBaseAt = null, plombaEnd = null, lastCheckedAt = null, watch = null, now = Date.now() }) {
   const reservedMs = toMs(reservedAt);
   const ageDays = reservedMs == null ? null : Math.floor((now - reservedMs) / DAY_MS);
-  const base = { ageDays, due: false, dueAt: null, kind: null, reason: null, nextAt: null, expired: false, watched: false, unverifiable: false, priceAssumed: false };
+  const base = { ageDays, due: false, dueAt: null, kind: null, reason: null, nextAt: null, expired: false, watched: false, awaitingVklad: false, unverifiable: false, priceAssumed: false };
 
   if (verdict === "withdrawn") return { ...base, stage: "withdrawn" };
   const sold = verdict === "sold" || filedAt != null;
@@ -152,11 +154,13 @@ export function assessSaleTrack({ reservedAt, removedAt = null, filedAt = null, 
     // Plomby hlídá API. Připomíná se jen plomba, kterou je potřeba potvrdit;
     // jinak ruční kontrola v katastru nic nepřinese. Rozvrh slouží už jen k
     // tomu, aby po půl roce byt skončil jako "nezjištěno".
+    // Potvrzení odložené "až po vkladu" (apiWatch, `waitSince`) se vrátí s jiným
+    // důvodem: teď už jde podle kupní ceny poznat, která jednotka je tenhle byt.
     if (watch.needsConfirm && watch.confirmAt > checkedMs) {
-      return { ...base, stage, due: true, dueAt: watch.confirmAt, kind: "confirm", reason: KIND_LABELS.confirm() };
+      return { ...base, stage, due: true, dueAt: watch.confirmAt, kind: "confirm", reason: watch.vkladEnded ? KIND_LABELS["confirm-ended"]() : KIND_LABELS.confirm() };
     }
     const upcoming = points.find((p) => p.at > now);
-    return { ...base, stage, watched: true, unverifiable: Boolean(watch.unverifiable), nextAt: upcoming ? upcoming.at : null, expired: !upcoming };
+    return { ...base, stage, watched: true, awaitingVklad: Boolean(watch.awaitingVklad), unverifiable: Boolean(watch.unverifiable), nextAt: upcoming ? upcoming.at : null, expired: !upcoming };
   }
   const pending = points.filter((p) => p.at <= now && p.at > checkedMs);
   if (pending.length) {

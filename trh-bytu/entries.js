@@ -184,6 +184,8 @@ export function computeEntries(db) {
       knFiledAt: pickOwnValue(g.members, "kn_filed_at"),
       plombaEnd: pickOwnValue(g.members, "kn_plomba_end"),
       knAutoUnit: pickOwnValue(g.members, "kn_auto_unit"),
+      // Potvrzení plomby odložené "až po vkladu" (ISO), viz kn-plomba.js apiWatch.
+      knConfirmWait: pickOwnValue(g.members, "kn_confirm_wait"),
       lvNumber: pickOwnValue(g.members, "lv_number"),
       saleVerdict: verdict,
       knCheckedAt: g.members.reduce((max, m) => (m.kn_checked_at && m.kn_checked_at > max ? m.kn_checked_at : max), "") || null,
