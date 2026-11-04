@@ -109,10 +109,10 @@
       "failingSince": null
     },
     "board:lukova": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1,
-      "failingSince": "2026-11-04T13:04:24.932Z"
+      "consecutiveFailures": 0,
+      "failingSince": null
     },
     "board:tatenice": {
       "failing": false,
@@ -1611,6 +1611,10 @@
     {
       "id": "8640951",
       "price": 184000
+    },
+    {
+      "id": "8181923",
+      "price": 560000
     }
   ],
   "pozemky-glamping:bazos": [
@@ -2804,6 +2808,10 @@
     },
     {
       "fingerprint": "184000_842",
+      "source": "RealityMIX.cz"
+    },
+    {
+      "fingerprint": "560000_738",
       "source": "RealityMIX.cz"
     }
   ],
@@ -4139,7 +4147,9 @@
     "https://www.vysoke-myto.cz/uredni-deska/vyrozumeni-pokracovani-v-rizeni-po-preruseni-uo-skorenice-cp-134-knn-vnn/",
     "https://www.vysoke-myto.cz/uredni-deska/vyrozumeni-o-zahajeni-rizeni-mista-pro-prechazeni-ul-jeronymova-vysoke-myto/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-silnici-iii-35720-v-k-u-doubravice-u-lestiny/",
-    "https://www.vysoke-myto.cz/uredni-deska/pdp-horniho-a-stredniho-labe-2027-2033-a-pdp-dilciho-povodi-luzicke-nisy-a-ostatnich-pritoku-odry-2027-2033-predani-zaveru-zjistovaci/"
+    "https://www.vysoke-myto.cz/uredni-deska/pdp-horniho-a-stredniho-labe-2027-2033-a-pdp-dilciho-povodi-luzicke-nisy-a-ostatnich-pritoku-odry-2027-2033-predani-zaveru-zjistovaci/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-mup-na-silnici-i-35-napojeni-dalnice-v-useku-dzbanov-litomysl/",
+    "https://www.vysoke-myto.cz/uredni-deska/aukcni-vyhlaska-oznameni-o-prodeji-majetku-k-u-vysoke-myto/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -4321,16 +4331,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-04T13:01:32.186Z",
-    "board:letohrad": "2026-11-04T13:01:32.186Z",
-    "board:zamberk": "2026-11-04T13:01:32.186Z",
-    "board:ceska-trebova": "2026-11-04T13:01:32.186Z",
-    "board:lanskroun": "2026-11-04T13:01:32.186Z",
-    "board:kraliky": "2026-11-04T13:01:32.186Z",
-    "board:vysoke-myto": "2026-11-04T13:01:32.186Z",
-    "board:lukova": "2026-11-04T12:46:05.683Z",
-    "board:tatenice": "2026-11-04T13:01:32.186Z",
-    "board:anenska-studanka": "2026-11-04T13:01:32.186Z",
+    "board:usti-nad-orlici": "2026-11-04T13:16:03.912Z",
+    "board:letohrad": "2026-11-04T13:16:03.912Z",
+    "board:zamberk": "2026-11-04T13:16:03.912Z",
+    "board:ceska-trebova": "2026-11-04T13:16:03.912Z",
+    "board:lanskroun": "2026-11-04T13:16:03.912Z",
+    "board:kraliky": "2026-11-04T13:16:03.912Z",
+    "board:vysoke-myto": "2026-11-04T13:16:03.912Z",
+    "board:lukova": "2026-11-04T13:16:03.912Z",
+    "board:tatenice": "2026-11-04T13:16:03.912Z",
+    "board:anenska-studanka": "2026-11-04T13:16:03.912Z",
     "board:okres-usti-nad-orlici": "2026-11-04T12:16:07.081Z"
   },
   "board:okres-usti-nad-orlici": [
