@@ -85,10 +85,10 @@
       "failingSince": null
     },
     "board:lanskroun": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-04T15:04:25.052Z"
     },
     "board:okres-usti-nad-orlici": {
       "failing": false,
@@ -109,22 +109,22 @@
       "failingSince": null
     },
     "board:lukova": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-04T15:06:06.927Z"
     },
     "board:tatenice": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-04T15:07:40.832Z"
     },
     "board:anenska-studanka": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-04T15:09:14.738Z"
     }
   },
   "byty:sreality": [
@@ -4332,13 +4332,13 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-04T14:46:00.970Z",
-    "board:letohrad": "2026-11-04T14:46:00.970Z",
-    "board:zamberk": "2026-11-04T14:46:00.970Z",
-    "board:ceska-trebova": "2026-11-04T14:46:00.970Z",
+    "board:usti-nad-orlici": "2026-11-04T15:01:58.605Z",
+    "board:letohrad": "2026-11-04T15:01:58.605Z",
+    "board:zamberk": "2026-11-04T15:01:58.605Z",
+    "board:ceska-trebova": "2026-11-04T15:01:58.605Z",
     "board:lanskroun": "2026-11-04T14:46:00.970Z",
-    "board:kraliky": "2026-11-04T14:46:00.970Z",
-    "board:vysoke-myto": "2026-11-04T14:46:00.970Z",
+    "board:kraliky": "2026-11-04T15:01:58.605Z",
+    "board:vysoke-myto": "2026-11-04T15:01:58.605Z",
     "board:lukova": "2026-11-04T14:46:00.970Z",
     "board:tatenice": "2026-11-04T14:46:00.970Z",
     "board:anenska-studanka": "2026-11-04T14:46:00.970Z",
