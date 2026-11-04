@@ -85,10 +85,10 @@
       "failingSince": null
     },
     "board:lanskroun": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 7,
-      "failingSince": "2026-11-04T15:04:25.052Z"
+      "consecutiveFailures": 0,
+      "failingSince": null
     },
     "board:okres-usti-nad-orlici": {
       "failing": false,
@@ -109,16 +109,16 @@
       "failingSince": null
     },
     "board:lukova": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 7,
-      "failingSince": "2026-11-04T15:06:06.927Z"
+      "consecutiveFailures": 0,
+      "failingSince": null
     },
     "board:tatenice": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 7,
-      "failingSince": "2026-11-04T15:07:40.832Z"
+      "consecutiveFailures": 0,
+      "failingSince": null
     },
     "board:anenska-studanka": {
       "failing": false,
@@ -4333,16 +4333,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-04T16:46:07.707Z",
-    "board:letohrad": "2026-11-04T16:46:07.707Z",
-    "board:zamberk": "2026-11-04T16:46:07.707Z",
-    "board:ceska-trebova": "2026-11-04T16:46:07.707Z",
-    "board:lanskroun": "2026-11-04T14:46:00.970Z",
-    "board:kraliky": "2026-11-04T16:46:07.707Z",
-    "board:vysoke-myto": "2026-11-04T16:46:07.707Z",
-    "board:lukova": "2026-11-04T14:46:00.970Z",
-    "board:tatenice": "2026-11-04T14:46:00.970Z",
-    "board:anenska-studanka": "2026-11-04T16:46:07.707Z",
+    "board:usti-nad-orlici": "2026-11-04T17:01:35.744Z",
+    "board:letohrad": "2026-11-04T17:01:35.744Z",
+    "board:zamberk": "2026-11-04T17:01:35.744Z",
+    "board:ceska-trebova": "2026-11-04T17:01:35.744Z",
+    "board:lanskroun": "2026-11-04T17:01:35.744Z",
+    "board:kraliky": "2026-11-04T17:01:35.744Z",
+    "board:vysoke-myto": "2026-11-04T17:01:35.744Z",
+    "board:lukova": "2026-11-04T17:01:35.744Z",
+    "board:tatenice": "2026-11-04T17:01:35.744Z",
+    "board:anenska-studanka": "2026-11-04T17:01:35.744Z",
     "board:okres-usti-nad-orlici": "2026-11-04T16:46:07.707Z"
   },
   "board:okres-usti-nad-orlici": [
