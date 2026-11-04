@@ -3159,7 +3159,8 @@
     "d-75077",
     "d-75074",
     "f-75101",
-    "e38320936"
+    "e38320936",
+    "d-75108"
   ],
   "board:zamberk": [
     "d-29682",
@@ -3375,7 +3376,24 @@
     "f-25545",
     "f-25543",
     "f-25541",
-    "e38259965"
+    "e38259965",
+    "f-29971",
+    "f-29965",
+    "f-29963",
+    "d-29972",
+    "f-29967",
+    "d-29954",
+    "d-29958",
+    "f-25539",
+    "f-25537",
+    "f-25535",
+    "f-25533",
+    "f-25010",
+    "f-23695",
+    "f-23092",
+    "f-23090",
+    "f-23088",
+    "f-29952"
   ],
   "board:ceska-trebova": [
     "f-48081",
@@ -3477,7 +3495,15 @@
     "d-48353",
     "f-48344",
     "f-48389",
-    "d-48385"
+    "d-48385",
+    "f-48424",
+    "d-48441",
+    "f-48440",
+    "f-48405",
+    "f-48410",
+    "f-48408",
+    "f-48399",
+    "f-48397"
   ],
   "board:lanskroun": [
     "MULA1003JSA6-0",
@@ -3928,7 +3954,10 @@
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335564",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335706",
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335928",
-    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335862"
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=335862",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=336103",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=336085",
+    "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=336078"
   ],
   "board:vysoke-myto": [
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-a-iii-tr-v-pusobnosti-orp-vysoke-myto-v-ramci-poradani-cyklistickeho-zavodu-letape-czech-republic-by-tour-de-france-pardubice/",
@@ -4333,16 +4362,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-04T21:16:00.638Z",
-    "board:letohrad": "2026-11-04T21:16:00.638Z",
-    "board:zamberk": "2026-11-04T21:16:00.638Z",
-    "board:ceska-trebova": "2026-11-04T21:16:00.638Z",
-    "board:lanskroun": "2026-11-04T21:16:00.638Z",
-    "board:kraliky": "2026-11-04T21:16:00.638Z",
-    "board:vysoke-myto": "2026-11-04T21:16:00.638Z",
-    "board:lukova": "2026-11-04T21:16:00.638Z",
-    "board:tatenice": "2026-11-04T21:16:00.638Z",
-    "board:anenska-studanka": "2026-11-04T21:16:00.638Z",
+    "board:usti-nad-orlici": "2026-11-04T21:31:12.687Z",
+    "board:letohrad": "2026-11-04T21:31:12.687Z",
+    "board:zamberk": "2026-11-04T21:31:12.687Z",
+    "board:ceska-trebova": "2026-11-04T21:31:12.687Z",
+    "board:lanskroun": "2026-11-04T21:31:12.687Z",
+    "board:kraliky": "2026-11-04T21:31:12.687Z",
+    "board:vysoke-myto": "2026-11-04T21:31:12.687Z",
+    "board:lukova": "2026-11-04T21:31:12.687Z",
+    "board:tatenice": "2026-11-04T21:31:12.687Z",
+    "board:anenska-studanka": "2026-11-04T21:31:12.687Z",
     "board:okres-usti-nad-orlici": "2026-11-04T20:31:16.852Z"
   },
   "board:okres-usti-nad-orlici": [
