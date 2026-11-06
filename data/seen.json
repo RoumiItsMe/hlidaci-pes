@@ -87,7 +87,7 @@
     "board:lanskroun": {
       "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 1,
+      "consecutiveFailures": 2,
       "failingSince": "2026-11-06T20:33:40.559Z"
     },
     "board:okres-usti-nad-orlici": {
@@ -111,19 +111,19 @@
     "board:lukova": {
       "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 1,
+      "consecutiveFailures": 2,
       "failingSince": "2026-11-06T20:35:22.820Z"
     },
     "board:tatenice": {
       "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 1,
+      "consecutiveFailures": 2,
       "failingSince": "2026-11-06T20:36:56.724Z"
     },
     "board:anenska-studanka": {
       "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 1,
+      "consecutiveFailures": 2,
       "failingSince": "2026-11-06T20:38:30.630Z"
     }
   },
@@ -1675,6 +1675,10 @@
     {
       "id": "8618883",
       "price": 1490000
+    },
+    {
+      "id": "8744031",
+      "price": 566550
     }
   ],
   "pozemky-glamping:bazos": [
@@ -4528,13 +4532,13 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-06T20:31:13.825Z",
-    "board:letohrad": "2026-11-06T20:31:13.825Z",
-    "board:zamberk": "2026-11-06T20:31:13.825Z",
-    "board:ceska-trebova": "2026-11-06T20:31:13.825Z",
+    "board:usti-nad-orlici": "2026-11-06T20:46:02.182Z",
+    "board:letohrad": "2026-11-06T20:46:02.182Z",
+    "board:zamberk": "2026-11-06T20:46:02.182Z",
+    "board:ceska-trebova": "2026-11-06T20:46:02.182Z",
     "board:lanskroun": "2026-11-06T20:16:08.390Z",
-    "board:kraliky": "2026-11-06T20:31:13.825Z",
-    "board:vysoke-myto": "2026-11-06T20:31:13.825Z",
+    "board:kraliky": "2026-11-06T20:46:02.182Z",
+    "board:vysoke-myto": "2026-11-06T20:46:02.182Z",
     "board:lukova": "2026-11-06T20:16:08.390Z",
     "board:tatenice": "2026-11-06T20:16:08.390Z",
     "board:anenska-studanka": "2026-11-06T20:16:08.390Z",
