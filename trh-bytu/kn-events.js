@@ -98,6 +98,8 @@ export function diffKnScan(prev, scan, { entries = [], matches = [] } = {}) {
   for (const c of scan.closed ?? []) {
     if (c.proceeding.typ !== "V" || prevClosed.has(c.proceeding.id)) continue;
     const entry = entryOfUnit(c.unit);
+    // Na jednotce běží další řízení o vkladu: skončit mohla zástava a převod (s cenou) ještě běží — API je neodliší.
+    const stillRunning = (scan.plomby ?? []).filter((p) => p.unit === c.unit).flatMap((p) => p.rizeni).filter((r) => r.typ === "V").length;
     events.push({
       ref: `ended:${c.proceeding.id}`,
       kind: "ended",
@@ -110,6 +112,7 @@ export function diffKnScan(prev, scan, { entries = [], matches = [] } = {}) {
         filedAt: c.proceeding.datumPrijeti?.slice(0, 10) ?? null,
         state: c.proceeding.stav ?? null,
         address: entry?.address ?? houseAddress,
+        ...(stillRunning ? { stillRunning } : {}),
       },
     });
   }

@@ -110,6 +110,17 @@ test("konec řízení: nově uzavřené řízení je událost ended; už dřív 
   assert.deepEqual(events[0].detail, { unit: "412/12", lv: 6319, filedAt: "2026-09-20", state: "Vyřízeno", address: "Lukesova 412" });
 });
 
+test("konec řízení, když na jednotce běží další řízení V (zástava vs. převod): událost to nese, ať zvoneček neslibuje cenu", () => {
+  const prev = scan({ at: T0, plomby: [plomba(UNIT, proc(14, "2026-09-20"), proc(16, "2026-09-27"))] });
+  const next = scan({ at: T1, plomby: [plomba(UNIT, proc(16, "2026-09-27"))], closed: [{ unit: UNIT, lv: 6319, proceeding: { ...proc(14, "2026-09-20"), stav: "Vyřízeno" } }] });
+  const [event] = diffKnScan(prev, next, { entries: [entry] });
+  assert.equal(event.kind, "ended");
+  assert.equal(event.detail.stillRunning, 1);
+  // Plomba na jiné jednotce se nepočítá.
+  const elsewhere = scan({ at: T1, plomby: [plomba(OTHER_UNIT, proc(16, "2026-09-27"))], closed: next.closed });
+  assert.equal("stillRunning" in diffKnScan(prev, elsewhere, { entries: [entry] })[0].detail, false);
+});
+
 test("ukládání: stejná událost se nezapíše dvakrát a načte se zpět s detailem", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(KN_EVENTS_DDL);

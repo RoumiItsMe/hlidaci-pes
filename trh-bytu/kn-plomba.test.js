@@ -156,6 +156,7 @@ test("apiWatch se známou jednotkou: plomba zmizela a appka to zaznamenala = cen
   // A kdyby na jednotce byla ještě jiná plomba, cena čeká dál.
   const stillRunning = scanOf({ closed: scan.closed });
   assert.equal(apiWatch(stillRunning, { reservedAt: RESERVED, unitNumber: 930004, now: NOW }).plombaActive, true);
+  assert.equal(apiWatch(stillRunning, { reservedAt: RESERVED, unitNumber: 930004, now: NOW }).priceReadyAt, null);
 });
 
 // --- potvrzení odložené "až po vkladu" (dvě plomby v domě, který byt je náš, pozná uživatel až z kupní ceny) ---
@@ -203,4 +204,31 @@ test("apiWatch: se známou jednotkou se odložení neuplatní — plombu na ní 
   assert.equal(w.plombaActive, true);
   assert.equal(w.awaitingVklad, false);
   assert.equal(w.needsConfirm, true);
+});
+
+// --- prodej na hypotéku: převod a zástava jsou dvě řízení V, API je neodliší ---
+
+test("apiWatch: skončilo jen jedno ze dvou řízení na jednotce (třeba zástava) — cena ještě není k vyřízení; po skončení obou ano, k pozdějšímu", () => {
+  const first = "2026-11-05T17:00:00.000Z";
+  const second = "2026-11-10T17:00:00.000Z";
+  const lien = proc(8473, "2026-10-14T15:40:10", { stav: "Odesláno vyrozumění o provedeném vkladu" });
+  const transfer = proc(8641, "2026-10-21T08:13:27");
+  const oneEnded = scanOf({
+    plomby: [{ unit: 930004, lv: 6319, rizeni: [transfer] }],
+    closed: [{ unit: 930004, lv: 6319, proceeding: lien, closedSeenAt: first }],
+  });
+  const w = apiWatch(oneEnded, { reservedAt: RESERVED, unitNumber: 930004, now: NOW });
+  assert.equal(w.plombaActive, true);
+  assert.equal(w.priceReadyAt, null);
+  const bothEnded = scanOf({
+    plomby: [],
+    closed: [
+      { unit: 930004, lv: 6319, proceeding: lien, closedSeenAt: first },
+      { unit: 930004, lv: 6319, proceeding: { ...transfer, stav: "Vklad proveden" }, closedSeenAt: second },
+    ],
+  });
+  assert.equal(apiWatch(bothEnded, { reservedAt: RESERVED, unitNumber: 930004, now: NOW }).priceReadyAt, Date.parse(second));
+  // Plomba z doby před rezervací (cizí, dlouho běžící řízení) cenu neblokuje.
+  const oldRunning = scanOf({ plomby: [{ unit: 930004, lv: 6319, rizeni: [proc(5000, "2026-06-01T10:00:00")] }], closed: [bothEnded.closed[0]] });
+  assert.equal(apiWatch(oldRunning, { reservedAt: RESERVED, unitNumber: 930004, now: NOW }).priceReadyAt, Date.parse(first));
 });

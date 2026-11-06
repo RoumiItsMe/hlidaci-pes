@@ -680,6 +680,11 @@ a Bazoš přesměrují na výpis, iDNES napíše jen „nabídka již není akti
     nebo změna konce plomby ruší dřívější „Zatím nic“. Když plomba na známé
     jednotce zmizí a API to zachytí, cena je k vyřízení hned i bez zadaného data. Po
     zjištění ceny je byt „Prodáno“ s ověřenou cenou (tu pak statistiky použijí).
+    **Prodej na hypotéku** má na jednotce dvě řízení o vkladu — převod vlastnictví a
+    zástavu. API katastru je neodliší (řízení nenese, co se zapisuje; ověřeno ve
+    specifikaci API KN) a kupní cenu nese jen převod. Signál z API proto platí, až
+    když na jednotce **neběží žádné** řízení podané po rezervaci; skončí-li jen jedno,
+    karta i zvoneček napíšou, že další ještě běží (skončit mohla zástava).
   - **Jednotka neznámá → shoda na úrovni domu.** V malé lokalitě se v domě za pár
     týdnů neprodávají dva byty, proto se plomba spojí s bytem **sama**, když je
     jasno: dům má právě **jeden** sledovaný byt (rezervovaný nebo zmizelý) bez

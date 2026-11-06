@@ -128,10 +128,14 @@ export function apiWatch(scan, { reservedAt, unitNumber = null, waitSince = null
   const first = analysis.candidates[0];
   // Fáze ceny (vklad podán, jednotka je známá): řízení o vkladu ještě běží
   // (plomba je na jednotce), nebo skončilo (plomba zmizela) — teprve potom jde
-  // v katastru zjistit kupní cenu.
+  // v katastru zjistit kupní cenu. Prodej na hypotéku má na jednotce DVĚ řízení
+  // typu V: převod vlastnictví a zástavu. API je neodliší (řízení nenese, co se
+  // zapisuje — ověřeno ve specifikaci API KN), a cenu nese jen převod. Cena je
+  // proto k vyřízení, až když na jednotce neběží žádné řízení po rezervaci — k
+  // poslednímu dni, kdy sken nějaké skončené uviděl.
   const unitKnown = analysis.mode === "unit";
   const seenAt = (c) => (c.seenAt ? Date.parse(c.seenAt) : NaN);
-  const endedAt = unitKnown ? analysis.closed.map(seenAt).filter(Number.isFinite) : [];
+  const endedAt = unitKnown && !first ? analysis.closed.map(seenAt).filter(Number.isFinite) : [];
   const result = {
     needsConfirm: Boolean(first),
     confirmAt: first ? Date.parse(first.filedAt) : null,

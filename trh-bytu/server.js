@@ -1351,7 +1351,9 @@ function notificationHeadline(n) {
     if (n.kind === "plomba") return `Nová plomba v domě — ${knUnitText(d)}, podáno ${formatKnDay(d.filedAt)}${houseEventHint(n)}`;
     if (n.kind === "ended")
       return n.group
-        ? `Řízení o vkladu skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}; teď jde zjistit kupní cenu`
+        ? `Řízení o vkladu skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}; ${
+            d.stillRunning ? "na jednotce ale běží další řízení (skončit mohla zástava) — cena se připomene, až skončí i to" : "teď jde zjistit kupní cenu"
+          }`
         : `Řízení o vkladu v domě skončilo — ${knUnitText(d)}${d.state ? `, stav „${d.state}“` : ""}${houseEventHint(n)}`;
   }
   return n.type === "reserved" ? "Rezervováno" : "Nová nabídka";
@@ -1944,8 +1946,8 @@ function renderPlombaBlock(e, scan) {
   const since = e.track.unreserved ? "po zmizení inzerátu" : "po rezervaci";
   const stamp = `<span class="muted"> (API katastru, ${esc(formatKnDay(scan.scannedAt))})</span>`;
   const stavy = (c) => c.proceedings.map((r) => `${esc(formatKnDay(r.datumPrijeti))}${r.stav ? ` — ${esc(r.stav)}` : ""}`).join("; ");
-  const closedText = (c) =>
-    `řízení V-${esc(c.proceeding.cislo)}/${esc(c.proceeding.rok)} u č. ${esc(c.label)} skončilo${c.proceeding.stav ? ` (${esc(c.proceeding.stav)})` : ""} — zjisti cenu`;
+  const closedText = (c, tail = "zjisti cenu") =>
+    `řízení V-${esc(c.proceeding.cislo)}/${esc(c.proceeding.rok)} u č. ${esc(c.label)} skončilo${c.proceeding.stav ? ` (${esc(c.proceeding.stav)})` : ""} — ${tail}`;
   // "To je ten byt" zapíše jednotku a vklad podán; u skončeného řízení i konec plomby (den, kdy ho sken uviděl) —
   // cenu pak jde zjistit hned. Stejná pole jako u událostí domu (renderHouseEvents).
   const unitButton = (c, { filedAt, plombaEnd = null }) =>
@@ -1993,7 +1995,10 @@ function renderPlombaBlock(e, scan) {
   } else {
     lines.push(`V domě (${a.unitCount} jednotek) ${since} nikdo nepodal vklad. Zapíšeš-li jednotku bytu v detailu, appka ji pak sleduje sama.`);
   }
-  if (a.mode === "unit") for (const c of a.closed) lines.push(closedText(c));
+  // Na jednotce ještě běží jiné řízení: to skončené mohla být zástava (API převod a zástavu neodliší), cena počká.
+  const stillRunning = a.mode === "unit" && a.candidates.length > 0;
+  const runningTail = "na jednotce ale ještě běží další řízení; skončit mohla zástava, cenu nese převod — připomene se, až skončí i to";
+  if (a.mode === "unit") for (const c of a.closed) lines.push(stillRunning ? closedText(c, runningTail) : closedText(c));
   return `<div class="kn-plomba">${lines.map((l) => (l.startsWith("<div") ? l : `<div>${l}</div>`)).join("")}${stamp}</div>`;
 }
 
