@@ -4577,16 +4577,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-08T08:16:03.235Z",
-    "board:letohrad": "2026-11-08T08:16:03.235Z",
-    "board:zamberk": "2026-11-08T08:16:03.235Z",
-    "board:ceska-trebova": "2026-11-08T08:16:03.235Z",
-    "board:lanskroun": "2026-11-08T08:16:03.235Z",
-    "board:kraliky": "2026-11-08T08:16:03.235Z",
-    "board:vysoke-myto": "2026-11-08T08:16:03.235Z",
-    "board:lukova": "2026-11-08T08:16:03.235Z",
-    "board:tatenice": "2026-11-08T08:16:03.235Z",
-    "board:anenska-studanka": "2026-11-08T08:16:03.235Z",
+    "board:usti-nad-orlici": "2026-11-08T08:31:14.278Z",
+    "board:letohrad": "2026-11-08T08:31:14.278Z",
+    "board:zamberk": "2026-11-08T08:31:14.278Z",
+    "board:ceska-trebova": "2026-11-08T08:31:14.278Z",
+    "board:lanskroun": "2026-11-08T08:31:14.278Z",
+    "board:kraliky": "2026-11-08T08:31:14.278Z",
+    "board:vysoke-myto": "2026-11-08T08:31:14.278Z",
+    "board:lukova": "2026-11-08T08:31:14.278Z",
+    "board:tatenice": "2026-11-08T08:31:14.278Z",
+    "board:anenska-studanka": "2026-11-08T08:31:14.278Z",
     "board:okres-usti-nad-orlici": "2026-11-08T08:04:09.909Z"
   },
   "board:okres-usti-nad-orlici": [
@@ -4619,12 +4619,6 @@
   ],
   "byty:__changes": [],
   "pozemky-glamping:__changes": [
-    {
-      "key": "790000>890000",
-      "source": "sreality",
-      "sourceLabel": "Sreality.cz",
-      "at": "2026-11-05T08:15:58.289Z"
-    },
     {
       "key": "223152>200837",
       "source": "bazos",
