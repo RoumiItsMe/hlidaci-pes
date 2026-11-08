@@ -85,10 +85,10 @@
       "failingSince": null
     },
     "board:lanskroun": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-08T19:33:47.498Z"
     },
     "board:okres-usti-nad-orlici": {
       "failing": false,
@@ -109,22 +109,22 @@
       "failingSince": null
     },
     "board:lukova": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-08T19:35:30.096Z"
     },
     "board:tatenice": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-08T19:37:03.999Z"
     },
     "board:anenska-studanka": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-08T19:38:37.903Z"
     }
   },
   "byty:sreality": [
@@ -1263,6 +1263,10 @@
     {
       "id": "226094405",
       "price": 3785000
+    },
+    {
+      "id": "226176378",
+      "price": 3100000
     }
   ],
   "pozemky-glamping:sreality": [
@@ -2635,6 +2639,10 @@
     {
       "fingerprint": "2555999_38",
       "source": "RealityMIX.cz"
+    },
+    {
+      "fingerprint": "3100000_32",
+      "source": "Bazoš.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -4593,13 +4601,13 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-08T19:16:02.297Z",
-    "board:letohrad": "2026-11-08T19:16:02.297Z",
-    "board:zamberk": "2026-11-08T19:16:02.297Z",
-    "board:ceska-trebova": "2026-11-08T19:16:02.297Z",
+    "board:usti-nad-orlici": "2026-11-08T19:31:18.782Z",
+    "board:letohrad": "2026-11-08T19:31:18.782Z",
+    "board:zamberk": "2026-11-08T19:31:18.782Z",
+    "board:ceska-trebova": "2026-11-08T19:31:18.782Z",
     "board:lanskroun": "2026-11-08T19:16:02.297Z",
-    "board:kraliky": "2026-11-08T19:16:02.297Z",
-    "board:vysoke-myto": "2026-11-08T19:16:02.297Z",
+    "board:kraliky": "2026-11-08T19:31:18.782Z",
+    "board:vysoke-myto": "2026-11-08T19:31:18.782Z",
     "board:lukova": "2026-11-08T19:16:02.297Z",
     "board:tatenice": "2026-11-08T19:16:02.297Z",
     "board:anenska-studanka": "2026-11-08T19:16:02.297Z",
