@@ -768,7 +768,7 @@
     },
     {
       "id": "8713317",
-      "price": 3390000
+      "price": null
     },
     {
       "id": "8713961",
@@ -4428,7 +4428,10 @@
     "https://www.vysoke-myto.cz/uredni-deska/oznameni-o-zahajeni-rizeni-vypousteni-ov-do-pzv-zadost-o-povoleni-k-vypousteni-odpadnich-vod-do-vod-podzemni/",
     "https://www.vysoke-myto.cz/uredni-deska/jednotne-environmentalni-stanovisko-uo-chocen-vysokomytska-1740-3x125a-knn/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-navrh-oop-zaplavove-uzemi-navrh-na-stanoveni-zaplavoveho-uzemi-vcetne-vymezeni-aktivni-zony/",
-    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-pk-parkoviste-v-ulici-slunecna-v-k-u-a-obci-vysoke-myto-2/"
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-pk-parkoviste-v-ulici-slunecna-v-k-u-a-obci-vysoke-myto-2/",
+    "https://www.vysoke-myto.cz/uredni-deska/navrh-rozpoctu-2027_-kralovska-venna-mesta/",
+    "https://www.vysoke-myto.cz/uredni-deska/navrh-strednedobeho-vyhledu-rozpoctu-2028-a-2029_kralovska-venna-mesta/",
+    "https://www.vysoke-myto.cz/uredni-deska/oznameni-o-konani-valne-hromady-so-kralovska-venna-mesta_25_11_2026/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -4613,17 +4616,17 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-09T09:01:36.180Z",
-    "board:letohrad": "2026-11-09T09:01:36.180Z",
-    "board:zamberk": "2026-11-09T09:01:36.180Z",
-    "board:ceska-trebova": "2026-11-09T09:01:36.180Z",
-    "board:lanskroun": "2026-11-09T09:01:36.180Z",
-    "board:kraliky": "2026-11-09T09:01:36.180Z",
-    "board:vysoke-myto": "2026-11-09T09:01:36.180Z",
-    "board:lukova": "2026-11-09T09:01:36.180Z",
-    "board:tatenice": "2026-11-09T09:01:36.180Z",
-    "board:anenska-studanka": "2026-11-09T09:01:36.180Z",
-    "board:okres-usti-nad-orlici": "2026-11-09T08:16:10.799Z"
+    "board:usti-nad-orlici": "2026-11-09T09:16:25.301Z",
+    "board:letohrad": "2026-11-09T09:16:25.301Z",
+    "board:zamberk": "2026-11-09T09:16:25.301Z",
+    "board:ceska-trebova": "2026-11-09T09:16:25.301Z",
+    "board:lanskroun": "2026-11-09T09:16:25.301Z",
+    "board:kraliky": "2026-11-09T09:16:25.301Z",
+    "board:vysoke-myto": "2026-11-09T09:16:25.301Z",
+    "board:lukova": "2026-11-09T09:16:25.301Z",
+    "board:tatenice": "2026-11-09T09:16:25.301Z",
+    "board:anenska-studanka": "2026-11-09T09:16:25.301Z",
+    "board:okres-usti-nad-orlici": "2026-11-09T09:16:25.301Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
