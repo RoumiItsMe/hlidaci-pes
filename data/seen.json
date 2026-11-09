@@ -4431,7 +4431,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-pk-parkoviste-v-ulici-slunecna-v-k-u-a-obci-vysoke-myto-2/",
     "https://www.vysoke-myto.cz/uredni-deska/navrh-rozpoctu-2027_-kralovska-venna-mesta/",
     "https://www.vysoke-myto.cz/uredni-deska/navrh-strednedobeho-vyhledu-rozpoctu-2028-a-2029_kralovska-venna-mesta/",
-    "https://www.vysoke-myto.cz/uredni-deska/oznameni-o-konani-valne-hromady-so-kralovska-venna-mesta_25_11_2026/"
+    "https://www.vysoke-myto.cz/uredni-deska/oznameni-o-konani-valne-hromady-so-kralovska-venna-mesta_25_11_2026/",
+    "https://www.vysoke-myto.cz/uredni-deska/vr-ceska-trebova-straznik-mestske-policie/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -4616,16 +4617,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-09T10:01:33.478Z",
-    "board:letohrad": "2026-11-09T10:01:33.478Z",
-    "board:zamberk": "2026-11-09T10:01:33.478Z",
-    "board:ceska-trebova": "2026-11-09T10:01:33.478Z",
-    "board:lanskroun": "2026-11-09T10:01:33.478Z",
-    "board:kraliky": "2026-11-09T10:01:33.478Z",
-    "board:vysoke-myto": "2026-11-09T10:01:33.478Z",
-    "board:lukova": "2026-11-09T10:01:33.478Z",
-    "board:tatenice": "2026-11-09T10:01:33.478Z",
-    "board:anenska-studanka": "2026-11-09T10:01:33.478Z",
+    "board:usti-nad-orlici": "2026-11-09T10:16:07.330Z",
+    "board:letohrad": "2026-11-09T10:16:07.330Z",
+    "board:zamberk": "2026-11-09T10:16:07.330Z",
+    "board:ceska-trebova": "2026-11-09T10:16:07.330Z",
+    "board:lanskroun": "2026-11-09T10:16:07.330Z",
+    "board:kraliky": "2026-11-09T10:16:07.330Z",
+    "board:vysoke-myto": "2026-11-09T10:16:07.330Z",
+    "board:lukova": "2026-11-09T10:16:07.330Z",
+    "board:tatenice": "2026-11-09T10:16:07.330Z",
+    "board:anenska-studanka": "2026-11-09T10:16:07.330Z",
     "board:okres-usti-nad-orlici": "2026-11-09T09:16:25.301Z"
   },
   "board:okres-usti-nad-orlici": [
