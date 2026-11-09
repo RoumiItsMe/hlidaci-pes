@@ -4118,7 +4118,8 @@
     "MULA1004BLU6-0",
     "MULA1004BOVG-0",
     "MULA1004C3UB-0",
-    "MULA1004CJDK-0"
+    "MULA1004CJDK-0",
+    "MULA1004CORN-0"
   ],
   "board:kraliky": [
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=318505",
@@ -4432,7 +4433,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/navrh-rozpoctu-2027_-kralovska-venna-mesta/",
     "https://www.vysoke-myto.cz/uredni-deska/navrh-strednedobeho-vyhledu-rozpoctu-2028-a-2029_kralovska-venna-mesta/",
     "https://www.vysoke-myto.cz/uredni-deska/oznameni-o-konani-valne-hromady-so-kralovska-venna-mesta_25_11_2026/",
-    "https://www.vysoke-myto.cz/uredni-deska/vr-ceska-trebova-straznik-mestske-policie/"
+    "https://www.vysoke-myto.cz/uredni-deska/vr-ceska-trebova-straznik-mestske-policie/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-napojeni-silnice-ii-312-na-d35-muk-vysoke-myto-zapad-iii-etapa/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -4617,16 +4619,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-09T11:01:38.841Z",
-    "board:letohrad": "2026-11-09T11:01:38.841Z",
-    "board:zamberk": "2026-11-09T11:01:38.841Z",
-    "board:ceska-trebova": "2026-11-09T11:01:38.841Z",
-    "board:lanskroun": "2026-11-09T11:01:38.841Z",
-    "board:kraliky": "2026-11-09T11:01:38.841Z",
-    "board:vysoke-myto": "2026-11-09T11:01:38.841Z",
-    "board:lukova": "2026-11-09T11:01:38.841Z",
-    "board:tatenice": "2026-11-09T11:01:38.841Z",
-    "board:anenska-studanka": "2026-11-09T11:01:38.841Z",
+    "board:usti-nad-orlici": "2026-11-09T11:16:02.690Z",
+    "board:letohrad": "2026-11-09T11:16:02.690Z",
+    "board:zamberk": "2026-11-09T11:16:02.690Z",
+    "board:ceska-trebova": "2026-11-09T11:16:02.690Z",
+    "board:lanskroun": "2026-11-09T11:16:02.690Z",
+    "board:kraliky": "2026-11-09T11:16:02.690Z",
+    "board:vysoke-myto": "2026-11-09T11:16:02.690Z",
+    "board:lukova": "2026-11-09T11:16:02.690Z",
+    "board:tatenice": "2026-11-09T11:16:02.690Z",
+    "board:anenska-studanka": "2026-11-09T11:16:02.690Z",
     "board:okres-usti-nad-orlici": "2026-11-09T10:26:19.443Z"
   },
   "board:okres-usti-nad-orlici": [
