@@ -4716,7 +4716,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/vyberove-rizeni-na-prideleni-bytu-11-a-21-12/",
     "https://www.vysoke-myto.cz/uredni-deska/zamer-pronajmout-dum-v-ul-javornickeho/",
     "https://www.vysoke-myto.cz/uredni-deska/konkursni-rizeni-litomysl-reditelk-reditelka-strediska-volneho-casu-litomysl/",
-    "https://www.vysoke-myto.cz/uredni-deska/vv-povoleni-stavby-uo-vysoke-myto-husova-ts-1015-stiznost/"
+    "https://www.vysoke-myto.cz/uredni-deska/vv-povoleni-stavby-uo-vysoke-myto-husova-ts-1015-stiznost/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-zverejneni-navrhu-opatreni-obecne-povahy-pro-stanoveni-mistni-upravy-provozu-na-pozemni-komunikaci-v-ulici-dobrovskeho-ve-vysokem-myte/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -4902,16 +4903,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-13T11:01:24.259Z",
-    "board:letohrad": "2026-11-13T11:01:24.259Z",
-    "board:zamberk": "2026-11-13T11:01:24.259Z",
-    "board:ceska-trebova": "2026-11-13T11:01:24.259Z",
-    "board:lanskroun": "2026-11-13T11:01:24.259Z",
-    "board:kraliky": "2026-11-13T11:01:24.259Z",
-    "board:vysoke-myto": "2026-11-13T11:01:24.259Z",
-    "board:lukova": "2026-11-13T11:01:24.259Z",
-    "board:tatenice": "2026-11-13T11:01:24.259Z",
-    "board:anenska-studanka": "2026-11-13T11:01:24.259Z",
+    "board:usti-nad-orlici": "2026-11-13T11:16:04.806Z",
+    "board:letohrad": "2026-11-13T11:16:04.806Z",
+    "board:zamberk": "2026-11-13T11:16:04.806Z",
+    "board:ceska-trebova": "2026-11-13T11:16:04.806Z",
+    "board:lanskroun": "2026-11-13T11:16:04.806Z",
+    "board:kraliky": "2026-11-13T11:16:04.806Z",
+    "board:vysoke-myto": "2026-11-13T11:16:04.806Z",
+    "board:lukova": "2026-11-13T11:16:04.806Z",
+    "board:tatenice": "2026-11-13T11:16:04.806Z",
+    "board:anenska-studanka": "2026-11-13T11:16:04.806Z",
     "board:okres-usti-nad-orlici": "2026-11-13T10:31:21.199Z"
   },
   "board:okres-usti-nad-orlici": [
