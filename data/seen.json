@@ -355,6 +355,14 @@
     {
       "id": "1441755212",
       "price": 4985000
+    },
+    {
+      "id": "285044812",
+      "price": 3290000
+    },
+    {
+      "id": "4143804492",
+      "price": 3890000
     }
   ],
   "byty:bezrealitky": [
@@ -639,6 +647,10 @@
     {
       "id": "6af44dff76c425d3500a2d75",
       "price": 4985000
+    },
+    {
+      "id": "6af6d6692517231d6e0480b9",
+      "price": 3290000
     }
   ],
   "byty:realitymix": [
@@ -1342,6 +1354,14 @@
     },
     {
       "id": "226329738",
+      "price": 3290000
+    },
+    {
+      "id": "226375175",
+      "price": 3890000
+    },
+    {
+      "id": "226375461",
       "price": 3290000
     }
   ],
@@ -2807,6 +2827,14 @@
     {
       "fingerprint": "2200000_50",
       "source": "RealityMIX.cz"
+    },
+    {
+      "fingerprint": "3290000_52",
+      "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "3890000_58",
+      "source": "Sreality.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -4869,16 +4897,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-13T09:16:48.393Z",
-    "board:letohrad": "2026-11-13T09:16:48.393Z",
-    "board:zamberk": "2026-11-13T09:16:48.393Z",
-    "board:ceska-trebova": "2026-11-13T09:16:48.393Z",
-    "board:lanskroun": "2026-11-13T09:16:48.393Z",
-    "board:kraliky": "2026-11-13T09:16:48.393Z",
-    "board:vysoke-myto": "2026-11-13T09:16:48.393Z",
-    "board:lukova": "2026-11-13T09:16:48.393Z",
-    "board:tatenice": "2026-11-13T09:16:48.393Z",
-    "board:anenska-studanka": "2026-11-13T09:16:48.393Z",
+    "board:usti-nad-orlici": "2026-11-13T09:31:24.334Z",
+    "board:letohrad": "2026-11-13T09:31:24.334Z",
+    "board:zamberk": "2026-11-13T09:31:24.334Z",
+    "board:ceska-trebova": "2026-11-13T09:31:24.334Z",
+    "board:lanskroun": "2026-11-13T09:31:24.334Z",
+    "board:kraliky": "2026-11-13T09:31:24.334Z",
+    "board:vysoke-myto": "2026-11-13T09:31:24.334Z",
+    "board:lukova": "2026-11-13T09:31:24.334Z",
+    "board:tatenice": "2026-11-13T09:31:24.334Z",
+    "board:anenska-studanka": "2026-11-13T09:31:24.334Z",
     "board:okres-usti-nad-orlici": "2026-11-13T09:16:48.393Z"
   },
   "board:okres-usti-nad-orlici": [
