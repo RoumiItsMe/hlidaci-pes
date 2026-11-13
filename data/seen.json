@@ -4867,16 +4867,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-13T06:01:36.266Z",
-    "board:letohrad": "2026-11-13T06:01:36.266Z",
-    "board:zamberk": "2026-11-13T06:01:36.266Z",
-    "board:ceska-trebova": "2026-11-13T06:01:36.266Z",
-    "board:lanskroun": "2026-11-13T06:01:36.266Z",
-    "board:kraliky": "2026-11-13T06:01:36.266Z",
-    "board:vysoke-myto": "2026-11-13T06:01:36.266Z",
-    "board:lukova": "2026-11-13T06:01:36.266Z",
-    "board:tatenice": "2026-11-13T06:01:36.266Z",
-    "board:anenska-studanka": "2026-11-13T06:01:36.266Z",
+    "board:usti-nad-orlici": "2026-11-13T06:16:05.645Z",
+    "board:letohrad": "2026-11-13T06:16:05.645Z",
+    "board:zamberk": "2026-11-13T06:16:05.645Z",
+    "board:ceska-trebova": "2026-11-13T06:16:05.645Z",
+    "board:lanskroun": "2026-11-13T06:16:05.645Z",
+    "board:kraliky": "2026-11-13T06:16:05.645Z",
+    "board:vysoke-myto": "2026-11-13T06:16:05.645Z",
+    "board:lukova": "2026-11-13T06:16:05.645Z",
+    "board:tatenice": "2026-11-13T06:16:05.645Z",
+    "board:anenska-studanka": "2026-11-13T06:16:05.645Z",
     "board:okres-usti-nad-orlici": "2026-11-13T05:45:56.363Z"
   },
   "board:okres-usti-nad-orlici": [
@@ -4910,12 +4910,6 @@
     "e39028749"
   ],
   "byty:__changes": [
-    {
-      "key": "5000000>4900000",
-      "source": "bezrealitky",
-      "sourceLabel": "Bezrealitky.cz",
-      "at": "2026-11-10T06:01:13.972Z"
-    },
     {
       "key": "4800000>4500000",
       "source": "bazos",
