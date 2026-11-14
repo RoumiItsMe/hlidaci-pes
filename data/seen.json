@@ -85,10 +85,10 @@
       "failingSince": null
     },
     "board:lanskroun": {
-      "failing": false,
+      "failing": true,
       "lastAlertAt": null,
-      "consecutiveFailures": 0,
-      "failingSince": null
+      "consecutiveFailures": 1,
+      "failingSince": "2026-11-14T17:19:01.231Z"
     },
     "board:okres-usti-nad-orlici": {
       "failing": false,
@@ -981,6 +981,10 @@
     {
       "id": "8760373",
       "price": 2499000
+    },
+    {
+      "id": "8760897",
+      "price": 4890000
     }
   ],
   "byty:bazos": [
@@ -4941,16 +4945,16 @@
     "OBAS1000ABPI-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-14T17:01:42.329Z",
-    "board:letohrad": "2026-11-14T17:01:42.329Z",
-    "board:zamberk": "2026-11-14T17:01:42.329Z",
-    "board:ceska-trebova": "2026-11-14T17:01:42.329Z",
+    "board:usti-nad-orlici": "2026-11-14T17:16:33.422Z",
+    "board:letohrad": "2026-11-14T17:16:33.422Z",
+    "board:zamberk": "2026-11-14T17:16:33.422Z",
+    "board:ceska-trebova": "2026-11-14T17:16:33.422Z",
     "board:lanskroun": "2026-11-14T17:01:42.329Z",
-    "board:kraliky": "2026-11-14T17:01:42.329Z",
-    "board:vysoke-myto": "2026-11-14T17:01:42.329Z",
-    "board:lukova": "2026-11-14T17:01:42.329Z",
-    "board:tatenice": "2026-11-14T17:01:42.329Z",
-    "board:anenska-studanka": "2026-11-14T17:01:42.329Z",
+    "board:kraliky": "2026-11-14T17:16:33.422Z",
+    "board:vysoke-myto": "2026-11-14T17:16:33.422Z",
+    "board:lukova": "2026-11-14T17:16:33.422Z",
+    "board:tatenice": "2026-11-14T17:16:33.422Z",
+    "board:anenska-studanka": "2026-11-14T17:16:33.422Z",
     "board:okres-usti-nad-orlici": "2026-11-14T16:16:34.245Z"
   },
   "board:okres-usti-nad-orlici": [
@@ -4983,14 +4987,7 @@
     "e38876508",
     "e39028749"
   ],
-  "byty:__changes": [
-    {
-      "key": "3990000>3790000",
-      "source": "sreality",
-      "sourceLabel": "Sreality.cz",
-      "at": "2026-11-11T17:01:14.060Z"
-    }
-  ],
+  "byty:__changes": [],
   "pozemky-glamping:__changes": [
     {
       "key": "566550>522600",
