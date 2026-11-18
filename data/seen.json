@@ -4915,7 +4915,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/konkursni-rizeni-litomysl-reditelk-reditelka-strediska-volneho-casu-litomysl/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-povoleni-stavby-uo-vysoke-myto-husova-ts-1015-stiznost/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-zverejneni-navrhu-opatreni-obecne-povahy-pro-stanoveni-mistni-upravy-provozu-na-pozemni-komunikaci-v-ulici-dobrovskeho-ve-vysokem-myte/",
-    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-pozemni-komunikaci-na-pozemcich-p-c-1175-3-a-1172-v-k-u-ujezd-u-chocne/"
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-pozemni-komunikaci-na-pozemcich-p-c-1175-3-a-1172-v-k-u-ujezd-u-chocne/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-mistni-upravy-provozu-na-mistnich-komunikacich-v-ulicich-lidicka-lezaku-a-17-listopadu-ve-vysokem-myte/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -5103,16 +5104,16 @@
     "OBAS1000AEWY-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-18T10:01:40.255Z",
-    "board:letohrad": "2026-11-18T10:01:40.255Z",
-    "board:zamberk": "2026-11-18T10:01:40.255Z",
-    "board:ceska-trebova": "2026-11-18T10:01:40.255Z",
-    "board:lanskroun": "2026-11-18T10:01:40.255Z",
-    "board:kraliky": "2026-11-18T10:01:40.255Z",
-    "board:vysoke-myto": "2026-11-18T10:01:40.255Z",
-    "board:lukova": "2026-11-18T10:01:40.255Z",
-    "board:tatenice": "2026-11-18T10:01:40.255Z",
-    "board:anenska-studanka": "2026-11-18T10:01:40.255Z",
+    "board:usti-nad-orlici": "2026-11-18T10:16:06.637Z",
+    "board:letohrad": "2026-11-18T10:16:06.637Z",
+    "board:zamberk": "2026-11-18T10:16:06.637Z",
+    "board:ceska-trebova": "2026-11-18T10:16:06.637Z",
+    "board:lanskroun": "2026-11-18T10:16:06.637Z",
+    "board:kraliky": "2026-11-18T10:16:06.637Z",
+    "board:vysoke-myto": "2026-11-18T10:16:06.637Z",
+    "board:lukova": "2026-11-18T10:16:06.637Z",
+    "board:tatenice": "2026-11-18T10:16:06.637Z",
+    "board:anenska-studanka": "2026-11-18T10:16:06.637Z",
     "board:okres-usti-nad-orlici": "2026-11-18T09:31:28.855Z"
   },
   "board:okres-usti-nad-orlici": [
