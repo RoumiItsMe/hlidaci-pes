@@ -4926,7 +4926,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-zverejneni-navrhu-opatreni-obecne-povahy-pro-stanoveni-mistni-upravy-provozu-na-pozemni-komunikaci-v-ulici-dobrovskeho-ve-vysokem-myte/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-pozemni-komunikaci-na-pozemcich-p-c-1175-3-a-1172-v-k-u-ujezd-u-chocne/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-mistni-upravy-provozu-na-mistnich-komunikacich-v-ulicich-lidicka-lezaku-a-17-listopadu-ve-vysokem-myte/",
-    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-fibichova-jozky-svobody-druzstevni-dobrovskeho-a-draby-v-k-u-a-obci-vysoke-myto/"
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-mk-v-ul-fibichova-jozky-svobody-druzstevni-dobrovskeho-a-draby-v-k-u-a-obci-vysoke-myto/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-mistni-upravy-provozu-na-pk-na-pozemcich-p-c-390-3-50-2-a-59-v-k-u-sec-u-brandysa-nad-orlici/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -5114,16 +5115,16 @@
     "OBAS1000AEWY-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-19T06:01:32.423Z",
-    "board:letohrad": "2026-11-19T06:01:32.423Z",
-    "board:zamberk": "2026-11-19T06:01:32.423Z",
-    "board:ceska-trebova": "2026-11-19T06:01:32.423Z",
-    "board:lanskroun": "2026-11-19T06:01:32.423Z",
-    "board:kraliky": "2026-11-19T06:01:32.423Z",
-    "board:vysoke-myto": "2026-11-19T06:01:32.423Z",
-    "board:lukova": "2026-11-19T06:01:32.423Z",
-    "board:tatenice": "2026-11-19T06:01:32.423Z",
-    "board:anenska-studanka": "2026-11-19T06:01:32.423Z",
+    "board:usti-nad-orlici": "2026-11-19T06:16:07.466Z",
+    "board:letohrad": "2026-11-19T06:16:07.466Z",
+    "board:zamberk": "2026-11-19T06:16:07.466Z",
+    "board:ceska-trebova": "2026-11-19T06:16:07.466Z",
+    "board:lanskroun": "2026-11-19T06:16:07.466Z",
+    "board:kraliky": "2026-11-19T06:16:07.466Z",
+    "board:vysoke-myto": "2026-11-19T06:16:07.466Z",
+    "board:lukova": "2026-11-19T06:16:07.466Z",
+    "board:tatenice": "2026-11-19T06:16:07.466Z",
+    "board:anenska-studanka": "2026-11-19T06:16:07.466Z",
     "board:okres-usti-nad-orlici": "2026-11-19T05:31:20.078Z"
   },
   "board:okres-usti-nad-orlici": [
