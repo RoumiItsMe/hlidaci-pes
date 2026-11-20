@@ -674,7 +674,7 @@
     },
     {
       "id": "6af44dff76c425d3500a2d75",
-      "price": 4985000
+      "price": 4500000
     },
     {
       "id": "6af6d6692517231d6e0480b9",
@@ -1024,7 +1024,7 @@
     },
     {
       "id": "6563958",
-      "price": 4985000
+      "price": 4500000
     },
     {
       "id": "8757433",
@@ -3075,6 +3075,10 @@
     {
       "fingerprint": "18900_65",
       "source": "Sreality.cz"
+    },
+    {
+      "fingerprint": "4500000_94",
+      "source": "Reality.iDNES.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -4655,7 +4659,8 @@
     "MULA1004GO4E-0",
     "MULA1004I5C9-0",
     "MULA1004GNCH-0",
-    "MULA1004IV4B-0"
+    "MULA1004IV4B-0",
+    "MULA1004IVLY-0"
   ],
   "board:kraliky": [
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=318505",
@@ -5183,16 +5188,16 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-20T12:31:20.579Z",
-    "board:letohrad": "2026-11-20T12:31:20.579Z",
-    "board:zamberk": "2026-11-20T12:31:20.579Z",
-    "board:ceska-trebova": "2026-11-20T12:31:20.579Z",
-    "board:lanskroun": "2026-11-20T12:31:20.579Z",
-    "board:kraliky": "2026-11-20T12:31:20.579Z",
-    "board:vysoke-myto": "2026-11-20T12:31:20.579Z",
-    "board:lukova": "2026-11-20T12:31:20.579Z",
-    "board:tatenice": "2026-11-20T12:31:20.579Z",
-    "board:anenska-studanka": "2026-11-20T12:31:20.579Z",
+    "board:usti-nad-orlici": "2026-11-20T12:46:12.867Z",
+    "board:letohrad": "2026-11-20T12:46:12.867Z",
+    "board:zamberk": "2026-11-20T12:46:12.867Z",
+    "board:ceska-trebova": "2026-11-20T12:46:12.867Z",
+    "board:lanskroun": "2026-11-20T12:46:12.867Z",
+    "board:kraliky": "2026-11-20T12:46:12.867Z",
+    "board:vysoke-myto": "2026-11-20T12:46:12.867Z",
+    "board:lukova": "2026-11-20T12:46:12.867Z",
+    "board:tatenice": "2026-11-20T12:46:12.867Z",
+    "board:anenska-studanka": "2026-11-20T12:46:12.867Z",
     "board:okres-usti-nad-orlici": "2026-11-20T12:31:20.579Z"
   },
   "board:okres-usti-nad-orlici": [
@@ -5233,6 +5238,12 @@
       "source": "idnes",
       "sourceLabel": "Reality.iDNES.cz",
       "at": "2026-11-19T10:31:23.485Z"
+    },
+    {
+      "key": "4985000>4500000",
+      "source": "idnes",
+      "sourceLabel": "Reality.iDNES.cz",
+      "at": "2026-11-20T12:45:53.550Z"
     }
   ],
   "pozemky-glamping:__changes": [
