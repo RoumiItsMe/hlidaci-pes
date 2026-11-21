@@ -5204,17 +5204,17 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-21T19:16:00.810Z",
-    "board:letohrad": "2026-11-21T19:16:00.810Z",
-    "board:zamberk": "2026-11-21T19:16:00.810Z",
-    "board:ceska-trebova": "2026-11-21T19:16:00.810Z",
-    "board:lanskroun": "2026-11-21T19:16:00.810Z",
-    "board:kraliky": "2026-11-21T19:16:00.810Z",
-    "board:vysoke-myto": "2026-11-21T19:16:00.810Z",
-    "board:lukova": "2026-11-21T19:16:00.810Z",
-    "board:tatenice": "2026-11-21T19:16:00.810Z",
-    "board:anenska-studanka": "2026-11-21T19:16:00.810Z",
-    "board:okres-usti-nad-orlici": "2026-11-21T18:16:08.741Z"
+    "board:usti-nad-orlici": "2026-11-21T19:31:20.640Z",
+    "board:letohrad": "2026-11-21T19:31:20.640Z",
+    "board:zamberk": "2026-11-21T19:31:20.640Z",
+    "board:ceska-trebova": "2026-11-21T19:31:20.640Z",
+    "board:lanskroun": "2026-11-21T19:31:20.640Z",
+    "board:kraliky": "2026-11-21T19:31:20.640Z",
+    "board:vysoke-myto": "2026-11-21T19:31:20.640Z",
+    "board:lukova": "2026-11-21T19:31:20.640Z",
+    "board:tatenice": "2026-11-21T19:31:20.640Z",
+    "board:anenska-studanka": "2026-11-21T19:31:20.640Z",
+    "board:okres-usti-nad-orlici": "2026-11-21T19:31:20.640Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
