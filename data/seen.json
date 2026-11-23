@@ -1564,7 +1564,7 @@
     },
     {
       "id": "1999355980",
-      "price": 450000
+      "price": 395000
     },
     {
       "id": "3814510668",
@@ -2372,7 +2372,7 @@
     },
     {
       "id": "224920656",
-      "price": 80483
+      "price": 117780
     },
     {
       "id": "224964674",
@@ -3548,6 +3548,10 @@
     },
     {
       "fingerprint": "395000_825",
+      "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "117780_963",
       "source": "Bazoš.cz"
     }
   ],
@@ -5236,17 +5240,17 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-23T13:46:08.108Z",
-    "board:letohrad": "2026-11-23T13:46:08.108Z",
-    "board:zamberk": "2026-11-23T13:46:08.108Z",
-    "board:ceska-trebova": "2026-11-23T13:46:08.108Z",
-    "board:lanskroun": "2026-11-23T13:46:08.108Z",
-    "board:kraliky": "2026-11-23T13:46:08.108Z",
-    "board:vysoke-myto": "2026-11-23T13:46:08.108Z",
-    "board:lukova": "2026-11-23T13:46:08.108Z",
-    "board:tatenice": "2026-11-23T13:46:08.108Z",
-    "board:anenska-studanka": "2026-11-23T13:46:08.108Z",
-    "board:okres-usti-nad-orlici": "2026-11-23T13:01:47.386Z"
+    "board:usti-nad-orlici": "2026-11-23T14:01:47.654Z",
+    "board:letohrad": "2026-11-23T14:01:47.654Z",
+    "board:zamberk": "2026-11-23T14:01:47.654Z",
+    "board:ceska-trebova": "2026-11-23T14:01:47.654Z",
+    "board:lanskroun": "2026-11-23T14:01:47.654Z",
+    "board:kraliky": "2026-11-23T14:01:47.654Z",
+    "board:vysoke-myto": "2026-11-23T14:01:47.654Z",
+    "board:lukova": "2026-11-23T14:01:47.654Z",
+    "board:tatenice": "2026-11-23T14:01:47.654Z",
+    "board:anenska-studanka": "2026-11-23T14:01:47.654Z",
+    "board:okres-usti-nad-orlici": "2026-11-23T14:01:47.654Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
@@ -5288,5 +5292,12 @@
       "at": "2026-11-21T16:01:21.872Z"
     }
   ],
-  "pozemky-glamping:__changes": []
+  "pozemky-glamping:__changes": [
+    {
+      "key": "80483>117780",
+      "source": "bazos",
+      "sourceLabel": "Bazoš.cz",
+      "at": "2026-11-23T14:01:47.253Z"
+    }
+  ]
 }
