@@ -109,16 +109,16 @@
       "failingSince": null
     },
     "board:lukova": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1,
-      "failingSince": "2026-11-23T15:32:54.720Z"
+      "consecutiveFailures": 0,
+      "failingSince": null
     },
     "board:tatenice": {
-      "failing": true,
+      "failing": false,
       "lastAlertAt": null,
-      "consecutiveFailures": 1,
-      "failingSince": "2026-11-23T15:33:02.099Z"
+      "consecutiveFailures": 0,
+      "failingSince": null
     },
     "board:anenska-studanka": {
       "failing": false,
@@ -1568,7 +1568,7 @@
     },
     {
       "id": "1999355980",
-      "price": 450000
+      "price": 395000
     },
     {
       "id": "3814510668",
@@ -4714,7 +4714,8 @@
     "MULA1004IW8K-0",
     "MULA1004IW39-0",
     "MULA1004IKGS-0",
-    "MULA1004JPFL-0"
+    "MULA1004JPFL-0",
+    "MULA1004JRVZ-0"
   ],
   "board:kraliky": [
     "https://www.kraliky.eu/vismo/uredni-deska-detail.asp?id=318505",
@@ -5246,16 +5247,16 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-23T15:31:35.513Z",
-    "board:letohrad": "2026-11-23T15:31:35.513Z",
-    "board:zamberk": "2026-11-23T15:31:35.513Z",
-    "board:ceska-trebova": "2026-11-23T15:31:35.513Z",
-    "board:lanskroun": "2026-11-23T15:31:35.513Z",
-    "board:kraliky": "2026-11-23T15:31:35.513Z",
-    "board:vysoke-myto": "2026-11-23T15:31:35.513Z",
-    "board:lukova": "2026-11-23T15:17:07.126Z",
-    "board:tatenice": "2026-11-23T15:17:07.126Z",
-    "board:anenska-studanka": "2026-11-23T15:31:35.513Z",
+    "board:usti-nad-orlici": "2026-11-23T15:46:39.506Z",
+    "board:letohrad": "2026-11-23T15:46:39.506Z",
+    "board:zamberk": "2026-11-23T15:46:39.506Z",
+    "board:ceska-trebova": "2026-11-23T15:46:39.506Z",
+    "board:lanskroun": "2026-11-23T15:46:39.506Z",
+    "board:kraliky": "2026-11-23T15:46:39.506Z",
+    "board:vysoke-myto": "2026-11-23T15:46:39.506Z",
+    "board:lukova": "2026-11-23T15:46:39.506Z",
+    "board:tatenice": "2026-11-23T15:46:39.506Z",
+    "board:anenska-studanka": "2026-11-23T15:46:39.506Z",
     "board:okres-usti-nad-orlici": "2026-11-23T15:17:07.126Z"
   },
   "board:okres-usti-nad-orlici": [
