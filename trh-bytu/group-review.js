@@ -19,8 +19,10 @@ export function compatible(a, b) {
 }
 
 /**
- * Byty, se kterými jde daný byt ručně sloučit: jiné byty téže dispozice (nebo bez dispozice), nejdřív ty s nejbližší
- * výměrou, pak podle adresy; nejvýš `limit`. `groups` jsou všechny byty z groupListings.
+ * Byty, se kterými jde daný byt ručně sloučit: nejdřív byty ve stejném domě (přesná adresa) bez ohledu na dispozici
+ * — portál ji u téhož bytu může mít vyplněnou špatně (Letohrad, Podměstí 219: iDNES 5+kk, ostatní 5+1) —, pak jiné
+ * byty téže dispozice (nebo bez dispozice); v obou skupinách nejdřív ty s nejbližší výměrou, pak podle adresy;
+ * nejvýš `limit`. `groups` jsou všechny byty z groupListings.
  */
 export function mergeCandidates(groups, group, limit = 30) {
   const rep = group.members[0];
@@ -29,13 +31,15 @@ export function mergeCandidates(groups, group, limit = 30) {
   const areaOf = (g) => g.members.map((m) => m.area_m2).find((v) => v != null) ?? null;
   const dispositionOf = (g) => g.members.map((m) => m.disposition).find(Boolean) ?? null;
   const disposition = dispositionOf(group) ?? rep?.disposition ?? null;
+  const houses = new Set(group.members.map((m) => m.exact_address).filter(Boolean));
+  const sameHouse = new Set(groups.filter((g) => g.members.some((m) => m.exact_address && houses.has(m.exact_address))).map((g) => g.key));
   return groups
     .filter((g) => g !== group && g.key !== group.key)
-    .filter((g) => disposition == null || dispositionOf(g) == null || dispositionOf(g) === disposition)
+    .filter((g) => sameHouse.has(g.key) || disposition == null || dispositionOf(g) == null || dispositionOf(g) === disposition)
     .sort((a, b) => {
       const da = area != null && areaOf(a) != null ? Math.abs(areaOf(a) - area) : Infinity;
       const db = area != null && areaOf(b) != null ? Math.abs(areaOf(b) - area) : Infinity;
-      return da - db || addressOf(a).localeCompare(addressOf(b), "cs");
+      return Number(sameHouse.has(b.key)) - Number(sameHouse.has(a.key)) || da - db || addressOf(a).localeCompare(addressOf(b), "cs");
     })
     .slice(0, limit);
 }
@@ -83,11 +87,14 @@ export function reviewGroup(group) {
   const prices = core.map((m) => m.price_czk).filter((v) => v != null);
   const coreArea = areas.length ? median(areas) : null;
   const corePrice = prices.length ? median(prices) : null;
+  // Jádro si neprotiřečí, takže dispozici má (pokud ji vůbec někdo uvádí) jedinou.
+  const coreDisposition = core.map((m) => m.disposition).find((v) => v != null) ?? null;
 
   const weak = members
     .filter((m) => removed.includes(m))
     .map((m) => {
       const notes = [];
+      if (m.disposition != null && coreDisposition != null && m.disposition !== coreDisposition) notes.push(`dispozice ${m.disposition} místo ${coreDisposition}`);
       if (m.area_m2 != null && coreArea != null && Math.abs(m.area_m2 - coreArea) > AREA_TOLERANCE_M2) notes.push(`výměra ${m.area_m2} m² místo ${coreArea} m²`);
       if (m.price_czk != null && corePrice != null && m.price_czk !== corePrice) notes.push(`cena ${m.price_czk.toLocaleString("cs-CZ")} Kč místo ${corePrice.toLocaleString("cs-CZ")} Kč`);
       return { id: m.id, source: m.source, notes };

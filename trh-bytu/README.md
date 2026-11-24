@@ -871,6 +871,14 @@ inzerát se spojí, když text sedí a plocha druhého inzerátu se v něm zmiň
 ("…52 m²…"). Jako hlavní záznam se pak bere důvěryhodnější portál (Sreality,
 iDNES), takže se zobrazí jeho výměra; fotky se sloučí ze všech inzerátů.
 
+**Jiná dispozice v polích portálu.** RK občas vyplní u téhož bytu na jednom portálu pole špatně (Letohrad, Podměstí
+219, 11/2026: iDNES má 5+kk a 279 m², text stejný jako na ostatních portálech říká "byt 5+1, 133 m²"). Když text
+inzerátu zmiňuje jedinou dispozici a tu z pole vůbec ne, platí pro porovnání i dispozice z textu (`textDisposition`
+v `group.js`, testy `group-text-disposition.test.js`). Rozhoduje pak jen shoda textů, shoda adresy nestačí; text,
+který zmiňuje i dispozici z pole nebo víc různých dispozic (developerský text pro víc bytů), nic neopravuje. Při
+zavedení to v reálných datech spojilo tři byty, všechny skutečně tytéž: Podměstí, Dukelská 319/320 (RK byt po padlé
+rezervaci vložila znovu jako 2+kk, text dál říká 2+1) a Černčická 219 v Novém Městě (pole 3+1, text 3+kk).
+
 ### Ruční sloučení a rozdělení (`/slouceni`)
 
 Automatika se občas plete (RealityMIX se sklepem má jinou výměru; dva různé byty se stejným textem), a
@@ -878,7 +886,8 @@ heuristiku nejde doladit pro každý případ. Proto má uživatel **poslední s
 
 - **Oddělit** — u každé nabídky bytu (v detailu, sekce 🔗 *Sloučení nabídek*, i na stránce Sloučení). Nabídka zůstane
   jako samostatný byt a už se k ničemu automaticky nepřipojí; ostatní nabídky bytu se nedotkne.
-- **Sloučit s jiným bytem** — výběr z bytů téže dispozice (nejbližší výměra první). Obě nabídky jsou pak jeden byt.
+- **Sloučit s jiným bytem** — výběr z bytů téže dispozice (nejbližší výměra první); byty ve stejném domě (přesná
+  adresa) se nabízejí vždy a jako první, i s jinou dispozicí — portál ji může mít špatně. Obě nabídky jsou pak jeden byt.
 - **Ano, týž byt** — potvrzení sloučeného bytu tak, jak je; byt se zamkne a přestane se připomínat.
 - **Vrátit na automatiku** — ruční zásah se zruší a nabídky se znovu seskupí podle cen, výměr a textu.
 
@@ -903,7 +912,8 @@ Plochu jde v detailu bytu opravit ručně — ruční hodnotu sběr nepřepisuje
 jiná výměra (mimo toleranci 1 m²) nebo jiná známá cena. Chybějící údaj (RK cenu nezveřejnila, portál plochu neuvádí)
 rozpor není, jinak by byla podezřelá každá nabídka „na vyžádání“. Spory se hledají mezi dvojicemi, ne přes souvislé
 komponenty: nabídka bez ceny by jinak „přemostila“ dvě nabídky s různou cenou. Pak se postupně vyřazuje nabídka s nejvíc
-spory (při shodě ta méně důvěryhodného portálu), vyřazené jsou ve výpisu zvýrazněné s důvodem („výměra 58 m² místo 52 m²“).
+spory (při shodě ta méně důvěryhodného portálu), vyřazené jsou ve výpisu zvýrazněné s důvodem („výměra 58 m² místo 52 m²“,
+„dispozice 5+kk místo 5+1“).
 V reálných datech to bylo při zavedení 8 bytů v Ústí a 7 v Náchodě — samé skutečně sporné případy.
 
 V řádku se takový byt jmenuje **"… — cena na vyžádání"**; znamená to, že

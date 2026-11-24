@@ -17,7 +17,7 @@
 // nemovitost navíc, než jeden řádek omylem za dvě různé.
 
 import { descriptionForDetection } from "./listing-text.js";
-import { AREA_UNIT_SOURCE } from "./parse.js";
+import { AREA_UNIT_SOURCE, mentionedDispositions } from "./parse.js";
 
 // Max. rozdíl v ploše (m²), co appka ještě bere jako "tentýž byt" napříč
 // portály. 1 m² pokrývá pozorovaný reálný rozdíl (51 vs 52 m² pro
@@ -239,17 +239,37 @@ function sameStreetAddress(a, b) {
   return pa.length === pb.length && [...pa].sort().join("|") === [...pb].sort().join("|");
 }
 
+// Dispozice, kterou poli portálu opravuje vlastní text inzerátu: pole říká jednu, text zmiňuje jedinou jinou a tu
+// z pole vůbec ne. RK u téhož bytu občas vyplní na jednom portálu pole špatně (reálný případ: Letohrad, Podměstí
+// 219 — iDNES má v polích 5+kk a 279 m², text stejný jako na Sreality/Bazoši/RealityMIX říká "byt 5+1, 133 m²").
+// Text, který zmiňuje i dispozici z pole, nebo víc různých dispozic ("byty 2+kk až 4+kk"), nic neopravuje.
+function textDisposition(listing) {
+  if (listing.disposition == null) return null;
+  const mentioned = mentionedDispositions(textOf(listing));
+  return mentioned.length === 1 && mentioned[0] !== listing.disposition ? mentioned[0] : null;
+}
+
+// Dispozice, pod kterými se inzerát porovnává s ostatními: z pole portálu a případně opravená textem.
+function dispositionsOf(listing) {
+  const corrected = textDisposition(listing);
+  return corrected ? [listing.disposition, corrected] : [listing.disposition];
+}
+
 // Tentýž byt na DVOU RŮZNÝCH portálech, i bez shody v ceně. Popisy jsou
 // spolehlivější signál; adresa se použije jen tam, kde popis nejde
 // porovnat (RealityMIX ho appka nezískává, viz README) — a musí být přesná
 // včetně ulice, protože stejné byty v jednom panelovém domě jsou běžné.
+// Dispozice se musí shodovat v polích portálů, nebo ji pole jednoho z nich opravuje vlastní text (textDisposition)
+// — pak ale rozhoduje jen shoda textů, adresa nestačí.
 function sameFlatAcrossPortals(a, b) {
   if (a.source === b.source) return false;
-  if (a.disposition == null || a.disposition !== b.disposition) return false;
+  if (a.disposition == null || b.disposition == null) return false;
+  const sameField = a.disposition === b.disposition;
+  if (!sameField && !dispositionsOf(a).some((d) => dispositionsOf(b).includes(d))) return false;
   if (!areasCompatible(a, b)) return false;
   const byDescription = descriptionsMatch(a, b);
   if (byDescription !== null) return byDescription;
-  return sameStreetAddress(a.address, b.address);
+  return sameField && sameStreetAddress(a.address, b.address);
 }
 
 // Spojí skupiny, které patří k sobě, ale ve výše spočítaném klíči
@@ -288,11 +308,14 @@ function mergeLinkedGroups(groups, listings, pairwise = listings, forced = []) {
   }
   for (const [idA, idB] of forced) link(idA, idB);
 
+  // Inzerát s dispozicí opravenou textem (textDisposition) se porovná i s inzeráty té opravené dispozice.
   const byDisposition = new Map();
   for (const l of pairwise) {
     if (l.disposition == null || l.area_m2 == null) continue;
-    if (!byDisposition.has(l.disposition)) byDisposition.set(l.disposition, []);
-    byDisposition.get(l.disposition).push(l);
+    for (const d of dispositionsOf(l)) {
+      if (!byDisposition.has(d)) byDisposition.set(d, []);
+      byDisposition.get(d).push(l);
+    }
   }
   for (const same of byDisposition.values()) {
     for (let i = 0; i < same.length; i++) {

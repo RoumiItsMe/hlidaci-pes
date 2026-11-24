@@ -47,6 +47,15 @@ export function parseDisposition(text) {
   return GARSONKA_RE.test(text) ? "1+kk" : null;
 }
 
+/** Všechny dispozice, které text zmiňuje ("2+1", "4+kk", garsonka = "1+kk"), každá jednou. */
+export function mentionedDispositions(text) {
+  if (!text) return [];
+  const found = new Set();
+  for (const m of text.matchAll(new RegExp(DISPOSITION_RE.source, "gi"))) found.add(`${m[1] ?? m[3]}+${(m[2] ?? m[4]).toLowerCase()}`);
+  if (GARSONKA_RE.test(text)) found.add("1+kk");
+  return [...found];
+}
+
 /** Vrátí plochu v m² jako číslo, nebo null. */
 export function parseAreaM2(text) {
   const m = text?.match(AREA_M2_RE);
