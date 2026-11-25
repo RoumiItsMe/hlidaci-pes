@@ -5120,7 +5120,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/jednotne-environmentalni-stanovisko-modernizace-obalovny-vysoke-myto/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-mistnich-komunikacich-v-ulicich-litomyslska-komenskeho-a-javornickeho-ve-vysokem-myte/",
     "https://www.vysoke-myto.cz/uredni-deska/zamer-uzavrit-dodatek-c-1-ke-smlouve-o-vypujcce-c-2103/",
-    "https://www.vysoke-myto.cz/uredni-deska/vyzva-k-prevzeti-pisemnosti-gadzala-lukasz/"
+    "https://www.vysoke-myto.cz/uredni-deska/vyzva-k-prevzeti-pisemnosti-gadzala-lukasz/",
+    "https://www.vysoke-myto.cz/uredni-deska/zamer-uzavrit-dodatek-c-2-k-najemni-smlouve-c-518/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -5316,16 +5317,16 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-25T12:01:32.184Z",
-    "board:letohrad": "2026-11-25T12:01:32.184Z",
-    "board:zamberk": "2026-11-25T12:01:32.184Z",
-    "board:ceska-trebova": "2026-11-25T12:01:32.184Z",
-    "board:lanskroun": "2026-11-25T12:01:32.184Z",
-    "board:kraliky": "2026-11-25T12:01:32.184Z",
-    "board:vysoke-myto": "2026-11-25T12:01:32.184Z",
-    "board:lukova": "2026-11-25T12:01:32.184Z",
-    "board:tatenice": "2026-11-25T12:01:32.184Z",
-    "board:anenska-studanka": "2026-11-25T12:01:32.184Z",
+    "board:usti-nad-orlici": "2026-11-25T12:16:00.450Z",
+    "board:letohrad": "2026-11-25T12:16:00.450Z",
+    "board:zamberk": "2026-11-25T12:16:00.450Z",
+    "board:ceska-trebova": "2026-11-25T12:16:00.450Z",
+    "board:lanskroun": "2026-11-25T12:16:00.450Z",
+    "board:kraliky": "2026-11-25T12:16:00.450Z",
+    "board:vysoke-myto": "2026-11-25T12:16:00.450Z",
+    "board:lukova": "2026-11-25T12:16:00.450Z",
+    "board:tatenice": "2026-11-25T12:16:00.450Z",
+    "board:anenska-studanka": "2026-11-25T12:16:00.450Z",
     "board:okres-usti-nad-orlici": "2026-11-25T12:01:32.184Z"
   },
   "board:okres-usti-nad-orlici": [
