@@ -5122,7 +5122,8 @@
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-prechodne-upravy-provozu-na-mistnich-komunikacich-v-ulicich-litomyslska-komenskeho-a-javornickeho-ve-vysokem-myte/",
     "https://www.vysoke-myto.cz/uredni-deska/zamer-uzavrit-dodatek-c-1-ke-smlouve-o-vypujcce-c-2103/",
     "https://www.vysoke-myto.cz/uredni-deska/vyzva-k-prevzeti-pisemnosti-gadzala-lukasz/",
-    "https://www.vysoke-myto.cz/uredni-deska/zamer-uzavrit-dodatek-c-2-k-najemni-smlouve-c-518/"
+    "https://www.vysoke-myto.cz/uredni-deska/zamer-uzavrit-dodatek-c-2-k-najemni-smlouve-c-518/",
+    "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-357-v-ul-gen-svatone-v-k-u-a-obci-vysoke-myto-z-duvodu-provadeni-upravy-zelene-podel-silnice-i-35/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -5318,17 +5319,17 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-25T14:01:36.943Z",
-    "board:letohrad": "2026-11-25T14:01:36.943Z",
-    "board:zamberk": "2026-11-25T14:01:36.943Z",
-    "board:ceska-trebova": "2026-11-25T14:01:36.943Z",
-    "board:lanskroun": "2026-11-25T14:01:36.943Z",
-    "board:kraliky": "2026-11-25T14:01:36.943Z",
-    "board:vysoke-myto": "2026-11-25T14:01:36.943Z",
-    "board:lukova": "2026-11-25T14:01:36.943Z",
-    "board:tatenice": "2026-11-25T14:01:36.943Z",
-    "board:anenska-studanka": "2026-11-25T14:01:36.943Z",
-    "board:okres-usti-nad-orlici": "2026-11-25T13:15:59.294Z"
+    "board:usti-nad-orlici": "2026-11-25T14:16:16.088Z",
+    "board:letohrad": "2026-11-25T14:16:16.088Z",
+    "board:zamberk": "2026-11-25T14:16:16.088Z",
+    "board:ceska-trebova": "2026-11-25T14:16:16.088Z",
+    "board:lanskroun": "2026-11-25T14:16:16.088Z",
+    "board:kraliky": "2026-11-25T14:16:16.088Z",
+    "board:vysoke-myto": "2026-11-25T14:16:16.088Z",
+    "board:lukova": "2026-11-25T14:16:16.088Z",
+    "board:tatenice": "2026-11-25T14:16:16.088Z",
+    "board:anenska-studanka": "2026-11-25T14:16:16.088Z",
+    "board:okres-usti-nad-orlici": "2026-11-25T14:16:16.088Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
