@@ -751,6 +751,10 @@
     {
       "id": "6b071172ab67a93cd10e4967",
       "price": 5250000
+    },
+    {
+      "id": "6b09350a61f8a037f606fcbb",
+      "price": 3410000
     }
   ],
   "byty:realitymix": [
@@ -3203,6 +3207,10 @@
     {
       "fingerprint": "3579000_59",
       "source": "Bazoš.cz"
+    },
+    {
+      "fingerprint": "3410000_73",
+      "source": "Reality.iDNES.cz"
     }
   ],
   "pozemky-glamping:__fingerprints": [
@@ -5380,17 +5388,17 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-27T07:31:20.488Z",
-    "board:letohrad": "2026-11-27T07:31:20.488Z",
-    "board:zamberk": "2026-11-27T07:31:20.488Z",
-    "board:ceska-trebova": "2026-11-27T07:31:20.488Z",
-    "board:lanskroun": "2026-11-27T07:31:20.488Z",
-    "board:kraliky": "2026-11-27T07:31:20.488Z",
-    "board:vysoke-myto": "2026-11-27T07:31:20.488Z",
-    "board:lukova": "2026-11-27T07:31:20.488Z",
-    "board:tatenice": "2026-11-27T07:31:20.488Z",
-    "board:anenska-studanka": "2026-11-27T07:31:20.488Z",
-    "board:okres-usti-nad-orlici": "2026-11-27T06:31:21.085Z"
+    "board:usti-nad-orlici": "2026-11-27T07:45:58.951Z",
+    "board:letohrad": "2026-11-27T07:45:58.951Z",
+    "board:zamberk": "2026-11-27T07:45:58.951Z",
+    "board:ceska-trebova": "2026-11-27T07:45:58.951Z",
+    "board:lanskroun": "2026-11-27T07:45:58.951Z",
+    "board:kraliky": "2026-11-27T07:45:58.951Z",
+    "board:vysoke-myto": "2026-11-27T07:45:58.951Z",
+    "board:lukova": "2026-11-27T07:45:58.951Z",
+    "board:tatenice": "2026-11-27T07:45:58.951Z",
+    "board:anenska-studanka": "2026-11-27T07:45:58.951Z",
+    "board:okres-usti-nad-orlici": "2026-11-27T07:45:58.951Z"
   },
   "board:okres-usti-nad-orlici": [
     "e33239062",
