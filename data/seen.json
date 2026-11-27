@@ -5197,7 +5197,10 @@
     "https://www.vysoke-myto.cz/uredni-deska/vyzva-k-prevzeti-pisemnosti-gadzala-lukasz/",
     "https://www.vysoke-myto.cz/uredni-deska/zamer-uzavrit-dodatek-c-2-k-najemni-smlouve-c-518/",
     "https://www.vysoke-myto.cz/uredni-deska/vv-oop-stanoveni-pup-na-sil-ii-357-v-ul-gen-svatone-v-k-u-a-obci-vysoke-myto-z-duvodu-provadeni-upravy-zelene-podel-silnice-i-35/",
-    "https://www.vysoke-myto.cz/uredni-deska/vyberove-rizeni-na-prideleni-bytu-spo-husova-156-31/"
+    "https://www.vysoke-myto.cz/uredni-deska/vyberove-rizeni-na-prideleni-bytu-spo-husova-156-31/",
+    "https://www.vysoke-myto.cz/uredni-deska/navrh-rozpoctu-mesta-vysokeho-myta-na-rok-2027/",
+    "https://www.vysoke-myto.cz/uredni-deska/navrh-strednedobeho-vyhledu-rozpoctu-mesta-vysokeho-myta-sestaveny-na-obdobi-2028-2030/",
+    "https://www.vysoke-myto.cz/uredni-deska/oznameni-provozovateli-o-miste-odstaveni-vozidla-renault/"
   ],
   "board:lukova": [
     "OBLK1000C9TL-0",
@@ -5393,16 +5396,16 @@
     "OBAS1000AG00-0"
   ],
   "__boardChecks": {
-    "board:usti-nad-orlici": "2026-11-27T11:01:40.057Z",
-    "board:letohrad": "2026-11-27T11:01:40.057Z",
-    "board:zamberk": "2026-11-27T11:01:40.057Z",
-    "board:ceska-trebova": "2026-11-27T11:01:40.057Z",
-    "board:lanskroun": "2026-11-27T11:01:40.057Z",
-    "board:kraliky": "2026-11-27T11:01:40.057Z",
-    "board:vysoke-myto": "2026-11-27T11:01:40.057Z",
-    "board:lukova": "2026-11-27T11:01:40.057Z",
-    "board:tatenice": "2026-11-27T11:01:40.057Z",
-    "board:anenska-studanka": "2026-11-27T11:01:40.057Z",
+    "board:usti-nad-orlici": "2026-11-27T11:16:00.725Z",
+    "board:letohrad": "2026-11-27T11:16:00.725Z",
+    "board:zamberk": "2026-11-27T11:16:00.725Z",
+    "board:ceska-trebova": "2026-11-27T11:16:00.725Z",
+    "board:lanskroun": "2026-11-27T11:16:00.725Z",
+    "board:kraliky": "2026-11-27T11:16:00.725Z",
+    "board:vysoke-myto": "2026-11-27T11:16:00.725Z",
+    "board:lukova": "2026-11-27T11:16:00.725Z",
+    "board:tatenice": "2026-11-27T11:16:00.725Z",
+    "board:anenska-studanka": "2026-11-27T11:16:00.725Z",
     "board:okres-usti-nad-orlici": "2026-11-27T11:01:40.057Z"
   },
   "board:okres-usti-nad-orlici": [
